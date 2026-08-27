@@ -1,0 +1,223 @@
+using System;
+using System.Collections.Generic;
+using FluidStabilizer.Contracts;
+using FluidStabilizer.Core.Sim.Sensors;
+using FluidStabilizer.Core.Sim.SloshModels;
+
+namespace FluidStabilizer.Core.Sim
+{
+    /// <summary>
+    /// The fixed-step simulation core (design-review §20 item 2). Owns the clock
+    /// and the 600/200/100 Hz cadence, and each physics step advances:
+    /// driver → vehicle → gimbal actuator → tank kinematics → slosh → (on sensor
+    /// ticks) sensor sampling → (on control ticks) the controller. Fully
+    /// deterministic given a seed; no Unity types.
+    ///
+    /// Drive it either with <see cref="RunEpisode"/> (headless, one call) or by
+    /// <see cref="BeginEpisode"/> + repeated <see cref="StepPhysics"/> (for the
+    /// Unity view and the RL adapter).
+    /// </summary>
+    public sealed class SimulationLoop
+    {
+        private readonly SimulationConfig _cfg;
+        private readonly IController _controller;
+        private readonly IDriverInput _driver;
+        private readonly ISloshModel _slosh;
+
+        private readonly ManualClock _clock;
+        private readonly VehicleModel _vehicle;
+        private readonly GimbalActuator _gimbal;
+        private readonly SensorSuite _sensors;
+
+        private readonly int _latencySensorSteps;
+        private readonly Queue<SensorBundle> _bundleQueue = new Queue<SensorBundle>();
+
+        private StabilizerCommand _latchedCommand;
+        private long _commandCount;
+        private double _effortAccum;
+        private long _torqueSatTicks, _angleLimitTicks;
+
+        private double _cumulativeOverflow;
+        private double _worstFreeboard;
+        private double _sloshEnergyIntegral;
+
+        public SimulationLoop(SimulationConfig cfg, IController controller, IDriverInput driver,
+            ISloshModel slosh = null)
+        {
+            cfg.Validate();
+            _cfg = cfg;
+            _controller = controller;
+            _driver = driver;
+            _slosh = slosh ?? new NullSloshModel();
+
+            _clock = new ManualClock(cfg.PhysicsStepSeconds);
+            _vehicle = new VehicleModel(cfg.Vehicle);
+            _gimbal = new GimbalActuator(cfg.Gimbal, cfg.PhysicsStepSeconds);
+            _sensors = new SensorSuite(cfg.Sensors, cfg.Slosh);
+
+            _latencySensorSteps = Math.Max(0,
+                (int)Math.Round(cfg.Sensors.BundleLatencySeconds / (cfg.PhysicsStepSeconds * cfg.SensorDecimation)));
+        }
+
+        public IClock Clock => _clock;
+        public long PhysicsStep => _clock.StepCount;
+        public double SimTime => _clock.SimTimeSeconds;
+        public bool EpisodeComplete => _clock.StepCount >= _cfg.TotalPhysicsSteps;
+
+        public VehicleState VehicleState { get; private set; }
+        public GimbalState GimbalState => _gimbal.State;
+        public TankKinematicState TankState { get; private set; }
+        public GroundTruthFrame LatestGroundTruth { get; private set; }
+        public SensorBundle LatestSensorBundle { get; private set; }
+        public StabilizerCommand LatestCommand => _latchedCommand;
+
+        public ulong Seed { get; private set; }
+
+        public void BeginEpisode(ulong seed)
+        {
+            Seed = seed;
+            var root = new DeterministicRandom(seed);
+
+            _clock.Reset();
+            _vehicle.Reset();
+            _gimbal.Reset();
+            _sensors.Reset(root.Fork("sensors"));
+            _driver.Reset();
+            _controller.Reset();
+            _slosh.Reset(_cfg.Slosh.ToParameters(), root.Fork("slosh"));
+
+            _bundleQueue.Clear();
+            _latchedCommand = StabilizerCommand.Hold(0, 0.0);
+            _commandCount = 0;
+            _effortAccum = 0;
+            _torqueSatTicks = _angleLimitTicks = 0;
+            _cumulativeOverflow = 0;
+            _worstFreeboard = double.PositiveInfinity;
+            _sloshEnergyIntegral = 0;
+
+            // Prime derived state at t = 0 without advancing time.
+            VehicleState = _vehicle.Step(DriverControls.Neutral, default, 0.0);
+            TankState = TankKinematics.Compute(VehicleState, _gimbal.State, _cfg.Gimbal.PivotInVehicle);
+            LatestSensorBundle = _sensors.Sample(0.0, VehicleState, _gimbal.State, TankState);
+            LatestGroundTruth = BuildGroundTruth();
+        }
+
+        /// <summary>Advance one physics step. Returns false once the episode is complete.</summary>
+        public bool StepPhysics()
+        {
+            if (EpisodeComplete) return false;
+
+            double dt = _cfg.PhysicsStepSeconds;
+            double tNext = (_clock.StepCount + 1) * dt;
+
+            DriverControls controls = _driver.Sample(tNext);
+
+            VehicleState v = _vehicle.Step(controls, default, dt);
+
+            // External load on the gimbal from the previous step's slosh reaction
+            // + tank gravity torque. v1: pivot at CoM so gravity torque ≈ 0, and
+            // the null slosh model contributes nothing. Real coupling lands with
+            // the pendulum model.
+            _gimbal.Step(_latchedCommand, 0.0, 0.0, dt);
+            GimbalState g = _gimbal.State;
+
+            TankKinematicState tank = TankKinematics.Compute(v, g, _cfg.Gimbal.PivotInVehicle);
+
+            var sloshInput = new SloshInput
+            {
+                GravityTankFrame = tank.GravityTankFrame,
+                LinearAccelerationTankFrame = tank.LinearAccelerationTankFrame,
+                AngularVelocityTankFrame = tank.AngularVelocityTankFrame,
+                AngularAccelerationTankFrame = tank.AngularAccelerationTankFrame,
+                Dt = dt
+            };
+            SloshOutput slosh = _slosh.Step(sloshInput);
+
+            _cumulativeOverflow += Math.Max(0.0, slosh.OverflowVolumeThisStep);
+            _worstFreeboard = Math.Min(_worstFreeboard, slosh.MinFreeboard);
+            _sloshEnergyIntegral += _slosh.SampleGroundTruth().SloshKineticEnergy * dt;
+
+            _clock.Advance();
+            VehicleState = v;
+            TankState = tank;
+
+            long step = _clock.StepCount;
+
+            if (step % _cfg.SensorDecimation == 0)
+            {
+                SensorBundle bundle = _sensors.Sample(_clock.SimTimeSeconds, v, g, tank);
+                _bundleQueue.Enqueue(bundle);
+                while (_bundleQueue.Count > _latencySensorSteps + 1) _bundleQueue.Dequeue();
+                LatestSensorBundle = bundle;
+            }
+
+            if (step % _cfg.ControlDecimation == 0)
+            {
+                SensorBundle delivered = _bundleQueue.Count > 0 ? _bundleQueue.Peek() : LatestSensorBundle;
+                _latchedCommand = _controller.ComputeCommand(delivered);
+                _commandCount++;
+                _effortAccum += 0.5 * (Math.Abs(_latchedCommand.PitchRateCommand) +
+                                       Math.Abs(_latchedCommand.RollRateCommand));
+                if (g.Pitch.TorqueSaturated || g.Roll.TorqueSaturated) _torqueSatTicks++;
+                if (g.Pitch.AtAngleLimit || g.Roll.AtAngleLimit) _angleLimitTicks++;
+            }
+
+            LatestGroundTruth = BuildGroundTruth();
+            return true;
+        }
+
+        public EpisodeResult RunEpisode(ulong seed)
+        {
+            BeginEpisode(seed);
+            while (StepPhysics()) { }
+            return Result();
+        }
+
+        public EpisodeResult Result() => new EpisodeResult
+        {
+            Seed = Seed,
+            PhysicsSteps = _clock.StepCount,
+            DurationSeconds = _clock.SimTimeSeconds,
+            ControllerName = _controller.Name,
+            DriverName = _driver.Name,
+            SloshModelName = _slosh.Name,
+            TotalOverflowVolume = _cumulativeOverflow,
+            WorstFreeboard = double.IsPositiveInfinity(_worstFreeboard) ? 0.0 : _worstFreeboard,
+            SloshEnergyIntegral = _sloshEnergyIntegral,
+            MeanAbsActionRate = _commandCount > 0 ? _effortAccum / _commandCount : 0.0,
+            TorqueSaturationFraction = _commandCount > 0 ? (double)_torqueSatTicks / _commandCount : 0.0,
+            AngleLimitFraction = _commandCount > 0 ? (double)_angleLimitTicks / _commandCount : 0.0
+        };
+
+        private GroundTruthFrame BuildGroundTruth()
+        {
+            GimbalState g = _gimbal.State;
+            SloshGroundTruth sg = _slosh.SampleGroundTruth();
+            Double3 tankSpecific = TankState.LinearAccelerationTankFrame - TankState.GravityTankFrame;
+
+            return new GroundTruthFrame
+            {
+                StampSeconds = _clock.SimTimeSeconds,
+                PhysicsStep = _clock.StepCount,
+                VehiclePositionWorld = VehicleState.OriginWorld,
+                VehicleSpeed = VehicleState.Speed,
+                VehicleLongAccel = VehicleState.LongitudinalAcceleration,
+                VehicleLatAccel = VehicleState.LateralAcceleration,
+                VehicleAngularVelocityBody = VehicleState.AngularVelocityBody,
+                PitchAngle = g.Pitch.Angle,
+                RollAngle = g.Roll.Angle,
+                PitchRate = g.Pitch.Rate,
+                RollRate = g.Roll.Rate,
+                PitchTorque = g.Pitch.AppliedTorque,
+                RollTorque = g.Roll.AppliedTorque,
+                AnyTorqueSaturated = g.Pitch.TorqueSaturated || g.Roll.TorqueSaturated,
+                AnyAngleLimited = g.Pitch.AtAngleLimit || g.Roll.AtAngleLimit,
+                TankSpecificForceTankFrame = tankSpecific,
+                LiquidCenterOfMassTankFrame = sg.LiquidCenterOfMass,
+                SloshKineticEnergy = sg.SloshKineticEnergy,
+                MinFreeboard = double.IsPositiveInfinity(_worstFreeboard) ? 0.0 : _worstFreeboard,
+                CumulativeOverflowVolume = _cumulativeOverflow
+            };
+        }
+    }
+}
