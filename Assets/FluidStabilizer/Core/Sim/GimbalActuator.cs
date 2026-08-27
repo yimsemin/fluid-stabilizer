@@ -37,12 +37,15 @@ namespace FluidStabilizer.Core.Sim
         {
             public double Angle;
             public double Rate;
+            public double Setpoint;      // integrated commanded-rate position target
+            public double Integral;      // servo position-error integral (anti-windup clamped)
             public double LastAccel;
             public double LastTorque;
             public double LastCurrent;
             public bool AtLimit;
             public bool Saturated;
             public DelayLine CommandDelay;
+            public double ReflectedInertia;
         }
 
         private readonly GimbalConfig _cfg;
@@ -64,10 +67,22 @@ namespace FluidStabilizer.Core.Sim
         {
             foreach (var a in new[] { _pitch, _roll })
             {
-                a.Angle = 0; a.Rate = 0; a.LastAccel = 0; a.LastTorque = 0;
+                a.Angle = 0; a.Rate = 0; a.Setpoint = 0; a.Integral = 0; a.LastAccel = 0; a.LastTorque = 0;
                 a.LastCurrent = 0; a.AtLimit = false; a.Saturated = false;
+                a.ReflectedInertia = 0.0;
                 a.CommandDelay.Reset(0.0);
             }
+        }
+
+        /// <summary>
+        /// Set the liquid inertia reflected onto each axis (kg·m²). Added to the
+        /// cradle inertia so the actuator "feels" the liquid mass without an
+        /// unstable coupling loop (see <see cref="IReflectedInertiaSource"/>).
+        /// </summary>
+        public void SetReflectedInertia(double pitch, double roll)
+        {
+            _pitch.ReflectedInertia = Math.Max(0.0, pitch);
+            _roll.ReflectedInertia = Math.Max(0.0, roll);
         }
 
         public GimbalState State => new GimbalState
@@ -95,19 +110,39 @@ namespace FluidStabilizer.Core.Sim
         {
             double cmd = a.CommandDelay.Step(MathD.ClampAbs(rateCommand, _cfg.MaxRateRadPerSec));
 
-            // First-order rate loop: time constant 1/(2π·bandwidth).
-            double loopGain = 2.0 * Math.PI * _cfg.BandwidthHz;
-            double accelDemand = (cmd - a.Rate) * loopGain;
+            double inertia = _cfg.AxisInertia + a.ReflectedInertia;
+
+            // The commanded rate integrates into a position setpoint; the axis
+            // then servos to that setpoint. This holds angle under a steady
+            // external load (a pure rate loop would drift), while still following
+            // rate commands.
+            a.Setpoint = MathD.ClampAbs(a.Setpoint + cmd * dt, _cfg.MaxAngleRad);
+
+            double omega = 2.0 * Math.PI * _cfg.BandwidthHz;
+            double kp = omega * omega;
+            double kd = 2.0 * _cfg.DampingRatio * omega;
+            double posError = a.Setpoint - a.Angle;
+
+            // Integral term with anti-windup: freeze it while the torque is
+            // saturated or the joint is on its travel limit.
+            if (!a.Saturated && !a.AtLimit)
+                a.Integral = MathD.ClampAbs(a.Integral + posError * dt, _cfg.MaxAngleRad);
+
+            double accelDemand = kp * posError + kd * (cmd - a.Rate) + _cfg.IntegralGain * a.Integral;
+
+            // Clamp the external load that the servo has to fight, so a bad
+            // transient in an upstream model cannot inject a divergent torque.
+            double load = MathD.ClampAbs(externalLoad, 4.0 * _cfg.MaxTorqueNm);
 
             double friction = _cfg.ViscousFrictionNmsPerRad * a.Rate
                               + _cfg.CoulombFrictionNm * Sign(a.Rate);
 
-            double torqueDemand = _cfg.AxisInertia * accelDemand + friction - externalLoad;
+            double torqueDemand = inertia * accelDemand + friction - load;
 
             double torqueApplied = MathD.ClampAbs(torqueDemand, _cfg.MaxTorqueNm);
             a.Saturated = Math.Abs(torqueDemand) > _cfg.MaxTorqueNm + 1e-9;
 
-            double accel = (torqueApplied - friction + externalLoad) / _cfg.AxisInertia;
+            double accel = (torqueApplied - friction + load) / inertia;
 
             a.Rate = MathD.ClampAbs(a.Rate + accel * dt, _cfg.MaxRateRadPerSec);
             double newAngle = a.Angle + a.Rate * dt;
@@ -117,12 +152,14 @@ namespace FluidStabilizer.Core.Sim
             {
                 newAngle = _cfg.MaxAngleRad;
                 if (a.Rate > 0) a.Rate = 0;
+                a.Setpoint = _cfg.MaxAngleRad;
                 a.AtLimit = true;
             }
             else if (newAngle < -_cfg.MaxAngleRad)
             {
                 newAngle = -_cfg.MaxAngleRad;
                 if (a.Rate < 0) a.Rate = 0;
+                a.Setpoint = -_cfg.MaxAngleRad;
                 a.AtLimit = true;
             }
 

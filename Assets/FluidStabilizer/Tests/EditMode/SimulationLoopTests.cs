@@ -94,15 +94,41 @@ namespace FluidStabilizer.Tests
         }
 
         [Test]
-        public void HoldController_NeverMovesTheGimbal()
+        public void HoldController_KeepsGimbalEssentiallyStationary()
         {
+            // HoldController commands zero rate; the servo setpoint stays at 0.
+            // The joint deflects a little under transient external load (real
+            // actuator compliance, ~1°) but must not wander: the time-averaged
+            // angle stays near zero and it settles back after the maneuver.
             var loop = new SimulationLoop(ShortConfig(), new HoldController(), new ScriptedManeuverDriver());
             loop.BeginEpisode(3);
+            double sumAbsPitch = 0, sumAbsRoll = 0, peak = 0;
+            long n = 0;
             while (loop.StepPhysics())
             {
-                Assert.AreEqual(0.0, loop.GimbalState.Pitch.Angle, 1e-12);
-                Assert.AreEqual(0.0, loop.GimbalState.Roll.Angle, 1e-12);
+                var g = loop.GimbalState;
+                sumAbsPitch += Math.Abs(g.Pitch.Angle);
+                sumAbsRoll += Math.Abs(g.Roll.Angle);
+                peak = Math.Max(peak, Math.Max(Math.Abs(g.Pitch.Angle), Math.Abs(g.Roll.Angle)));
+                n++;
             }
+
+            Assert.Less(sumAbsPitch / n, 3e-3, "mean |pitch| should be tiny");
+            Assert.Less(sumAbsRoll / n, 3e-3, "mean |roll| should be tiny");
+            Assert.Less(peak, 3e-2, "transient compliance under load stays small");
+        }
+
+        [Test]
+        public void NoDisturbance_GimbalDoesNotMoveUnderHold()
+        {
+            var cfg = new SimulationConfig { EpisodeSeconds = 5.0 };
+            cfg.Sensors.Enabled = false;
+            var loop = new SimulationLoop(cfg, new HoldController(),
+                new ConstantDriver(DriverControls.Neutral));
+            loop.BeginEpisode(1);
+            while (loop.StepPhysics()) { }
+            Assert.AreEqual(0.0, loop.GimbalState.Pitch.Angle, 1e-6);
+            Assert.AreEqual(0.0, loop.GimbalState.Roll.Angle, 1e-6);
         }
 
         [Test]

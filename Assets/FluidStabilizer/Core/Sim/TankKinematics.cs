@@ -45,15 +45,19 @@ namespace FluidStabilizer.Core.Sim
             Double3 omegaJointV = new Double3(0, pitchRate, 0) + rollAxisV * rollRate;
             Double3 alphaJointV = new Double3(0, pitchAcc, 0) + rollAxisV * rollAcc;
 
+            // Angular velocity/acceleration of the tank = vehicle + gimbal joints.
             Double3 omegaV = v.AngularVelocityBody + omegaJointV;
             Double3 alphaV = v.AngularAccelerationBody + alphaJointV;
 
-            // Linear acceleration of the pivot in the vehicle frame:
-            //   a_pivot = a_origin + alpha x r + omega x (omega x r)
+            // Linear acceleration of the pivot: the gimbal pivot is the centre of
+            // rotation, so gimbal joint motion does NOT translate it — only the
+            // vehicle body's motion does. Using the joint terms here would inject
+            // a large lever-arm feedback into the slosh model.
             Double3 r = pivotInVehicle;
             Double3 aPivotV = v.LinearAccelerationBody
-                              + Double3.Cross(alphaV, r)
-                              + Double3.Cross(omegaV, Double3.Cross(omegaV, r));
+                              + Double3.Cross(v.AngularAccelerationBody, r)
+                              + Double3.Cross(v.AngularVelocityBody,
+                                  Double3.Cross(v.AngularVelocityBody, r));
 
             Double3 gravityWorld = new Double3(0, 0, -MathD.StandardGravity);
 

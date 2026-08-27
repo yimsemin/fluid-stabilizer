@@ -33,6 +33,8 @@ namespace FluidStabilizer.Core.Sim
         private readonly Queue<SensorBundle> _bundleQueue = new Queue<SensorBundle>();
 
         private StabilizerCommand _latchedCommand;
+        private SloshOutput _lastSlosh;
+        private double _lastSloshLoadPitch, _lastSloshLoadRoll;
         private long _commandCount;
         private double _effortAccum;
         private long _torqueSatTicks, _angleLimitTicks;
@@ -86,8 +88,13 @@ namespace FluidStabilizer.Core.Sim
             _controller.Reset();
             _slosh.Reset(_cfg.Slosh.ToParameters(), root.Fork("slosh"));
 
+            if (_slosh is IReflectedInertiaSource ri)
+                _gimbal.SetReflectedInertia(ri.ReflectedInertiaPitch, ri.ReflectedInertiaRoll);
+
             _bundleQueue.Clear();
             _latchedCommand = StabilizerCommand.Hold(0, 0.0);
+            _lastSlosh = default;
+            _lastSloshLoadPitch = _lastSloshLoadRoll = 0.0;
             _commandCount = 0;
             _effortAccum = 0;
             _torqueSatTicks = _angleLimitTicks = 0;
@@ -98,7 +105,7 @@ namespace FluidStabilizer.Core.Sim
             // Prime derived state at t = 0 without advancing time.
             VehicleState = _vehicle.Step(DriverControls.Neutral, default, 0.0);
             TankState = TankKinematics.Compute(VehicleState, _gimbal.State, _cfg.Gimbal.PivotInVehicle);
-            LatestSensorBundle = _sensors.Sample(0.0, VehicleState, _gimbal.State, TankState);
+            LatestSensorBundle = _sensors.Sample(0.0, VehicleState, _gimbal.State, TankState, _lastSlosh);
             LatestGroundTruth = BuildGroundTruth();
         }
 
@@ -114,11 +121,10 @@ namespace FluidStabilizer.Core.Sim
 
             VehicleState v = _vehicle.Step(controls, default, dt);
 
-            // External load on the gimbal from the previous step's slosh reaction
-            // + tank gravity torque. v1: pivot at CoM so gravity torque ≈ 0, and
-            // the null slosh model contributes nothing. Real coupling lands with
-            // the pendulum model.
-            _gimbal.Step(_latchedCommand, 0.0, 0.0, dt);
+            // The gimbal sees the previous step's slosh reaction torque as an
+            // external load (explicit one-step-lag coupling — stable at 600 Hz
+            // for the liquid/cradle inertia ratio here; see docs/decisions.md D1).
+            _gimbal.Step(_latchedCommand, _lastSloshLoadPitch, _lastSloshLoadRoll, dt);
             GimbalState g = _gimbal.State;
 
             TankKinematicState tank = TankKinematics.Compute(v, g, _cfg.Gimbal.PivotInVehicle);
@@ -132,6 +138,8 @@ namespace FluidStabilizer.Core.Sim
                 Dt = dt
             };
             SloshOutput slosh = _slosh.Step(sloshInput);
+            _lastSlosh = slosh;
+            ProjectSloshLoadOntoJoints(slosh.ReactionTorqueTankFrame, g);
 
             _cumulativeOverflow += Math.Max(0.0, slosh.OverflowVolumeThisStep);
             _worstFreeboard = Math.Min(_worstFreeboard, slosh.MinFreeboard);
@@ -145,7 +153,7 @@ namespace FluidStabilizer.Core.Sim
 
             if (step % _cfg.SensorDecimation == 0)
             {
-                SensorBundle bundle = _sensors.Sample(_clock.SimTimeSeconds, v, g, tank);
+                SensorBundle bundle = _sensors.Sample(_clock.SimTimeSeconds, v, g, tank, slosh);
                 _bundleQueue.Enqueue(bundle);
                 while (_bundleQueue.Count > _latencySensorSteps + 1) _bundleQueue.Dequeue();
                 LatestSensorBundle = bundle;
@@ -188,6 +196,23 @@ namespace FluidStabilizer.Core.Sim
             TorqueSaturationFraction = _commandCount > 0 ? (double)_torqueSatTicks / _commandCount : 0.0,
             AngleLimitFraction = _commandCount > 0 ? (double)_angleLimitTicks / _commandCount : 0.0
         };
+
+        /// <summary>
+        /// Resolve the slosh reaction torque (tank frame) onto the two gimbal
+        /// joint axes so the actuator feels a load that varies with the liquid
+        /// motion. Stored for the next step's <c>_gimbal.Step</c>.
+        /// </summary>
+        private void ProjectSloshLoadOntoJoints(Double3 reactionTorqueTankFrame, in GimbalState g)
+        {
+            Double3x3 rVT = Double3x3.Gimbal(g.Pitch.Angle, g.Roll.Angle);
+            Double3 tauV = rVT * reactionTorqueTankFrame;
+
+            double cp = Math.Cos(g.Pitch.Angle), sp = Math.Sin(g.Pitch.Angle);
+            var rollAxisV = new Double3(cp, 0.0, -sp);
+
+            _lastSloshLoadPitch = tauV.Y;                       // pitch joint axis = V.Y
+            _lastSloshLoadRoll = Double3.Dot(tauV, rollAxisV);  // roll joint axis
+        }
 
         private GroundTruthFrame BuildGroundTruth()
         {

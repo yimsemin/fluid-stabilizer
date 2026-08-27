@@ -89,9 +89,15 @@ namespace FluidStabilizer.Core.Sim
         public double MaxTorqueNm = 400.0;         // peak, per axis
         public double ContinuousTorqueNm = 180.0;  // thermal limit, per axis
 
-        /// <summary>Closed-loop actuator bandwidth (Hz) and damping for the 2nd-order rate loop.</summary>
+        /// <summary>Closed-loop actuator bandwidth (Hz) and damping for the position/rate servo.</summary>
         public double BandwidthHz = 3.5;
-        public double DampingRatio = 0.8;
+        public double DampingRatio = 0.9;
+
+        /// <summary>
+        /// Servo integral gain (1/s²·rad → N·m via inertia). Removes steady-state
+        /// angle sag under a constant external load, as a real PID gimbal does.
+        /// </summary>
+        public double IntegralGain = 40.0;
 
         /// <summary>Backlash dead-band half-width (rad). 0 disables backlash.</summary>
         public double BacklashRad = 0.0;
@@ -117,7 +123,9 @@ namespace FluidStabilizer.Core.Sim
         public double LiquidDensity = 1000.0;
         public double NaturalFrequencyScale = 1.0;
         public double DampingRatio = 0.05;
-        public double ParticipatingMassFraction = 0.5;
+        public double ParticipatingMassScale = 1.0;
+        public double SurfaceSlopePerPendulumAngle = 1.0;
+        public double SpillDischargeCoefficient = 0.6;
 
         /// <summary>Empty tank + cradle mass (kg).</summary>
         public double DryMass = 40.0;
@@ -131,7 +139,9 @@ namespace FluidStabilizer.Core.Sim
             LiquidDensity = LiquidDensity,
             NaturalFrequencyScale = NaturalFrequencyScale,
             DampingRatio = DampingRatio,
-            ParticipatingMassFraction = ParticipatingMassFraction
+            ParticipatingMassScale = ParticipatingMassScale,
+            SurfaceSlopePerPendulumAngle = SurfaceSlopePerPendulumAngle,
+            SpillDischargeCoefficient = SpillDischargeCoefficient
         };
     }
 

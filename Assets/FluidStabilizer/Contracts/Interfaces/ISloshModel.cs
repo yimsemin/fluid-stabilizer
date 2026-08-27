@@ -97,7 +97,20 @@ namespace FluidStabilizer.Contracts
         /// <summary>First-mode damping ratio (dimensionless).</summary>
         public double DampingRatio;
 
-        /// <summary>Fraction of liquid mass that participates in the first sloshing mode.</summary>
-        public double ParticipatingMassFraction;
+        /// <summary>
+        /// Multiplier on the analytically-derived first-mode participating mass
+        /// fraction (1.0 = use the textbook value).
+        /// </summary>
+        public double ParticipatingMassScale;
+
+        /// <summary>
+        /// Free-surface elevation at the wall per unit equivalent-pendulum angle,
+        /// as a fraction of the half-length. ~1.0 nominal; needs calibration
+        /// against a shallow-water run (design-review §6 caveat).
+        /// </summary>
+        public double SurfaceSlopePerPendulumAngle;
+
+        /// <summary>Weir discharge coefficient for the continuous overflow estimate (~0.6).</summary>
+        public double SpillDischargeCoefficient;
     }
 }

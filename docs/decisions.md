@@ -5,6 +5,33 @@ reasoning. Newest first. These refine `design-review.md`; they do not replace it
 
 ---
 
+## D3 — 2026-08-28 — Slosh ↔ actuator coupling: split inertia vs. load
+
+The slosh model and the gimbal actuator are coupled both ways. Feeding the full
+slosh reaction torque to the actuator as an external load created an unstable
+explicit algebraic loop (the reaction's angular-acceleration term acts like
+negative inertia). Resolved by:
+
+1. **Split the reaction.** The slosh model reports a roughly-constant
+   `ReflectedInertia*` per axis (`IReflectedInertiaSource`); the simulation adds
+   it to the actuator's axis inertia. The reaction torque the model returns each
+   step then omits the tank-angular-acceleration term, leaving only the genuine
+   state-dependent (θ, θ̇, base motion) disturbance, which is fed back as an
+   external load with a one-step lag — stable at 600 Hz.
+2. **Pivot doesn't translate under gimbal motion.** `TankKinematics` computes the
+   pivot's linear acceleration from vehicle body motion only. The gimbal pivot is
+   the centre of rotation, so joint rates/accels don't move it; including them
+   injected a large lever-arm (≈2.6 m) feedback into the slosh model.
+3. **Actuator is a position servo, not a bare rate loop.** The commanded rate
+   integrates to a position setpoint that a PD+I loop tracks, so a steady
+   external load produces bounded sag, not drift.
+
+Pendulum angle/rate are clamped to the ROM's validity range (~75°, 25 rad/s) so a
+bad transient can't cascade to NaN; hitting the clamp in normal use signals an
+out-of-envelope scenario.
+
+---
+
 ## D2 — 2026-08-27 — Optional sensors use `Has*` flags, not `Nullable<T>`
 
 `Nullable<struct>` does not survive Unity serialization and does not map cleanly
