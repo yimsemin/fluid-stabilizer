@@ -145,20 +145,26 @@ namespace FluidStabilizer.Core.Sim.SloshModels
                 Double3.Cross(_fixedMassPos, fFixed);
 
             // --- free-surface elevation at the four walls & overflow ---
-            double etaXplus = _surfaceSlopeGain * (_tankLx * 0.5) * Math.Sin(_thx);
-            double etaYplus = _surfaceSlopeGain * (_tankLy * 0.5) * Math.Sin(_thy);
+            // Wave elevation at a wall relative to the mean surface. Capped at
+            // 0.8·depth: a first-mode linear wave cannot exceed the fill depth,
+            // and the ROM has no validity near that (wave breaking — out of scope,
+            // design-review §5).
+            double depth = _restSurfaceZ;
+            double etaCap = 0.8 * Math.Max(1e-3, depth);
+            double etaX = MathD.ClampAbs(_surfaceSlopeGain * (_tankLx * 0.5) * Math.Sin(_thx), etaCap);
+            double etaY = MathD.ClampAbs(_surfaceSlopeGain * (_tankLy * 0.5) * Math.Sin(_thy), etaCap);
 
-            double fbXp = _rimZ - (_restSurfaceZ + etaXplus);
-            double fbXm = _rimZ - (_restSurfaceZ - etaXplus);
-            double fbYp = _rimZ - (_restSurfaceZ + etaYplus);
-            double fbYm = _rimZ - (_restSurfaceZ - etaYplus);
-            double minFreeboard = Math.Min(Math.Min(fbXp, fbXm), Math.Min(fbYp, fbYm));
+            double fbXp = _rimZ - (_restSurfaceZ + Math.Abs(etaX));
+            double fbYp = _rimZ - (_restSurfaceZ + Math.Abs(etaY));
+            double minFreeboard = Math.Min(fbXp, fbYp);
 
+            // Overflow: only the liquid physically above the rim near the high
+            // wall can leave. Model it as a wedge (triangular cross-section along
+            // the tank, full wall width) that drains toward empty with a ~0.3 s
+            // time constant, bounded by a weir rate.
             double spill = 0.0;
-            spill += WeirOutflow(-fbXp, _wallWidthX, (_tankLx * 0.5) * _thxDot, dt);
-            spill += WeirOutflow(-fbXm, _wallWidthX, (_tankLx * 0.5) * _thxDot, dt);
-            spill += WeirOutflow(-fbYp, _wallWidthY, (_tankLy * 0.5) * _thyDot, dt);
-            spill += WeirOutflow(-fbYm, _wallWidthY, (_tankLy * 0.5) * _thyDot, dt);
+            spill += WallOverflow(_restSurfaceZ + Math.Abs(etaX) - _rimZ, Math.Abs(etaX), _tankLx, _wallWidthX, dt);
+            spill += WallOverflow(_restSurfaceZ + Math.Abs(etaY) - _rimZ, Math.Abs(etaY), _tankLy, _wallWidthY, dt);
 
             spill = Math.Min(spill, _liquidVolume);
             _liquidVolume -= spill;
@@ -262,13 +268,28 @@ namespace FluidStabilizer.Core.Sim.SloshModels
             return (force, rBob, aRel);
         }
 
-        private double WeirOutflow(double headAboveRim, double wallWidth, double surfaceVel, double dt)
+        /// <summary>
+        /// Volume leaving over one rim edge this step. Only the liquid physically
+        /// above the rim near that wall can go: a triangular wedge along the tank,
+        /// spanning the wall width, that drains toward empty with a ~0.35 s time
+        /// constant, further capped by a weir-flow rate. This bounds the total
+        /// spill per slosh excursion to about the wedge volume, and it stops once
+        /// the wave recedes below the rim.
+        /// </summary>
+        private double WallOverflow(double head, double eta, double tankLen, double wallWidth, double dt)
         {
-            if (headAboveRim <= 0.0) return 0.0;
-            // Volume crossing the rim this step ≈ Cd · width · head · |outward surface velocity| · dt,
-            // with a floor so a static over-fill still drains slowly.
-            double v = Math.Max(Math.Abs(surfaceVel), 0.2);
-            return _dischargeCoef * wallWidth * headAboveRim * v * dt;
+            if (head <= 0.0 || eta <= 1e-6) return 0.0;
+
+            double slope = eta / (0.5 * tankLen);                 // surface rise per unit length
+            double horizontalExtent = head / Math.Max(1e-3, slope);
+            double wedgeVolume = 0.5 * head * horizontalExtent * wallWidth;
+
+            double byTimeConstant = wedgeVolume * (dt / 0.35);
+            double weirRate = _dischargeCoef * (2.0 / 3.0)
+                              * Math.Sqrt(2.0 * MathD.StandardGravity)
+                              * wallWidth * Math.Pow(head, 1.5);
+
+            return Math.Min(byTimeConstant, weirRate * dt);
         }
 
         private static double NaturalFreq(double tankLength, double depth)

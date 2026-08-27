@@ -40,24 +40,30 @@ namespace FluidStabilizer.Core.Sim
             public double Setpoint;      // integrated commanded-rate position target
             public double Integral;      // servo position-error integral (anti-windup clamped)
             public double LastAccel;
+            public double LastAccelSmoothed;
             public double LastTorque;
             public double LastCurrent;
             public bool AtLimit;
             public bool Saturated;
             public DelayLine CommandDelay;
             public double ReflectedInertia;
+            public Core.LowPass AccelFilter;
         }
 
         private readonly GimbalConfig _cfg;
         private readonly AxisSim _pitch = new AxisSim();
         private readonly AxisSim _roll = new AxisSim();
         private readonly double _torquePerAmp; // Kt·gear, for the current estimate
+        private readonly double _stepDt;
 
         public GimbalActuator(GimbalConfig cfg, double dt)
         {
             _cfg = cfg;
             _pitch.CommandDelay = new DelayLine(cfg.CommandDelaySeconds, dt);
             _roll.CommandDelay = new DelayLine(cfg.CommandDelaySeconds, dt);
+            _pitch.AccelFilter = new Core.LowPass(18.0);
+            _roll.AccelFilter = new Core.LowPass(18.0);
+            _stepDt = dt;
             // Pick Kt so peak torque corresponds to a ~20 A peak current.
             _torquePerAmp = cfg.MaxTorqueNm / 20.0;
             Reset();
@@ -68,9 +74,10 @@ namespace FluidStabilizer.Core.Sim
             foreach (var a in new[] { _pitch, _roll })
             {
                 a.Angle = 0; a.Rate = 0; a.Setpoint = 0; a.Integral = 0; a.LastAccel = 0; a.LastTorque = 0;
-                a.LastCurrent = 0; a.AtLimit = false; a.Saturated = false;
+                a.LastAccelSmoothed = 0; a.LastCurrent = 0; a.AtLimit = false; a.Saturated = false;
                 a.ReflectedInertia = 0.0;
                 a.CommandDelay.Reset(0.0);
+                a.AccelFilter.Reset(0.0);
             }
         }
 
@@ -164,6 +171,7 @@ namespace FluidStabilizer.Core.Sim
             }
 
             a.LastAccel = accel;
+            a.LastAccelSmoothed = a.AccelFilter.Step(accel, _stepDt);
             a.Angle = newAngle;
             a.LastTorque = torqueApplied;
             a.LastCurrent = torqueApplied / _torquePerAmp;
@@ -173,7 +181,7 @@ namespace FluidStabilizer.Core.Sim
         {
             Angle = a.Angle,
             Rate = a.Rate,
-            AngularAccel = a.LastAccel,
+            AngularAccel = a.LastAccelSmoothed,
             AppliedTorque = a.LastTorque,
             MotorCurrent = a.LastCurrent,
             AtAngleLimit = a.AtLimit,

@@ -12,8 +12,8 @@ Tracks the phase-1 scope from `design-review.md` §20. Design approved 2026-08-2
 | 6 | Actuator model per axis | 🟡 `GimbalActuator`: transport delay, **PD+I position servo** (rate cmd → setpoint), peak-torque saturation, Coulomb+viscous friction, rate + travel limits with anti-windup, reflected-inertia input, external-load clamp, current estimate. Backlash present but off by default; motor+gearbox detail + continuous-torque thermal model pending |
 | 7 | Sensor layer + DTOs + noise/bias/delay/rate | 🟡 `SensorSuite`: vehicle+tank IMU (specific force, no gravity split), encoders (quantised), motors, 4 load cells, optional level/CAN; per-sample noise + per-episode bias; bundle latency in the loop. Load-cell slosh redistribution + bias random-walk/misalignment pending |
 | 8 | `ISensorBus` / `IActuatorBus` + in-process impl | 🟡 `IController` seam + DTOs carry the contract; explicit bus deferred |
-| 9 | Baseline controllers: specific-force alignment, PID, privileged MPC | 🟡 `HoldController` only; real baselines pending |
-| 10 | Eval harness: fixed scenarios, metrics, baseline comparison, GT logging | 🟡 `EpisodeResult` metrics + `GroundTruthFrame` done; scenario set + batch runner + comparison report pending |
+| 9 | Baseline controllers: specific-force alignment, PID, privileged MPC | 🟡 `HoldController`, `SpecificForceAlignmentController`, `PidController`, `PrivilegedFullStateController` (via `IPrivilegedController` + `PrivilegedObservation`) done. **Finding F1: naive PID/SFA excite slosh and spill worse than Hold; the privileged ceiling only matches Hold.** A real ceiling (LQR/MPC or anticipatory control) is the top next task — see `docs/findings.md`. |
+| 10 | Eval harness: fixed scenarios, metrics, baseline comparison, GT logging | ✅ `Evaluator` + `ScenarioSet` (6 scenarios) + `AggregateResult` + deterministic text report. |
 | 11 | Playable human-drive scene | ⬜ not started |
 | 12 | RL path: Gymnasium socket adapter + PPO, asymmetric critic, frame-stack | ⬜ not started |
 | 13 | Domain-randomization config (narrow) + per-episode param logging | 🟡 config structs exist with nominal values; the randomizer + logging pending |
@@ -27,10 +27,13 @@ Tracks the phase-1 scope from `design-review.md` §20. Design approved 2026-08-2
 ## Verification so far
 
 - Headless compile: clean (0 errors, 0 warnings).
-- EditMode tests: **35/35 pass** — adds `PendulumSloshModel` (rest reaction =
-  liquid weight, forward accel → liquid back, left accel → liquid right,
-  ring-down frequency matches rectangular-tank first mode, damping decays the
-  oscillation, slosh KE positive while sloshing, spills under resonant shake but
-  not when calm, coupled-loop determinism + no blow-up over 40 s).
+- EditMode tests: **40 pass, 2 skipped** (skipped = `[Explicit]` tuning/trace
+  diagnostics). Covers the deterministic core, `PendulumSloshModel` physics
+  (natural frequency vs theory, damping, response direction, spill under
+  resonant shake), the coupled loop (determinism, no blow-up over 40 s), the
+  baselines, and finding F1 (naive control excites slosh + worsens spill).
+- Run: `"/Applications/Unity/Hub/Editor/6000.5.10f1/Unity.app/Contents/MacOS/Unity" -batchmode -nographics -projectPath . -runTests -testPlatform EditMode -testResults Logs/editmode-results.xml -logFile -`
+- Controller comparison report:
+  `-testFilter FluidStabilizer.Tests.BaselineControllerTests.Report_PrintsAndIsDeterministic` (prints the table).
 - Re-run tests headless:
   `"/Applications/Unity/Hub/Editor/6000.5.10f1/Unity.app/Contents/MacOS/Unity" -batchmode -nographics -projectPath . -runTests -testPlatform EditMode -testResults Logs/editmode-results.xml -logFile -`
