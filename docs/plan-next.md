@@ -9,6 +9,21 @@ pendulum ROM, then shallow water — swapped in behind `ISloshModel` with no sce
 changes. Truck feel: **realistic** (heavy, long braking, lazy steering).
 Input: **keyboard + gamepad**.
 
+**Status 2026-08-28:** B done (see finding F2), C done (see `docs/human-drive.md`).
+**A is next** — start of the next session.
+
+### Liquid visualization (owner asked)
+
+Right now the liquid is a translucent blue block plus a brighter surface quad
+tilted by the two pendulum angles — a proxy, because the pendulum ROM has no
+spatial surface, only two mode angles. **Real water-like liquid comes with A:**
+the shallow-water model produces an actual height field, and `SimView` will then
+render it as a deforming mesh with a water shader — visible traveling waves that
+climb the walls and slop over the rim. Full particle/SPH fluid (foam, splashes,
+refraction) stays out of scope — it breaks determinism and the RL step budget
+(design-review §6, §21). The shallow-water mesh + a good surface shader is the
+target look.
+
 ---
 
 ## B. Gentler, more realistic driver + scenario revision
@@ -70,7 +85,11 @@ floor), depth-averaged:
 - Sloshing under a step acceleration: compare wall wave and settling to the
   pendulum ROM — expect agreement at low amplitude, divergence when big.
 - Re-run `PlantControllabilityTests` and the baseline evaluation with this model.
-  **This is the deciding experiment for F1.**
+  **This is the deciding experiment for F1's aggressive-regime finding.**
+
+**Then:** `SimView` renders the height field as a mesh (a `MeshFilter` updated
+each frame from the grid) with a simple water shader, replacing the tilted-quad
+proxy. Add a scene toggle for pendulum-ROM vs shallow-water.
 
 **Cost / risk:** the solver is the main effort and the main risk (instability
 blowing up training later). Keep the grid small, the scheme simple and proven,

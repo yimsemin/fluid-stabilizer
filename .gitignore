@@ -66,6 +66,14 @@ crashlytics-build.properties
 /[Aa]ssets/[Ss]treamingAssets/aa/*
 
 # ---------------------------------------------------------------------
+# Code-generated scene: SceneBuilder regenerates it with fresh fileIDs on every
+# run, so committing it produces a huge meaningless diff each rebuild. Build it
+# on demand: menu ▸ FluidStabilizer ▸ Rebuild Play Scene.
+# ---------------------------------------------------------------------
+/Assets/FluidStabilizer/Scenes/PlayScene.unity
+/Assets/FluidStabilizer/Scenes/PlayScene.unity.meta
+
+# ---------------------------------------------------------------------
 # Claude Code — machine-local settings (shared config stays in .claude/settings.json)
 # ---------------------------------------------------------------------
 .claude/settings.local.json
