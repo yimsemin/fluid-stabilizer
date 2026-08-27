@@ -20,9 +20,9 @@ follow.
 
 ```
 fluid-stabilizer/
-├── Assets/            Unity project assets  (created after Unity license is activated)
-├── Packages/          Unity package manifest
-├── ProjectSettings/   Unity project settings
+├── Assets/            Unity project assets  (empty — no feature code yet)
+├── Packages/          Unity package manifest (minimal: built-in modules only)
+├── ProjectSettings/   Unity project settings (Unity 6000.5.10f1, Built-in render pipeline)
 ├── docs/              Design docs — read these first
 │   ├── project-brief.md              The goal, in full
 │   ├── design-review.md              Critical review of the idea + recommendations
@@ -34,10 +34,15 @@ fluid-stabilizer/
 
 ## Status
 
-Environment checked, Git repository configured. **The Unity project has not been
-created yet — the Unity Editor license needs to be activated first.** See
+Environment verified, Git repository configured, **Unity project created and
+verified** (opens headless, compiles clean). See
 [docs/setup-status.md](docs/setup-status.md).
 
 No feature code has been written. The design review in
 [docs/design-review.md](docs/design-review.md) is awaiting the owner's decision
-before implementation starts.
+before implementation starts. No GitHub remote created yet.
+
+## Opening the project
+
+Unity Hub → **Add → Add project from disk** → select this folder. Use Unity
+**6000.5.10f1** exactly (same version on Mac and Windows).

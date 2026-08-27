@@ -57,19 +57,23 @@ and multi-mode models are phase-2 drop-in replacements. design-review §6.
 ## Environment facts
 
 - Unity **6000.5.10f1**, pinned via committed `ProjectSettings/ProjectVersion.txt`.
-  Same version on Mac and Windows.
+  Same version on Mac and Windows. **Built-in render pipeline** (not URP).
+- Unity project is at the **repo root** (`Assets/`, `Packages/`,
+  `ProjectSettings/` alongside `docs/`).
 - macOS arm64 (Apple M4 Max). Windows may be used later — keep config
   platform-neutral.
-- Git on `main`, Git LFS active. `gh` authed as `yimsemin`.
-- Generated files (`Library/`, `*.sln`, `*.csproj`, `Logs/`, `UserSettings/`) are
-  gitignored.
+- Git on `main`, Git LFS active. `gh` authed as `yimsemin`. No remote yet.
+- Generated files (`Library/`, `*.sln`, `*.csproj`, `Logs/`, `UserSettings/`,
+  `Temp/`) are gitignored.
+- `Packages/manifest.json` is minimal. When phase 1 is approved, add
+  `com.unity.test-framework` and `com.unity.inputsystem` first.
+- Headless verify: `"/Applications/Unity/Hub/Editor/6000.5.10f1/Unity.app/Contents/MacOS/Unity" -batchmode -quit -nographics -projectPath . -logFile -`
 
 ## Current state
 
-Design + scaffolding only. **No feature code yet.** The Unity project is not
-created until the Unity license is activated (setup-status §5.1). After that:
-create + verify project, initial commit, then **wait for the owner's decision on
-the design review** before implementing anything.
+Design + verified empty Unity project. **No feature code yet.** Environment,
+Git, and the Unity project are done and committed locally. **Waiting for the
+owner's decision on the design review** before implementing anything.
 
 ## Docs discipline
 
