@@ -27,7 +27,7 @@ namespace FluidStabilizer.SimEditor
             // --- environment ---
             var ground = GameObject.CreatePrimitive(PrimitiveType.Plane);
             ground.name = "Ground";
-            ground.transform.localScale = new Vector3(200, 1, 200);
+            ground.transform.localScale = new Vector3(2000, 1, 2000);
             ground.GetComponent<Renderer>().sharedMaterial = SolidMaterial("Ground", new Color(0.22f, 0.24f, 0.26f));
 
             var lightGo = new GameObject("Sun");
