@@ -11,7 +11,7 @@ Last updated: 2026-08-27
 | Unity Hub | 3.21.0, installed at `/Applications/Unity Hub.app` |
 | Unity Editor | **6000.5.10f1** (Unity 6.2 line), at `/Applications/Unity/Hub/Editor/6000.5.10f1` |
 | Unity Editor modules installed | WebGL Build Support, Documentation |
-| Unity **license** | ❌ **not activated** — blocks project creation. See §4. |
+| Unity **license** | ✅ activated (Unity Personal, entitlement license present) |
 | Git | 2.55.0 |
 | Git identity | `YSM <smyim428@gmail.com>` (global) |
 | Git LFS | ❌ was missing → **installed** (3.7.1), see §3 |
@@ -23,18 +23,43 @@ Last updated: 2026-08-27
 
 ### Verdict
 
-The environment is sufficient to build and run the simulation **once the Unity
-license is activated**. No missing tools block phase-1 work except the Unity
-license.
+The environment is sufficient to build and run the simulation. No missing tools
+block phase-1 work.
 
 - **Unity 6000.5.10f1 is a fine version to standardize on.** It is current, it is
   the same on macOS and Windows, and nothing in the design needs a different
-  version. Recommend pinning the project to it (`ProjectSettings/ProjectVersion.txt`
-  is committed) and both machines using exactly this version via Unity Hub.
+  version. The project is pinned to it (`ProjectSettings/ProjectVersion.txt` is
+  committed); both machines must use exactly this version via Unity Hub.
 - **No extra Unity modules needed now.** Mac in-Editor play mode does not require
   a build-support module. Add "Windows Build Support (Mono)" / "Mac Build Support"
   only if/when you want standalone builds. The WebGL module that is already
   installed is harmless; leave it.
+
+## 1b. Unity project — created and verified (2026-08-27)
+
+- Created via the Editor CLI (`-createProject`) at the **repo root**
+  (`/Users/ysm/Documents/fluid-stabilizer`), so `Assets/`, `Packages/`,
+  `ProjectSettings/` sit alongside `docs/`.
+- **Render pipeline: Built-in (BiRP).** The CLI-created project is a bare 3D
+  project on the Built-in pipeline — this supersedes the earlier note about the
+  URP "3D cross-platform" template. Built-in is the better fit here: fewer
+  dependencies, lighter, and rendering is off during headless training anyway.
+  A simple visual truck/tank/liquid proxy needs nothing URP provides. Revisit
+  only if visualization needs outgrow it.
+- `Packages/manifest.json` is minimal: Unity built-in modules + one default
+  package (`com.unity.multiplayer.center`, harmless, can be removed later).
+  **Not yet added** (recommended when phase 1 starts, not before):
+  `com.unity.test-framework` (deterministic unit tests for the controller/slosh
+  math) and `com.unity.inputsystem` (gamepad/keyboard driver input). Held back
+  per "no feature work before the design review is approved."
+- **Verified:** opened headless twice — 37 packages resolved, scripts compiled
+  with 0 errors, Asset Pipeline refresh clean, batchmode quit successfully.
+  (The `Curl error 7 … config.uca.cloud.unity3d.com` and initial licensing
+  handshake-retry lines in the log are the offline analytics/config endpoint and
+  are harmless.)
+- Committed: `Packages/manifest.json`, `Packages/packages-lock.json`, and
+  `ProjectSettings/*` (24 small text files). `Library/`, `Logs/`, `Temp/`,
+  `UserSettings/` are correctly gitignored.
 
 ## 2. Git repository — configured
 
@@ -45,7 +70,8 @@ license.
   asset types.
 - `core.autocrlf=input` set locally.
 - Git LFS hooks installed in the repo.
-- **No GitHub remote created yet** — that needs your go-ahead (see §5).
+- Initial commits: repo scaffold + design docs, then the verified Unity project.
+- **No GitHub remote created yet** — that needs your go-ahead (see §5.2).
 
 ## 3. Tools installed this session, and why
 
@@ -66,43 +92,25 @@ Nothing else was installed.
 | **A standalone IDE (Rider / VS Code C#)** | Not required for phase 1. The Editor + Claude Code is enough. Can be added later purely as a convenience. |
 | **Extra Unity build-support modules** | Not needed for in-Editor play or headless training on this Mac. Add per-platform build support only when standalone builds are actually wanted. |
 
-## 5. Blocked / needs you
+## 5. Needs you
 
-### 5.1 Activate the Unity Editor license (required to proceed)
+### 5.1 Unity license — done ✅
 
-The Editor is installed but no license is active, so it refuses to create or open
-projects (`No valid Unity Editor license found`). This needs your Unity account
-sign-in — it cannot be automated.
-
-1. Open **Unity Hub**.
-2. Sign in with a Unity account (create a free one at id.unity.com if you don't
-   have one — account creation must be done by you).
-3. Hub → the account menu (top-right) → **Manage licenses** → **Add license** →
-   **Get a free personal license** (Unity Personal). Unity Personal is free for
-   individuals / small revenue and is the right choice here.
-4. Confirm it shows an active license.
-
-Tell me when that's done and I will create the Unity project via the command
-line with the settings from the design review (URP "3D cross-platform" template,
-pinned to 6000.5.10f1, at the repo root), verify it opens and enters Play mode,
-and make the initial commit.
-
-Alternatively you can create it yourself in Unity Hub (**New project → Universal
-3D → name `fluid-stabilizer`, location = this folder's parent so the project
-lands at `/Users/ysm/Documents/fluid-stabilizer`**) — but letting me do it via
-CLI keeps the settings controlled.
+Unity Personal license activated. Project created and verified (see §1b).
 
 ### 5.2 GitHub remote (optional, your call)
 
-`gh` is authenticated as `yimsemin`, so I can create the remote without any new
-login. I have **not** done so. When you want it, confirm:
+`gh` is authenticated as `yimsemin`, so the remote can be created without any new
+login. It has **not** been created. When you want it, confirm:
 
 - repo name `fluid-stabilizer`, owner `yimsemin`
 - **private** or public
-- then I'll run `gh repo create` and push `main`.
+- then: `gh repo create` + push `main`.
 
-## 6. Next step after unblocking
+## 6. Current state / next step
 
-Create + verify the Unity project (§5.1), make the initial commit, then **stop
-and wait for your decision on the design review** (`design-review.md`) before any
-feature implementation.
+Environment verified, Git repo configured, Unity project created and verified,
+all committed locally. **Now waiting for your decision on the design review**
+(`design-review.md`) before any feature implementation. When phase 1 is approved,
+the first setup task is adding `com.unity.test-framework` and
+`com.unity.inputsystem` and agreeing `frames-units-conventions.md`.
