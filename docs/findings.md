@@ -4,7 +4,52 @@ Empirical results from the simulation as it is built. Newest first.
 
 ---
 
+## F2 — 2026-08-28 — A realistic driver flips F1: tilt control works for highway driving
+
+Interpretation 3 of F1 (the synthetic driver was too broadband) largely holds.
+
+`HighwayDriver` — slow lane-keeping wander plus **smooth** (raised-cosine)
+maneuvers: lane changes, a highway curve held and released, easing for traffic,
+a firm-but-not-emergency brake. No sharp edges near the slosh frequency.
+
+Re-running the evaluation with it (`HighwayBriskLowFreeboard`: 0.27 m freeboard,
+briskness 0.9, 40 s, 6 seeds):
+
+| controller | spill (L, mean) | spill / episodes |
+|---|---|---|
+| PID (SpecificForceAlignment+I) | **0.39** | 4/6 |
+| SpecificForceAlignment | **0.44** | 4/6 |
+| PrivilegedFeedforwardTilt | 0.50 | 4/6 |
+| **Hold** | **6.98** (max 38.8) | 4/6 |
+
+The analytic tilt controllers now spill **~15× less than doing nothing**. For
+realistic highway driving the task is well-posed and rule-based control helps.
+
+**But the aggressive/adversarial regime is unchanged** (`AggressiveRandom`,
+`HighFillAggressive`): every tilt controller still spills more than Hold and runs
+2–13× the slosh energy — the sharp broadband maneuvers push the equivalent-
+pendulum ROM out of its small-amplitude validity and the tilt loop resonates.
+
+**Net picture — a healthy problem:**
+- Highway driving: rule-based tilt control works; RL should match/beat it easily.
+- Aggressive transients + plant randomization: where RL / anticipation earns its
+  place, and where the shallow-water check (F1 interpretation 1, still to do)
+  matters for trusting the numbers.
+
+**LQR shelved as a baseline.** `LqrSloshController` resonates in every scenario:
+its linear design model (ideal rate follower) is too far from the real
+servo + transport delay + angle-command actuator. `AxisLqr`'s Riccati math is
+correct and still tested; a proper MPC on the real actuator model is future work.
+
+Guard: `EvaluatorTests.TiltControl_ClearlyBeatsHold_OnRealisticBriskDriving` and
+`NaiveTiltControl_StillExcitesSlosh_UnderAggressiveDriving`.
+
+---
+
 ## F1 — 2026-08-28 — No baseline controller beats "hold the tank rigid"
+
+**Superseded in part by F2** (realistic driver) — kept for the reasoning and the
+plant-model history. The aggressive-regime finding still stands.
 
 **Status: project-shaping. Needs a direction decision (see end).**
 

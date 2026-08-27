@@ -21,9 +21,28 @@ namespace FluidStabilizer.Core.Sim.Eval
         {
             new Scenario
             {
-                Name = "CalmCruise",
-                Config = () => new SimulationConfig { EpisodeSeconds = 25.0 },
-                Driver = _ => new ConstantDriver(new DriverControls { Throttle = 0.13 })
+                Name = "HighwayCalm",
+                Config = () => new SimulationConfig { EpisodeSeconds = 30.0 },
+                Driver = seed => new HighwayDriver(seed, briskness: 0.2)
+            },
+            new Scenario
+            {
+                Name = "HighwayBrisk",
+                Config = () => new SimulationConfig { EpisodeSeconds = 30.0 },
+                Driver = seed => new HighwayDriver(seed, briskness: 0.6)
+            },
+            new Scenario
+            {
+                // The intended "interesting" regime: freeboard ~0.30 m, brisk
+                // (but realistic) highway driving.
+                Name = "HighwayBriskLowFreeboard",
+                Config = () =>
+                {
+                    var c = new SimulationConfig { EpisodeSeconds = 40.0 };
+                    c.Slosh.FillRatio = 0.66; // 0.53 m liquid ⇒ 0.27 m freeboard
+                    return c;
+                },
+                Driver = seed => new HighwayDriver(seed, briskness: 0.9)
             },
             new Scenario
             {
@@ -33,28 +52,9 @@ namespace FluidStabilizer.Core.Sim.Eval
             },
             new Scenario
             {
-                Name = "RandomModerate",
+                Name = "AggressiveRandom",
                 Config = () => new SimulationConfig { EpisodeSeconds = 30.0 },
-                Driver = seed => new RandomManeuverDriver(seed, aggression: 0.4)
-            },
-            new Scenario
-            {
-                // The intended "interesting" regime: freeboard ~0.30 m, brisk
-                // driving. Hold spills; a good controller should not.
-                Name = "ModerateFreeboard",
-                Config = () =>
-                {
-                    var c = new SimulationConfig { EpisodeSeconds = 30.0 };
-                    c.Slosh.FillRatio = 0.625; // 0.50 m liquid ⇒ 0.30 m freeboard
-                    return c;
-                },
-                Driver = seed => new RandomManeuverDriver(seed, aggression: 0.6)
-            },
-            new Scenario
-            {
-                Name = "RandomAggressive",
-                Config = () => new SimulationConfig { EpisodeSeconds = 30.0 },
-                Driver = seed => new RandomManeuverDriver(seed, aggression: 0.9)
+                Driver = seed => new RandomManeuverDriver(seed, aggression: 0.7)
             },
             new Scenario
             {
