@@ -19,6 +19,7 @@ namespace FluidStabilizer.Core.Sim
         public int SensorDecimation = 3;   // 600 / 3 = 200 Hz
         public int ControlDecimation = 6;  // 600 / 6 = 100 Hz
 
+        /// <summary>Episode length (s). Zero or negative = run indefinitely (interactive play).</summary>
         public double EpisodeSeconds = 30.0;
 
         public VehicleConfig Vehicle = new VehicleConfig();

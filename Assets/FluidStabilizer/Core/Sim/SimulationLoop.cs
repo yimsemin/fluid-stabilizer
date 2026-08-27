@@ -20,7 +20,7 @@ namespace FluidStabilizer.Core.Sim
     public sealed class SimulationLoop
     {
         private readonly SimulationConfig _cfg;
-        private readonly IController _controller;
+        private IController _controller;
         private readonly IDriverInput _driver;
         private readonly ISloshModel _slosh;
 
@@ -62,9 +62,23 @@ namespace FluidStabilizer.Core.Sim
         }
 
         public IClock Clock => _clock;
+        public SimulationConfig Config => _cfg;
+        public IController Controller => _controller;
         public long PhysicsStep => _clock.StepCount;
         public double SimTime => _clock.SimTimeSeconds;
-        public bool EpisodeComplete => _clock.StepCount >= _cfg.TotalPhysicsSteps;
+        public bool EpisodeComplete =>
+            _cfg.EpisodeSeconds > 0.0 && _clock.StepCount >= _cfg.TotalPhysicsSteps;
+
+        /// <summary>
+        /// Swap the stabilizer controller mid-run (a dev / interactive
+        /// convenience — the new controller is <see cref="IController.Reset"/>).
+        /// </summary>
+        public void SetController(IController controller)
+        {
+            _controller = controller ?? throw new ArgumentNullException(nameof(controller));
+            _controller.Reset();
+            _latchedCommand = StabilizerCommand.Hold(_commandCount, _clock.SimTimeSeconds);
+        }
 
         public VehicleState VehicleState { get; private set; }
         public GimbalState GimbalState => _gimbal.State;

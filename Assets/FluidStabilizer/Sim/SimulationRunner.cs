@@ -1,0 +1,109 @@
+using System;
+using FluidStabilizer.Contracts;
+using FluidStabilizer.Core.Sim;
+using FluidStabilizer.Core.Sim.SloshModels;
+using FluidStabilizer.Controller;
+using UnityEngine;
+
+namespace FluidStabilizer.Sim
+{
+    public enum StabilizerChoice
+    {
+        Off,                    // tank held rigid to the bed (HoldController)
+        SpecificForceAlignment,
+        SpecificForceAlignmentPlusI,
+        PrivilegedFeedforward,  // cheats (true slosh-free tilt) — for comparison only
+    }
+
+    /// <summary>
+    /// Drives a <see cref="SimulationLoop"/> in real time for interactive play.
+    /// The loop and every model it owns are engine-free; this MonoBehaviour only
+    /// paces it and exposes state to the view / HUD.
+    /// </summary>
+    public sealed class SimulationRunner : MonoBehaviour
+    {
+        [Header("Setup")]
+        public double FillRatio = 0.55;
+        public StabilizerChoice Stabilizer = StabilizerChoice.Off;
+        [Range(0.05f, 1f)] public float TimeScale = 1f;
+        public ulong Seed = 1;
+
+        [Header("Runtime (read-only)")]
+        [SerializeField] private double _simTime;
+        [SerializeField] private double _speedKmh;
+        [SerializeField] private double _minFreeboard;
+        [SerializeField] private double _spillLitres;
+
+        public SimulationLoop Loop { get; private set; }
+        public HumanDriverInput Driver { get; private set; }
+        public StabilizerChoice ActiveStabilizer { get; private set; }
+
+        private double _accumulator;
+        private const int MaxStepsPerFrame = 40;
+
+        private void Awake() => BuildLoop();
+
+        public void BuildLoop()
+        {
+            var cfg = new SimulationConfig { EpisodeSeconds = 0.0 }; // endless
+            cfg.Slosh.FillRatio = FillRatio;
+
+            Driver = new HumanDriverInput();
+            Loop = new SimulationLoop(cfg, MakeController(Stabilizer), Driver, new PendulumSloshModel());
+            Loop.BeginEpisode(Seed);
+            ActiveStabilizer = Stabilizer;
+            _accumulator = 0;
+        }
+
+        public void ResetEpisode()
+        {
+            Loop.SetController(MakeController(ActiveStabilizer));
+            Loop.BeginEpisode(Seed);
+            _accumulator = 0;
+        }
+
+        public void SetStabilizer(StabilizerChoice choice)
+        {
+            ActiveStabilizer = choice;
+            Stabilizer = choice;
+            Loop.SetController(MakeController(choice));
+        }
+
+        private static IController MakeController(StabilizerChoice c) => c switch
+        {
+            StabilizerChoice.SpecificForceAlignment => new SpecificForceAlignmentController(),
+            StabilizerChoice.SpecificForceAlignmentPlusI => new PidController(),
+            StabilizerChoice.PrivilegedFeedforward => new PrivilegedFullStateController(),
+            _ => new HoldController(),
+        };
+
+        private void Update() => Advance(Time.deltaTime);
+
+        /// <summary>
+        /// Step the simulation forward by <paramref name="wallDt"/> seconds of
+        /// wall time (scaled by <see cref="TimeScale"/>), in fixed physics steps.
+        /// Public so it can be driven from a test.
+        /// </summary>
+        public void Advance(double wallDt)
+        {
+            if (Loop == null) return;
+
+            double dtPhysics = Loop.Config.PhysicsStepSeconds;
+            _accumulator += wallDt * Mathf.Max(0.02f, TimeScale);
+
+            int steps = 0;
+            while (_accumulator >= dtPhysics && steps < MaxStepsPerFrame)
+            {
+                Loop.StepPhysics();
+                _accumulator -= dtPhysics;
+                steps++;
+            }
+
+            var gt = Loop.LatestGroundTruth;
+            _simTime = Loop.SimTime;
+            _speedKmh = Loop.VehicleState.Speed * 3.6;
+            _minFreeboard = gt.MinFreeboard;
+            _spillLitres = gt.CumulativeOverflowVolume * 1000.0;
+        }
+    }
+}
