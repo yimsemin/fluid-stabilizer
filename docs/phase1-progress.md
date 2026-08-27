@@ -7,9 +7,9 @@ Tracks the phase-1 scope from `design-review.md` §20. Design approved 2026-08-2
 | 1 | Unity project + docs + `frames-units-conventions.md` locked | ✅ done |
 | 2 | `SimulationCore`: fixed-step scheduler, `IClock`, seeded RNG | ✅ done — `ManualClock`, `DeterministicRandom` (PCG32), `SimulationLoop` (600/200/100 Hz cadence, bundle latency, GT recording), engine-free |
 | 3 | Vehicle: sprung mass + friction-circle bicycle model + road; `IDriverInput` | 🟡 `VehicleModel` (longitudinal + bicycle + friction circle + 2nd-order pitch/roll) + `ScriptedManeuverDriver`/`ConstantDriver` done; road grade/bank/bumps hook present but unused; human input + trace record/replay not started |
-| 4 | Tank on 2-DOF actuated gimbal, pivot at CoM | 🟡 `TankKinematics` (kinematically attached per decision D1) done; slosh↔joint load coupling still stubbed |
-| 5 | `ISloshModel` + pendulum ROM + continuous overflow volume | 🟡 interface + `NullSloshModel` placeholder done; **pendulum ROM is the next task** |
-| 6 | Actuator model per axis | 🟡 `GimbalActuator`: transport delay, first-order rate loop, peak-torque saturation, Coulomb+viscous friction, rate + travel limits, external-load input, current estimate. Backlash present but off by default; motor+gearbox detail + continuous-torque thermal model pending |
+| 4 | Tank on 2-DOF actuated gimbal, pivot at CoM | ✅ `TankKinematics` + two-way slosh↔joint coupling (decision D3: reflected inertia + lagged load, pivot not translated by joint motion) |
+| 5 | `ISloshModel` + pendulum ROM + continuous overflow volume | ✅ `PendulumSloshModel`: 1 planar pendulum/axis + fixed mass, rectangular-tank first-mode ωₙ & participating mass, rotating-frame EOM, full liquid reaction, weir-style continuous overflow that drains the fill. Verified: natural frequency matches theory ±15%, damping decays, response direction correct, spills under resonant shake / not when calm. Multi-mode & shallow-water still deferred (phase 2). Surface-slope gain still needs calibration. |
+| 6 | Actuator model per axis | 🟡 `GimbalActuator`: transport delay, **PD+I position servo** (rate cmd → setpoint), peak-torque saturation, Coulomb+viscous friction, rate + travel limits with anti-windup, reflected-inertia input, external-load clamp, current estimate. Backlash present but off by default; motor+gearbox detail + continuous-torque thermal model pending |
 | 7 | Sensor layer + DTOs + noise/bias/delay/rate | 🟡 `SensorSuite`: vehicle+tank IMU (specific force, no gravity split), encoders (quantised), motors, 4 load cells, optional level/CAN; per-sample noise + per-episode bias; bundle latency in the loop. Load-cell slosh redistribution + bias random-walk/misalignment pending |
 | 8 | `ISensorBus` / `IActuatorBus` + in-process impl | 🟡 `IController` seam + DTOs carry the contract; explicit bus deferred |
 | 9 | Baseline controllers: specific-force alignment, PID, privileged MPC | 🟡 `HoldController` only; real baselines pending |
@@ -27,11 +27,10 @@ Tracks the phase-1 scope from `design-review.md` §20. Design approved 2026-08-2
 ## Verification so far
 
 - Headless compile: clean (0 errors, 0 warnings).
-- EditMode tests: **25/25 pass** — `Double3`/`MathD`, `DeterministicRandom`
-  (determinism, named-fork stability, Gaussian moments), `ManualClock`,
-  `HoldController`, `GimbalActuator` (direction, rate limit, travel limit,
-  command delay), `SimulationLoop` (episode length, bit-identical trace for a
-  fixed seed, brake/accel affects speed, tank IMU ≈ 1 g up at rest, hold =
-  no motion, null slosh never spills).
+- EditMode tests: **35/35 pass** — adds `PendulumSloshModel` (rest reaction =
+  liquid weight, forward accel → liquid back, left accel → liquid right,
+  ring-down frequency matches rectangular-tank first mode, damping decays the
+  oscillation, slosh KE positive while sloshing, spills under resonant shake but
+  not when calm, coupled-loop determinism + no blow-up over 40 s).
 - Re-run tests headless:
   `"/Applications/Unity/Hub/Editor/6000.5.10f1/Unity.app/Contents/MacOS/Unity" -batchmode -nographics -projectPath . -runTests -testPlatform EditMode -testResults Logs/editmode-results.xml -logFile -`

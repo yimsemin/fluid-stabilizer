@@ -44,7 +44,7 @@ namespace FluidStabilizer.Core.Sim.Sensors
         }
 
         public SensorBundle Sample(double simTime, in VehicleState v, in GimbalState g,
-            in TankKinematicState tank)
+            in TankKinematicState tank, in SloshOutput slosh)
         {
             var bundle = new SensorBundle { StampSeconds = simTime };
 
@@ -87,21 +87,35 @@ namespace FluidStabilizer.Core.Sim.Sensors
                 RollTorque = g.Roll.AppliedTorque + Gauss(_cfg.MotorCurrentNoiseA * 5.0)
             };
 
-            // --- Load cells: 4 corners. v1 = static weight split + noise.
-            //     (Slosh CoM redistribution wired in when the pendulum model lands.)
-            double liquidMass = _sloshCfg.FillRatio * _sloshCfg.TankLengthX * _sloshCfg.TankWidthY
-                                * _sloshCfg.TankHeightZ * _sloshCfg.LiquidDensity;
-            double totalWeight = (_sloshCfg.DryMass + liquidMass) * MathD.StandardGravity;
-            double perCell = totalWeight / 4.0;
+            // --- Load cells: 4 corners of the tank cradle, at (±cx, ±cy) in the
+            //     tank frame. Each reads the tank-Z force it transmits. The total
+            //     normal force and its moment redistribution come from the dry
+            //     tank inertia plus the slosh reaction, so the cells carry a
+            //     partial, realistic signature of the liquid CoM shift.
+            double cx = 0.4 * _sloshCfg.TankLengthX;
+            double cy = 0.4 * _sloshCfg.TankWidthY;
+
+            // F_support = m_dry (a - g) - F_slosh   (Newton's 2nd law on the tank)
+            double dryZ = _sloshCfg.DryMass * (tank.LinearAccelerationTankFrame.Z - tank.GravityTankFrame.Z);
+            double fzTotal = dryZ - slosh.ReactionForceTankFrame.Z;
+
+            // Support moments about the tank X/Y axes (dry CoM at the pivot ⇒ no dry moment).
+            double mxs = -slosh.ReactionTorqueTankFrame.X;
+            double mys = -slosh.ReactionTorqueTankFrame.Y;
+
+            double baseCell = fzTotal / 4.0;
+            double dMx = mxs / (4.0 * cy); // ± per cell by sign of y
+            double dMy = mys / (4.0 * cx); // ± per cell by sign of x
+
             bundle.LoadCells = new LoadCellSample
             {
                 StampSeconds = simTime,
                 Forces = new[]
                 {
-                    perCell + Gauss(_cfg.LoadCellNoiseN),
-                    perCell + Gauss(_cfg.LoadCellNoiseN),
-                    perCell + Gauss(_cfg.LoadCellNoiseN),
-                    perCell + Gauss(_cfg.LoadCellNoiseN)
+                    baseCell + dMx - dMy + Gauss(_cfg.LoadCellNoiseN), // (+x, +y)
+                    baseCell - dMx - dMy + Gauss(_cfg.LoadCellNoiseN), // (+x, -y)
+                    baseCell + dMx + dMy + Gauss(_cfg.LoadCellNoiseN), // (-x, +y)
+                    baseCell - dMx + dMy + Gauss(_cfg.LoadCellNoiseN)  // (-x, -y)
                 }
             };
 
