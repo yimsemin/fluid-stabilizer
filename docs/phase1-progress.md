@@ -2,6 +2,11 @@
 
 Tracks the phase-1 scope from `design-review.md` §20. Design approved 2026-08-27.
 
+> **Resume here (next session):** step **A — 2-D shallow-water slosh model**
+> (`docs/plan-next.md` §A), then its height-field mesh visualization, then
+> phase-1 items 12 (RL socket adapter) and 13 (domain randomization).
+> Latest commit at handoff: `7f814b1`. EditMode: 47 pass / 3 skipped.
+
 | # | Item | Status |
 |---|---|---|
 | 1 | Unity project + docs + `frames-units-conventions.md` locked | ✅ done |
