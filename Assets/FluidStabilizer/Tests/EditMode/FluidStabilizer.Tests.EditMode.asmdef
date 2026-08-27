@@ -5,6 +5,8 @@
     "FluidStabilizer.Contracts",
     "FluidStabilizer.Core",
     "FluidStabilizer.Controller",
+    "FluidStabilizer.Sim",
+    "Unity.InputSystem",
     "UnityEngine.TestRunner",
     "UnityEditor.TestRunner"
   ],
