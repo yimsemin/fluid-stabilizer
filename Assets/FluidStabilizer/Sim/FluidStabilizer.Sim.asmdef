@@ -1,0 +1,19 @@
+{
+  "name": "FluidStabilizer.Sim",
+  "rootNamespace": "FluidStabilizer.Sim",
+  "references": [
+    "FluidStabilizer.Contracts",
+    "FluidStabilizer.Core",
+    "FluidStabilizer.Controller",
+    "Unity.InputSystem"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false
+}

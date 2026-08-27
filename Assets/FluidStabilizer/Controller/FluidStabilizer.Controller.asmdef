@@ -1,0 +1,17 @@
+{
+  "name": "FluidStabilizer.Controller",
+  "rootNamespace": "FluidStabilizer.Controller",
+  "references": [
+    "FluidStabilizer.Contracts",
+    "FluidStabilizer.Core"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": true
+}
