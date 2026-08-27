@@ -24,6 +24,11 @@ namespace FluidStabilizer.Contracts
         public double SloshRollAngle;
         public double SloshRollRate;
 
+        /// <summary>True first-mode natural frequency (rad/s) and damping ratio.</summary>
+        public double SloshPitchOmega;
+        public double SloshRollOmega;
+        public double SloshDampingRatio;
+
         /// <summary>True liquid centre of mass relative to the tank origin, tank frame.</summary>
         public Double3 LiquidComTankFrame;
 

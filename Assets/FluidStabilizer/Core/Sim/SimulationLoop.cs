@@ -166,8 +166,9 @@ namespace FluidStabilizer.Core.Sim
                     ? pc.ComputeCommand(delivered, BuildPrivilegedObservation())
                     : _controller.ComputeCommand(delivered);
                 _commandCount++;
-                _effortAccum += 0.5 * (Math.Abs(_latchedCommand.PitchRateCommand) +
-                                       Math.Abs(_latchedCommand.RollRateCommand));
+                // Effort = actual joint angular rate (mode-agnostic; measures
+                // how hard the actuator is working).
+                _effortAccum += 0.5 * (Math.Abs(g.Pitch.Rate) + Math.Abs(g.Roll.Rate));
                 if (g.Pitch.TorqueSaturated || g.Roll.TorqueSaturated) _torqueSatTicks++;
                 if (g.Pitch.AtAngleLimit || g.Roll.AtAngleLimit) _angleLimitTicks++;
             }
@@ -235,6 +236,9 @@ namespace FluidStabilizer.Core.Sim
                 SloshPitchRate = mode.Length > 1 ? mode[1] : 0.0,
                 SloshRollAngle = mode.Length > 2 ? mode[2] : 0.0,
                 SloshRollRate = mode.Length > 3 ? mode[3] : 0.0,
+                SloshPitchOmega = sg.PitchModeOmega,
+                SloshRollOmega = sg.RollModeOmega,
+                SloshDampingRatio = sg.ModeDampingRatio,
                 LiquidComTankFrame = sg.LiquidCenterOfMass,
                 SloshKineticEnergy = sg.SloshKineticEnergy,
                 MinFreeboard = double.IsPositiveInfinity(_worstFreeboard) ? 0.0 : _lastSlosh.MinFreeboard

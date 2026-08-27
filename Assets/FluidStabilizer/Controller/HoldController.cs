@@ -21,7 +21,9 @@ namespace FluidStabilizer.Controller
 
         public StabilizerCommand ComputeCommand(in SensorBundle sensors)
         {
-            return StabilizerCommand.Hold(_sequence++, sensors.StampSeconds);
+            // Explicit angle-hold at zero (not a zero-rate command) so the tank
+            // is held rigid to the truck bed even under external slosh load.
+            return StabilizerCommand.Angle(_sequence++, sensors.StampSeconds, 0.0, 0.0);
         }
     }
 }

@@ -4,61 +4,95 @@ Empirical results from the simulation as it is built. Newest first.
 
 ---
 
-## F1 — 2026-08-28 — Naive reactive control makes spilling *worse*; "do nothing" is a strong baseline
+## F1 — 2026-08-28 — No baseline controller beats "hold the tank rigid"
 
-**What the evaluation shows** (`Evaluator` over the fixed scenario set, 6 seeds;
-run `BaselineControllerTests.Report_PrintsAndIsDeterministic`):
+**Status: project-shaping. Needs a direction decision (see end).**
 
-| scenario | Hold spill | PID spill | SFA spill | PrivFullState spill |
-|---|---|---|---|---|
-| CalmCruise | 0 | 0 | 0 | 0 |
-| ScriptedManeuver | 0 | 0 | 0 | 0 |
-| RandomModerate | 0 | 0 | 0 | 0 |
-| RandomAggressive | 0 | 0 | 0 | 0 |
-| **ModerateFreeboard** (0.30 m freeboard, brisk) | **7.0 L** | **36.9 L** | **37.3 L** | **7.6 L** |
-| **HighFillAggressive** (0.22 m freeboard) | **96.0 L** | **101.0 L** | **101.3 L** | **86.7 L** |
+### What was tried (design-review option A: build a real ceiling)
 
-Slosh energy (∫ KE dt) tells the mechanism: the naive feedback controllers
-(`PID`, `SpecificForceAlignment`) run **2–13× more** slosh energy than `Hold`.
-They are pumping the first slosh mode into resonance.
+Four baselines, evaluated over the fixed 6-scenario set × 6 seeds
+(`BaselineControllerTests.Report_PrintsAndIsDeterministic`):
 
-**Why.** The gimbal only influences the liquid through (a) rotating the
-gravity vector in the tank frame and (b) the tank's angular acceleration, which
-forces the slosh pendulum directly. A controller that reacts hard to the felt
-tilt — which itself oscillates at the slosh frequency — moves the tank at that
-frequency, and through the rate→setpoint integration and servo lag the phase
-comes out wrong, so it adds energy instead of removing it. Slosh natural
-frequency here is ~0.7 Hz (pitch) / ~1.3 Hz (roll), squarely in the band of
-real maneuvers and of the actuator's own response.
+- **Hold** — command joint angle 0 (tank rigid to the bed). The floor.
+- **SpecificForceAlignment** — command the joint *angle* = low-passed felt tilt
+  (sensor-only). Servo tracks it.
+- **SpecificForceAlignment+I** — the above plus a clamped integral trim.
+- **PrivilegedFeedforwardTilt** — command the joint angle = low-passed
+  *slosh-free* ideal tilt (privileged: clean specific force).
+- **LQR** — per-axis discrete LQR on the coupled slosh + gimbal model, using the
+  true slosh state and modal frequency/damping (privileged). Solved via the
+  discrete Riccati recursion (`AxisLqr`).
 
-**What beats it.** Only a smooth, heavily-low-passed, slew-limited command that
-does *not* chase the fast component (`PrivilegedFullState`, kTrack=1, 1.6 Hz
-low-pass, slew-limited). Even with perfect state it only **matches** Hold on
-spill and shaves ~10 % on the hardest scenario. A controller that *substantially*
-beats Hold does not exist yet.
+### Result
 
-**Assessment — this is good for the project premise, with caveats.**
+On the four low/moderate scenarios nobody spills. On the two that discriminate:
 
-- It confirms the task is a *real* Physical-AI problem: not solvable by an
-  obvious rule, and naive control is actively harmful (design-review §2, §18.6–7,
-  §19.1). The RL objective is well-posed: beat Hold, and decisively beat naive
-  PID, by learning anticipatory, slosh-state-aware, smooth control.
-- **Caveat 1 — the ceiling is currently weak.** `PrivilegedFullState` is
-  hand-tuned smooth feed-forward, not a solved optimal controller. Before RL
-  results can be judged we need a genuine ceiling: a proper LQR/MPC on the
-  linearized coupled model, or a well-designed anticipatory controller (preview
-  of the maneuver, notch at the slosh frequency, phase-correct slosh damping).
-  This is the top near-term task.
-- **Caveat 2 — model calibration is unverified.** `SurfaceSlopePerPendulumAngle`
-  (pendulum angle → wall wave height) is set to 1.0 by a quasi-static argument
-  but never checked against a shallow-water run or data. The absolute spill
-  volumes and the exact controllability boundary depend on it. Fidelity
-  conclusions are provisional until this is calibrated (design-review §6 caveat).
-- **Caveat 3 — regime is narrow.** With realistic accelerations (≤ ~0.45 g) the
-  nominal 0.40 m freeboard never spills for anyone; spill only appears below
-  ~0.30 m freeboard. The "interesting" band is real but thin, and domain
-  randomization needs to keep episodes inside it.
+| ModerateFreeboard (0.30 m freeboard) | spill (L, mean) |
+|---|---|
+| **Hold** | **0.4** |
+| SpecificForceAlignment | 5.8 |
+| SpecificForceAlignment+I | 17.7 |
+| PrivilegedFeedforwardTilt | 35.9 |
+| LQR | 36.7 |
 
-**Guard.** `EvaluatorTests.NaiveFeedbackControllers_ExciteSlosh_AndWorsenSpill`
-asserts the finding, so if a later plant change quietly makes the task trivially
-controllable, a test fails and we notice.
+Every active controller spills **more** than doing nothing, and *more
+intervention makes it worse* (the aggressive trackers, Priv and LQR, are worst).
+HighFillAggressive shows the same ordering.
+
+### Why
+
+Rotating the tank to track a tilt target excites the first slosh mode — through
+the gravity-vector rotation transient and the Euler term (tank angular
+acceleration forces the pendulum). For this driver's broadband, event-driven
+maneuvers the slosh energy added by moving the tank exceeds the spill reduction
+from being aligned.
+
+This is **not** fixable by actuator authority (`ActuatorAuthorityTests`): the
+privileged controller stays at ~36–42 L spill across ±30°→±60° travel, 2× rate,
+2× torque, 2× bandwidth, and all of them combined. Widening the travel limit
+actually makes **Hold worse** (the load-dragged servo swings further off-target
+and kicks the slosh), so the ±30° limit is currently *protecting* Hold.
+
+Yet an isolated diagnostic (`PlantControllabilityTests`) shows that *kinematic*
+tank tilt tracking a clean sinusoidal maneuver cuts the wall wave ~12× (perfect)
+or ~3× (through a 2 Hz lag). So tilt control helps for smooth single-axis input;
+it fails for the sharp, two-axis, actuator-in-the-loop case.
+
+### Interpretations (the decision)
+
+1. **Slosh-ROM coupling too pessimistic.** The equivalent-pendulum model's
+   response to tank rotation (Euler term + gravity-rotation transient) may
+   over-penalize tank motion. A shallow-water model could show control helping.
+   → calibrate/upgrade the slosh model before trusting the controllability
+   verdict (design-review §6 caveat; this was the deferred "option B").
+2. **The task as posed is near-uncontrollable for aggressive driving.** Real tank
+   trucks use baffles + careful driving, not active gimbals. 2-axis rotation of
+   an open tank may simply not have the authority. → adjust the premise: add
+   preview/anticipation, a third (heave) axis, baffles, or accept a "robustness
+   under mild conditions" framing.
+3. **The synthetic driver is too broadband.** `RandomManeuverDriver` fires sharp
+   0.3–1.0 s events that sit near the roll slosh period (~0.8 s) and resonate.
+   Real highway driving is gentler and more band-limited. → redesign the driver
+   distribution and re-evaluate.
+
+### Model changes made along the way (committed)
+
+- Overflow rewritten as a bounded wedge + weir; wave elevation capped at
+  0.8·depth (the old weir over-estimated ~100×).
+- Quadratic (amplitude-dependent) slosh damping added — models wave-breaking
+  dissipation, keeps the ROM from running far outside small-amplitude validity
+  (Dodge/Keulegan).
+- Gimbal reported angular acceleration low-passed (18 Hz) so raw servo accel
+  doesn't kick the pendulum.
+- `StabilizerCommand` gained a `JointAngle` mode (design-review §11); the
+  analytic baselines command angle, the actuator servo tracks it. RL keeps
+  `JointRate`.
+- `AxisLqr` (discrete Riccati) + `LqrSloshController`; `PrivilegedObservation`
+  now carries the true modal frequencies/damping.
+- Realistic magnitudes: brake/friction ≈ 0.45 g, tank 0.8 m tall, 0.5 fill.
+
+### Guards
+
+`EvaluatorTests.NoBaselineControllerBeatsHold_OnTheDiscriminatingScenario` and
+`NaiveFeedbackControllers_ExciteSlosh_AndWorsenSpill` lock in the current state;
+if a plant/controller change flips either, this file must be revisited.

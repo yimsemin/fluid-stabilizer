@@ -109,21 +109,30 @@ namespace FluidStabilizer.Core.Sim
         public void Step(in StabilizerCommand command, double externalLoadTorquePitch,
             double externalLoadTorqueRoll, double dt)
         {
-            StepAxis(_pitch, command.PitchRateCommand, externalLoadTorquePitch, dt);
-            StepAxis(_roll, command.RollRateCommand, externalLoadTorqueRoll, dt);
+            bool angleMode = command.Mode == StabilizerCommandMode.JointAngle;
+            StepAxis(_pitch, command.PitchCommand, angleMode, externalLoadTorquePitch, dt);
+            StepAxis(_roll, command.RollCommand, angleMode, externalLoadTorqueRoll, dt);
         }
 
-        private void StepAxis(AxisSim a, double rateCommand, double externalLoad, double dt)
+        private void StepAxis(AxisSim a, double command, bool angleMode, double externalLoad, double dt)
         {
-            double cmd = a.CommandDelay.Step(MathD.ClampAbs(rateCommand, _cfg.MaxRateRadPerSec));
+            double cmd = a.CommandDelay.Step(angleMode
+                ? MathD.ClampAbs(command, _cfg.MaxAngleRad)
+                : MathD.ClampAbs(command, _cfg.MaxRateRadPerSec));
 
             double inertia = _cfg.AxisInertia + a.ReflectedInertia;
 
-            // The commanded rate integrates into a position setpoint; the axis
-            // then servos to that setpoint. This holds angle under a steady
-            // external load (a pure rate loop would drift), while still following
-            // rate commands.
-            a.Setpoint = MathD.ClampAbs(a.Setpoint + cmd * dt, _cfg.MaxAngleRad);
+            // Rate commands integrate into the position setpoint; angle commands
+            // set it directly. Either way the axis then servos to the setpoint,
+            // which holds angle under a steady external load (a pure rate loop
+            // would drift).
+            if (angleMode)
+                a.Setpoint = cmd;
+            else
+                a.Setpoint = MathD.ClampAbs(a.Setpoint + cmd * dt, _cfg.MaxAngleRad);
+
+            // For the servo's rate-feedforward term, the effective rate command.
+            double rateFeedforward = angleMode ? 0.0 : cmd;
 
             double omega = 2.0 * Math.PI * _cfg.BandwidthHz;
             double kp = omega * omega;
@@ -135,7 +144,7 @@ namespace FluidStabilizer.Core.Sim
             if (!a.Saturated && !a.AtLimit)
                 a.Integral = MathD.ClampAbs(a.Integral + posError * dt, _cfg.MaxAngleRad);
 
-            double accelDemand = kp * posError + kd * (cmd - a.Rate) + _cfg.IntegralGain * a.Integral;
+            double accelDemand = kp * posError + kd * (rateFeedforward - a.Rate) + _cfg.IntegralGain * a.Integral;
 
             // Clamp the external load that the servo has to fight, so a bad
             // transient in an upstream model cannot inject a divergent torque.

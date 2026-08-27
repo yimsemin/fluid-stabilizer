@@ -49,6 +49,7 @@ namespace FluidStabilizer.Core.Sim.SloshModels
         private double _Lx, _Ly;      // pendulum lengths
         private double _wx, _wy;      // natural frequencies (rad/s)
         private double _zeta;
+        private double _zetaQuad;     // amplitude-dependent damping
         private double _surfaceSlopeGain;
         private double _dischargeCoef;
         private Double3 _pivot;        // pendulum pivot in tank frame
@@ -86,6 +87,7 @@ namespace FluidStabilizer.Core.Sim.SloshModels
             _m0 = Math.Max(0.0, mFluid - _m1x - _m1y);
 
             _zeta = Math.Max(0.0, p.DampingRatio);
+            _zetaQuad = Math.Max(0.0, p.QuadraticDamping);
             _surfaceSlopeGain = p.SurfaceSlopePerPendulumAngle;
             _dischargeCoef = p.SpillDischargeCoefficient;
 
@@ -198,7 +200,10 @@ namespace FluidStabilizer.Core.Sim.SloshModels
             {
                 LiquidCenterOfMass = com,
                 SloshKineticEnergy = ke,
-                ModeState = new[] { _thx, _thxDot, _thy, _thyDot }
+                ModeState = new[] { _thx, _thxDot, _thy, _thyDot },
+                PitchModeOmega = _wx,
+                RollModeOmega = _wy,
+                ModeDampingRatio = _zeta
             };
         }
 
@@ -212,7 +217,9 @@ namespace FluidStabilizer.Core.Sim.SloshModels
             Double3 s = gT - aT - Double3.Cross(alpha, rBob)
                         - Double3.Cross(omega, Double3.Cross(omega, rBob));
             double tangential = Double3.Dot(s, TPitch(_thx));
-            return tangential / _Lx - 2.0 * _zeta * _wx * _thxDot;
+            return tangential / _Lx
+                   - 2.0 * _zeta * _wx * _thxDot
+                   - _zetaQuad * _thxDot * Math.Abs(_thxDot);
         }
 
         // The ROM is only valid for moderate excursions; clamp to keep a bad
@@ -238,7 +245,9 @@ namespace FluidStabilizer.Core.Sim.SloshModels
             Double3 s = gT - aT - Double3.Cross(alpha, rBob)
                         - Double3.Cross(omega, Double3.Cross(omega, rBob));
             double tangential = Double3.Dot(s, TRoll(_thy));
-            return tangential / _Ly - 2.0 * _zeta * _wy * _thyDot;
+            return tangential / _Ly
+                   - 2.0 * _zeta * _wy * _thyDot
+                   - _zetaQuad * _thyDot * Math.Abs(_thyDot);
         }
 
         private void IntegrateRoll(Double3 gT, Double3 aT, Double3 omega, Double3 alpha, double dt)

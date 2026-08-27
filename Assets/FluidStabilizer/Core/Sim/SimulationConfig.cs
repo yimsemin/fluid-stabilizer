@@ -126,7 +126,17 @@ namespace FluidStabilizer.Core.Sim
         public double FillRatio = 0.5;      // 0.40 m liquid ⇒ 0.40 m freeboard (nominal)
         public double LiquidDensity = 1000.0;
         public double NaturalFrequencyScale = 1.0;
-        public double DampingRatio = 0.10;
+
+        /// <summary>Linear (small-amplitude) first-mode damping ratio.</summary>
+        public double DampingRatio = 0.08;
+
+        /// <summary>
+        /// Amplitude-dependent damping: an extra torque ∝ θ̇·|θ̇| that models the
+        /// energy lost when a large slosh wave breaks. Keeps the reduced-order
+        /// model from running far outside its small-amplitude validity under hard
+        /// maneuvers (Dodge/Keulegan — slosh damping grows with amplitude).
+        /// </summary>
+        public double QuadraticDamping = 0.9;
         public double ParticipatingMassScale = 1.0;
         public double SurfaceSlopePerPendulumAngle = 1.0;
         public double SpillDischargeCoefficient = 0.6;
@@ -143,6 +153,7 @@ namespace FluidStabilizer.Core.Sim
             LiquidDensity = LiquidDensity,
             NaturalFrequencyScale = NaturalFrequencyScale,
             DampingRatio = DampingRatio,
+            QuadraticDamping = QuadraticDamping,
             ParticipatingMassScale = ParticipatingMassScale,
             SurfaceSlopePerPendulumAngle = SurfaceSlopePerPendulumAngle,
             SpillDischargeCoefficient = SpillDischargeCoefficient

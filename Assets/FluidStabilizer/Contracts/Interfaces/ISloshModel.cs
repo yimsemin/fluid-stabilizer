@@ -55,6 +55,11 @@ namespace FluidStabilizer.Contracts
 
         /// <summary>Current mode amplitudes (model-defined; e.g. pendulum angles, rad).</summary>
         public double[] ModeState;
+
+        /// <summary>First-mode natural frequency about each axis (rad/s) and its damping ratio.</summary>
+        public double PitchModeOmega;
+        public double RollModeOmega;
+        public double ModeDampingRatio;
     }
 
     /// <summary>
@@ -94,8 +99,11 @@ namespace FluidStabilizer.Contracts
         /// <summary>Multiplier on the analytically-derived first-mode natural frequency.</summary>
         public double NaturalFrequencyScale;
 
-        /// <summary>First-mode damping ratio (dimensionless).</summary>
+        /// <summary>Linear (small-amplitude) first-mode damping ratio (dimensionless).</summary>
         public double DampingRatio;
+
+        /// <summary>Amplitude-dependent damping coefficient (extra accel ∝ −θ̇·|θ̇|).</summary>
+        public double QuadraticDamping;
 
         /// <summary>
         /// Multiplier on the analytically-derived first-mode participating mass

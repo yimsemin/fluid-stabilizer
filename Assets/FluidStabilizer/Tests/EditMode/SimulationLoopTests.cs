@@ -153,7 +153,7 @@ namespace FluidStabilizer.Tests
             var act = new GimbalActuator(cfg, dt);
             act.Reset();
 
-            var cmd = new StabilizerCommand { PitchRateCommand = 5.0, RollRateCommand = 0.0 };
+            var cmd = StabilizerCommand.Rate(0, 0, 5.0, 0.0);
             for (int i = 0; i < 6000; i++) act.Step(cmd, 0, 0, dt); // 10 s
 
             Assert.Greater(act.State.Pitch.Angle, 0.0);
@@ -170,7 +170,7 @@ namespace FluidStabilizer.Tests
             var act = new GimbalActuator(cfg, dt);
             act.Reset();
 
-            var cmd = new StabilizerCommand { PitchRateCommand = 999.0 };
+            var cmd = StabilizerCommand.Rate(0, 0, 999.0, 0.0);
             double maxSeen = 0;
             for (int i = 0; i < 600; i++)
             {
@@ -188,7 +188,7 @@ namespace FluidStabilizer.Tests
             var act = new GimbalActuator(cfg, dt);
             act.Reset();
 
-            var cmd = new StabilizerCommand { PitchRateCommand = 1.0 };
+            var cmd = StabilizerCommand.Rate(0, 0, 1.0, 0.0);
             // Within the first few steps (< 30 steps ≈ 50 ms) nothing should move.
             for (int i = 0; i < 10; i++) act.Step(cmd, 0, 0, dt);
             Assert.AreEqual(0.0, act.State.Pitch.Rate, 1e-9);

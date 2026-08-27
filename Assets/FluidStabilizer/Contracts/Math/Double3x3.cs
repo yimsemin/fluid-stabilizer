@@ -75,6 +75,23 @@ namespace FluidStabilizer.Contracts
         public static Double3x3 Gimbal(double pitch, double roll)
             => RotY(pitch) * RotX(roll);
 
+        public static Double3x3 operator +(Double3x3 a, Double3x3 b) => new Double3x3(
+            a.R00 + b.R00, a.R01 + b.R01, a.R02 + b.R02,
+            a.R10 + b.R10, a.R11 + b.R11, a.R12 + b.R12,
+            a.R20 + b.R20, a.R21 + b.R21, a.R22 + b.R22);
+
+        public static Double3x3 operator -(Double3x3 a, Double3x3 b) => new Double3x3(
+            a.R00 - b.R00, a.R01 - b.R01, a.R02 - b.R02,
+            a.R10 - b.R10, a.R11 - b.R11, a.R12 - b.R12,
+            a.R20 - b.R20, a.R21 - b.R21, a.R22 - b.R22);
+
+        public static Double3x3 operator *(Double3x3 a, double s) => new Double3x3(
+            a.R00 * s, a.R01 * s, a.R02 * s,
+            a.R10 * s, a.R11 * s, a.R12 * s,
+            a.R20 * s, a.R21 * s, a.R22 * s);
+
+        public static Double3x3 operator *(double s, Double3x3 a) => a * s;
+
         public static Double3x3 operator *(Double3x3 a, Double3x3 b) => new Double3x3(
             a.R00 * b.R00 + a.R01 * b.R10 + a.R02 * b.R20,
             a.R00 * b.R01 + a.R01 * b.R11 + a.R02 * b.R21,
