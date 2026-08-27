@@ -3,11 +3,12 @@
 ## Open
 
 1. Open the project in Unity **6000.5.10f1** (Unity Hub → Add → this folder).
-2. Open the scene **`Assets/FluidStabilizer/Scenes/PlayScene.unity`**.
-3. Press **Play**.
+2. **menu ▸ FluidStabilizer ▸ Rebuild Play Scene**  — this generates
+   `Assets/FluidStabilizer/Scenes/PlayScene.unity` (it is not in git: the builder
+   reshuffles every id on each run, so it is regenerated on demand).
+3. Open that scene and press **Play**.
 
-If the scene ever looks wrong or you want it regenerated:
-**menu ▸ FluidStabilizer ▸ Rebuild Play Scene**.
+Re-run the menu item any time the scene looks wrong or you changed `SceneBuilder`.
 
 ## Controls
 
