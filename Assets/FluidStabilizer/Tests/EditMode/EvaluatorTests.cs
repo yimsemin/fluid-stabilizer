@@ -18,8 +18,12 @@ namespace FluidStabilizer.Tests
             ("Hold", () => new HoldController()),
             ("SpecificForceAlignment", () => new SpecificForceAlignmentController()),
             ("PID", () => new PidController()),
-            ("PrivilegedFullState", () => new PrivilegedFullStateController()),
-            ("LQR", () => new LqrSloshController()),
+            ("PrivilegedFeedforward", () => new PrivilegedFullStateController()),
+            // LQR is SHELVED as a baseline (see docs/findings.md F1): its linear
+            // design model (ideal rate follower) is too far from the real
+            // servo + delay + angle-command plant, so it resonates. AxisLqr's
+            // math is still tested (AxisLqrTests); a proper MPC on the real
+            // actuator model is future work.
         };
 
         private static readonly ulong[] Seeds = { 1, 2, 3, 4, 5, 6 };
@@ -42,51 +46,50 @@ namespace FluidStabilizer.Tests
         }
 
         [Test]
-        public void NaiveFeedbackControllers_ExciteSlosh_AndWorsenSpill()
+        public void TiltControl_ClearlyBeatsHold_OnRealisticBriskDriving()
         {
-            // Central finding (docs/findings.md, design-review §2/§18/§19.1): a
-            // naive reactive controller pumps the slosh mode into resonance and
-            // spills MORE than doing nothing. This is the gap a learned policy
-            // must close, and it is a guard against the plant quietly becoming
-            // trivially controllable later.
-            var scenario = ScenarioSet.Default().Where(s => s.Name == "ModerateFreeboard").ToArray();
-            var results = Evaluator.Run(scenario, Baselines(), Seeds);
-
-            double holdSpill = results.First(r => r.Controller == "Hold").MeanOverflow;
-            double pidSpill = results.First(r => r.Controller == "PID").MeanOverflow;
-            double sfaSpill = results.First(r => r.Controller == "SpecificForceAlignment").MeanOverflow;
-
-            Assert.Greater(holdSpill, 1e-4, "ModerateFreeboard should actually spill under Hold");
-            Assert.Greater(pidSpill, holdSpill * 5.0, "naive PID should spill much more than doing nothing");
-            Assert.Greater(sfaSpill, holdSpill * 3.0, "specific-force alignment should spill more than doing nothing");
-        }
-
-        [Test]
-        public void NoBaselineControllerBeatsHold_OnTheDiscriminatingScenario()
-        {
-            // Documents finding F1's current state (docs/findings.md): with the
-            // equivalent-pendulum slosh model and a 2-axis gimbal, NO baseline —
-            // naive PID, smooth feed-forward, or model-based LQR — beats holding
-            // the tank rigid on the ModerateFreeboard scenario. Rotating the tank
-            // to track the felt tilt excites the slosh more than the alignment
-            // helps. This is a project-shaping result; if a later change makes a
-            // baseline win here, revisit findings.md and this test.
-            var scenario = ScenarioSet.Default().Where(s => s.Name == "ModerateFreeboard").ToArray();
+            // Finding F1 follow-up (docs/findings.md): with a realistic
+            // band-limited highway driver, tilting the tank to track the felt
+            // specific force works — the analytic baselines spill far less than
+            // holding the tank rigid. (Under the aggressive/adversarial driver
+            // they still struggle — see the next test.)
+            var scenario = ScenarioSet.Default().Where(s => s.Name == "HighwayBriskLowFreeboard").ToArray();
             var results = Evaluator.Run(scenario, Baselines(), Seeds);
 
             double hold = results.First(r => r.Controller == "Hold").MeanOverflow;
-            foreach (var r in results.Where(r => r.Controller != "Hold"))
-                Assert.GreaterOrEqual(r.MeanOverflow, hold,
-                    $"{r.Controller} unexpectedly beat Hold ({r.MeanOverflow:E3} < {hold:E3}) — update findings.md");
+            double pid = results.First(r => r.Controller == "PID").MeanOverflow;
+            double sfa = results.First(r => r.Controller == "SpecificForceAlignment").MeanOverflow;
+
+            Assert.Greater(hold, 1e-3, "the scenario should actually challenge Hold");
+            Assert.Less(pid, hold * 0.35, "PID should spill far less than Hold on realistic driving");
+            Assert.Less(sfa, hold * 0.35, "specific-force alignment should spill far less than Hold");
         }
 
         [Test]
-        public void CalmCruise_NobodySpills()
+        public void NaiveTiltControl_StillExcitesSlosh_UnderAggressiveDriving()
         {
-            var calm = ScenarioSet.Default().Where(s => s.Name == "CalmCruise").ToArray();
+            // The remaining hard case (docs/findings.md F1): under sharp,
+            // broadband maneuvers the naive baselines still pump the slosh mode.
+            // This is the gap a learned/anticipatory policy must close, and a
+            // guard against the plant quietly becoming trivially controllable.
+            var scenario = ScenarioSet.Default().Where(s => s.Name == "AggressiveRandom").ToArray();
+            var results = Evaluator.Run(scenario, Baselines(), Seeds);
+
+            double holdSlosh = results.First(r => r.Controller == "Hold").MeanSloshEnergyIntegral;
+            double sfaSlosh = results.First(r => r.Controller == "SpecificForceAlignment").MeanSloshEnergyIntegral;
+            double pidSlosh = results.First(r => r.Controller == "PID").MeanSloshEnergyIntegral;
+
+            Assert.Greater(sfaSlosh, holdSlosh, "SFA still excites slosh under aggressive driving");
+            Assert.Greater(pidSlosh, holdSlosh, "PID still excites slosh under aggressive driving");
+        }
+
+        [Test]
+        public void HighwayCalm_NobodySpills()
+        {
+            var calm = ScenarioSet.Default().Where(s => s.Name == "HighwayCalm").ToArray();
             var results = Evaluator.Run(calm, Baselines(), Seeds);
             foreach (var r in results)
-                Assert.AreEqual(0, r.SpillEpisodes, $"{r.Controller} spilled during calm cruise");
+                Assert.AreEqual(0, r.SpillEpisodes, $"{r.Controller} spilled during calm highway driving");
         }
 
         [Test]
