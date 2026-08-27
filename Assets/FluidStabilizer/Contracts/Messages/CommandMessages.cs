@@ -2,31 +2,60 @@ using System;
 
 namespace FluidStabilizer.Contracts
 {
+    /// <summary>How the actuator should interpret a <see cref="StabilizerCommand"/>.</summary>
+    public enum StabilizerCommandMode
+    {
+        /// <summary>Per-axis commanded joint angular rate (rad/s). The RL action space.</summary>
+        JointRate = 0,
+
+        /// <summary>
+        /// Per-axis target joint angle (rad); the actuator's position servo tracks
+        /// it. Used by the analytic baselines, which are fundamentally "point the
+        /// tank at the right tilt" (design-review §11 — angle-command option).
+        /// </summary>
+        JointAngle = 1
+    }
+
     /// <summary>
-    /// A stabilizer command from the controller/policy. v1 action space is a
-    /// per-axis commanded joint angular rate (rad/s); a low-level actuator
-    /// controller in the Sim layer tracks it subject to torque/rate/travel
-    /// limits, backlash, friction and transport delay.
+    /// A stabilizer command from the controller/policy. The two axes are pitch
+    /// and roll; <see cref="Mode"/> selects whether the values are rates or
+    /// target angles.
     /// </summary>
     [Serializable]
     public struct StabilizerCommand
     {
-        /// <summary>Monotonic sequence number, set by the controller.</summary>
         public long Sequence;
-
-        /// <summary>The sensor-bundle stamp this command was computed from.</summary>
         public double FromStampSeconds;
 
-        /// <summary>Commanded joint angular rate (rad/s).</summary>
-        public double PitchRateCommand;
-        public double RollRateCommand;
+        public StabilizerCommandMode Mode;
+
+        /// <summary>rad/s when <see cref="Mode"/> is JointRate; rad when JointAngle.</summary>
+        public double PitchCommand;
+        public double RollCommand;
 
         public static StabilizerCommand Hold(long sequence, double fromStamp) => new StabilizerCommand
         {
             Sequence = sequence,
             FromStampSeconds = fromStamp,
-            PitchRateCommand = 0.0,
-            RollRateCommand = 0.0
+            Mode = StabilizerCommandMode.JointRate,
+            PitchCommand = 0.0,
+            RollCommand = 0.0
         };
+
+        public static StabilizerCommand Rate(long sequence, double fromStamp, double pitchRate, double rollRate)
+            => new StabilizerCommand
+            {
+                Sequence = sequence, FromStampSeconds = fromStamp,
+                Mode = StabilizerCommandMode.JointRate,
+                PitchCommand = pitchRate, RollCommand = rollRate
+            };
+
+        public static StabilizerCommand Angle(long sequence, double fromStamp, double pitchAngle, double rollAngle)
+            => new StabilizerCommand
+            {
+                Sequence = sequence, FromStampSeconds = fromStamp,
+                Mode = StabilizerCommandMode.JointAngle,
+                PitchCommand = pitchAngle, RollCommand = rollAngle
+            };
     }
 }

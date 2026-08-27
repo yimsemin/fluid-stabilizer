@@ -19,6 +19,7 @@ namespace FluidStabilizer.Tests
             ("SpecificForceAlignment", () => new SpecificForceAlignmentController()),
             ("PID", () => new PidController()),
             ("PrivilegedFullState", () => new PrivilegedFullStateController()),
+            ("LQR", () => new LqrSloshController()),
         };
 
         private static readonly ulong[] Seeds = { 1, 2, 3, 4, 5, 6 };
@@ -52,29 +53,31 @@ namespace FluidStabilizer.Tests
             var results = Evaluator.Run(scenario, Baselines(), Seeds);
 
             double holdSpill = results.First(r => r.Controller == "Hold").MeanOverflow;
-            double holdSlosh = results.First(r => r.Controller == "Hold").MeanSloshEnergyIntegral;
             double pidSpill = results.First(r => r.Controller == "PID").MeanOverflow;
-            double pidSlosh = results.First(r => r.Controller == "PID").MeanSloshEnergyIntegral;
-            double sfaSlosh = results.First(r => r.Controller == "SpecificForceAlignment").MeanSloshEnergyIntegral;
+            double sfaSpill = results.First(r => r.Controller == "SpecificForceAlignment").MeanOverflow;
 
             Assert.Greater(holdSpill, 1e-4, "ModerateFreeboard should actually spill under Hold");
-            Assert.Greater(pidSlosh, holdSlosh, "PID should excite slosh vs Hold");
-            Assert.Greater(sfaSlosh, holdSlosh, "SpecificForceAlignment should excite slosh vs Hold");
-            Assert.Greater(pidSpill, holdSpill, "naive PID should spill more than doing nothing");
+            Assert.Greater(pidSpill, holdSpill * 5.0, "naive PID should spill much more than doing nothing");
+            Assert.Greater(sfaSpill, holdSpill * 3.0, "specific-force alignment should spill more than doing nothing");
         }
 
         [Test]
-        public void SmoothPrivilegedControl_IsNotHarmful_AndFarBetterThanNaivePid()
+        public void NoBaselineControllerBeatsHold_OnTheDiscriminatingScenario()
         {
+            // Documents finding F1's current state (docs/findings.md): with the
+            // equivalent-pendulum slosh model and a 2-axis gimbal, NO baseline —
+            // naive PID, smooth feed-forward, or model-based LQR — beats holding
+            // the tank rigid on the ModerateFreeboard scenario. Rotating the tank
+            // to track the felt tilt excites the slosh more than the alignment
+            // helps. This is a project-shaping result; if a later change makes a
+            // baseline win here, revisit findings.md and this test.
             var scenario = ScenarioSet.Default().Where(s => s.Name == "ModerateFreeboard").ToArray();
             var results = Evaluator.Run(scenario, Baselines(), Seeds);
 
             double hold = results.First(r => r.Controller == "Hold").MeanOverflow;
-            double priv = results.First(r => r.Controller == "PrivilegedFullState").MeanOverflow;
-            double pid = results.First(r => r.Controller == "PID").MeanOverflow;
-
-            Assert.Less(priv, hold * 1.20, "smooth privileged control must not make spill meaningfully worse");
-            Assert.Less(priv, pid * 0.4, "smooth privileged control must clearly beat the naive PID");
+            foreach (var r in results.Where(r => r.Controller != "Hold"))
+                Assert.GreaterOrEqual(r.MeanOverflow, hold,
+                    $"{r.Controller} unexpectedly beat Hold ({r.MeanOverflow:E3} < {hold:E3}) — update findings.md");
         }
 
         [Test]

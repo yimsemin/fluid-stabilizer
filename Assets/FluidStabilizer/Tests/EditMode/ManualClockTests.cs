@@ -42,8 +42,8 @@ namespace FluidStabilizer.Tests
             var first = c.ComputeCommand(s);
             var second = c.ComputeCommand(s);
 
-            Assert.AreEqual(0.0, first.PitchRateCommand);
-            Assert.AreEqual(0.0, first.RollRateCommand);
+            Assert.AreEqual(0.0, first.PitchCommand);
+            Assert.AreEqual(0.0, first.RollCommand);
             Assert.AreEqual(0, first.Sequence);
             Assert.AreEqual(1, second.Sequence);
             Assert.AreEqual(1.0, first.FromStampSeconds);

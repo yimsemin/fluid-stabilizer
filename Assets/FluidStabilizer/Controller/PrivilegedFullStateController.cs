@@ -1,4 +1,3 @@
-using System;
 using FluidStabilizer.Contracts;
 using FluidStabilizer.Core;
 
@@ -7,45 +6,36 @@ namespace FluidStabilizer.Controller
     /// <summary>
     /// Performance-ceiling baseline (design-review §2, §12).
     ///
-    /// Key finding from the plant model: the gimbal's angular acceleration forces
-    /// the slosh pendulum almost 1:1 (the Euler term α×r in the pendulum
-    /// equation), so any controller that moves the tank abruptly to "help"
-    /// actually kicks the liquid and can drive the slosh mode into resonance.
-    /// A working controller must move the tank <em>smoothly</em>.
+    /// Diagnostic finding (`PlantControllabilityTests`): if the tank tilt tracks
+    /// the quasi-static ideal tilt the wall wave shrinks ~12×; through a
+    /// first-order lag it still shrinks ~3×. High-gain feedback on the *felt*
+    /// tilt fails only because that signal oscillates at the slosh frequency and
+    /// the loop resonates. So the ceiling is: command the joint <em>angle</em> to
+    /// the low-passed slosh-free ideal tilt and let the servo track it — no
+    /// slosh-state feedback (the liquid's own damping clears the residual).
     ///
-    /// This ceiling therefore tracks the slosh-free effective-gravity tilt with a
-    /// smoothed, slew-limited command and only a light slosh-rate damping term.
-    /// It is hand-tuned, deliberately conservative, and represents "best smooth
-    /// feed-forward + gentle feedback with perfect state" rather than a solved
-    /// optimal controller (LQR/MPC ceiling is phase-2). Never deployed.
+    /// Privileged: it uses the slosh-free specific force. A sensor-only version
+    /// must estimate it (that is <see cref="SpecificForceAlignmentController"/>).
+    /// Never deployed.
     /// </summary>
     public sealed class PrivilegedFullStateController : IPrivilegedController
     {
-        private readonly double _kTrack;      // proportional pull toward the smoothed tilt target
-        private readonly double _kSloshRate;  // light slosh-mode damping
-        private readonly double _maxSlewRadPerSec2; // limit on how fast the rate command may change
-        private readonly LowPass _ffPitch, _ffRoll;
-        private double _cmdPitch, _cmdRoll;
+        private readonly LowPass _tgtPitch, _tgtRoll;
         private long _seq;
         private double _lastStamp;
 
-        public PrivilegedFullStateController(
-            double kTrack = 1.0, double kSloshRate = 0.0, double maxSlew = 20.0)
+        public PrivilegedFullStateController(double targetCutoffHz = 2.0)
         {
-            _kTrack = kTrack;
-            _kSloshRate = kSloshRate;
-            _maxSlewRadPerSec2 = maxSlew;
-            _ffPitch = new LowPass(1.6);
-            _ffRoll = new LowPass(1.6);
+            _tgtPitch = new LowPass(targetCutoffHz);
+            _tgtRoll = new LowPass(targetCutoffHz);
         }
 
-        public string Name => "PrivilegedFullState (ceiling)";
+        public string Name => "PrivilegedFeedforwardTilt (ceiling)";
 
         public void Reset()
         {
-            _ffPitch.Reset();
-            _ffRoll.Reset();
-            _cmdPitch = _cmdRoll = 0.0;
+            _tgtPitch.Reset();
+            _tgtRoll.Reset();
             _seq = 0;
             _lastStamp = 0.0;
         }
@@ -60,22 +50,10 @@ namespace FluidStabilizer.Controller
             _lastStamp = p.StampSeconds;
 
             var f = p.SpecificForceTankFrame; // slosh-free
-            double targetPitch = _ffPitch.Step(Math.Atan2(f.X, Math.Max(1e-6, f.Z)), dt);
-            double targetRoll = _ffRoll.Step(Math.Atan2(f.Y, Math.Max(1e-6, f.Z)), dt);
+            double tgtPitch = _tgtPitch.Step(TiltGeometry.DesiredPitch(f), dt);
+            double tgtRoll = _tgtRoll.Step(TiltGeometry.DesiredRoll(f), dt);
 
-            double rawPitch = _kTrack * (targetPitch - p.PitchAngle) - _kSloshRate * p.SloshPitchRate;
-            double rawRoll = _kTrack * (targetRoll - p.RollAngle) - _kSloshRate * p.SloshRollRate;
-
-            _cmdPitch = MathD.MoveToward(_cmdPitch, rawPitch, _maxSlewRadPerSec2 * dt);
-            _cmdRoll = MathD.MoveToward(_cmdRoll, rawRoll, _maxSlewRadPerSec2 * dt);
-
-            return new StabilizerCommand
-            {
-                Sequence = _seq++,
-                FromStampSeconds = s.StampSeconds,
-                PitchRateCommand = _cmdPitch,
-                RollRateCommand = _cmdRoll
-            };
+            return StabilizerCommand.Angle(_seq++, s.StampSeconds, tgtPitch, tgtRoll);
         }
     }
 }

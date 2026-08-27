@@ -1,28 +1,26 @@
-using System;
 using FluidStabilizer.Contracts;
 using FluidStabilizer.Core;
 
 namespace FluidStabilizer.Controller
 {
     /// <summary>
-    /// Tuned PID baseline (design-review §2): PID on the tank-tilt error (angle
-    /// between the tank floor and the low-passed specific force), with the
-    /// derivative taken from the measured joint rate (no noisy differentiation)
-    /// and clamped integral action for steady loads such as a long hill.
+    /// Sensor-only baseline: like <see cref="SpecificForceAlignmentController"/>
+    /// but adds a clamped integral term on the residual tilt error, so a steady
+    /// load (a long hill, a persistent bias) is trimmed out. Commands a target
+    /// joint angle; the actuator servo tracks it.
     /// </summary>
     public sealed class PidController : IController
     {
-        private readonly double _kp, _ki, _kd, _cutoffHz, _integralClamp;
+        private readonly double _ki, _cutoffHz, _integralClamp;
         private readonly LowPass _fx, _fy, _fz;
         private double _iPitch, _iRoll;
         private long _seq;
         private double _lastStamp;
 
         public PidController(
-            double kp = 5.0, double ki = 2.5, double kd = 0.8,
-            double specificForceCutoffHz = 1.5, double integralClampRad = 0.3)
+            double ki = 0.4, double specificForceCutoffHz = 0.7, double integralClampRad = 0.15)
         {
-            _kp = kp; _ki = ki; _kd = kd;
+            _ki = ki;
             _cutoffHz = specificForceCutoffHz;
             _integralClamp = integralClampRad;
             _fx = new LowPass(_cutoffHz);
@@ -30,7 +28,7 @@ namespace FluidStabilizer.Controller
             _fz = new LowPass(_cutoffHz);
         }
 
-        public string Name => "PID";
+        public string Name => "SpecificForceAlignment+I";
 
         public void Reset()
         {
@@ -49,22 +47,14 @@ namespace FluidStabilizer.Controller
             var f = s.TankImu.SpecificForce;
             var fLp = new Double3(_fx.Step(f.X, dt), _fy.Step(f.Y, dt), _fz.Step(f.Z, dt));
 
-            double ePitch = TiltGeometry.DesiredPitch(fLp) - s.Joints.PitchAngle;
-            double eRoll = TiltGeometry.DesiredRoll(fLp) - s.Joints.RollAngle;
+            double tgtPitch = TiltGeometry.DesiredPitch(fLp);
+            double tgtRoll = TiltGeometry.DesiredRoll(fLp);
 
-            _iPitch = MathD.ClampAbs(_iPitch + ePitch * dt, _integralClamp);
-            _iRoll = MathD.ClampAbs(_iRoll + eRoll * dt, _integralClamp);
+            _iPitch = MathD.ClampAbs(_iPitch + (tgtPitch - s.Joints.PitchAngle) * dt, _integralClamp);
+            _iRoll = MathD.ClampAbs(_iRoll + (tgtRoll - s.Joints.RollAngle) * dt, _integralClamp);
 
-            double pitchCmd = _kp * ePitch + _ki * _iPitch - _kd * s.Joints.PitchRate;
-            double rollCmd = _kp * eRoll + _ki * _iRoll - _kd * s.Joints.RollRate;
-
-            return new StabilizerCommand
-            {
-                Sequence = _seq++,
-                FromStampSeconds = s.StampSeconds,
-                PitchRateCommand = pitchCmd,
-                RollRateCommand = rollCmd
-            };
+            return StabilizerCommand.Angle(_seq++, s.StampSeconds,
+                tgtPitch + _ki * _iPitch, tgtRoll + _ki * _iRoll);
         }
     }
 }
