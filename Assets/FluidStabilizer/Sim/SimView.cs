@@ -54,9 +54,12 @@ namespace FluidStabilizer.Sim
             LiquidSurface.localScale = new Vector3(
                 (float)cfg.Slosh.TankWidthY * 0.98f, 1f, (float)cfg.Slosh.TankLengthX * 0.98f);
             LiquidSurface.localPosition = new Vector3(0f, hy, 0f);
-            // slosh pitch is about SI Y (Unity X); slosh roll is about SI X (Unity Z)
-            LiquidSurface.localRotation = Quaternion.Euler(
-                Mathf.Rad2Deg * (float)p.SloshPitchAngle, 0f, -Mathf.Rad2Deg * (float)p.SloshRollAngle);
+            // slosh pitch is about SI Y (Unity X); slosh roll is about SI X (Unity Z).
+            // Clamp the *visual* tilt — the ROM pendulum can swing past where a
+            // real first-mode surface stays flat.
+            float visPitch = Mathf.Clamp(Mathf.Rad2Deg * (float)p.SloshPitchAngle, -35f, 35f);
+            float visRoll = Mathf.Clamp(Mathf.Rad2Deg * (float)p.SloshRollAngle, -35f, 35f);
+            LiquidSurface.localRotation = Quaternion.Euler(visPitch, 0f, -visRoll);
         }
 
         private void ApplyStaticGeometry(SimulationConfig cfg)
