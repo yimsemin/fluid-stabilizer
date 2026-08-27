@@ -29,11 +29,11 @@ namespace FluidStabilizer.Core.Sim.Drivers
         {
             // piecewise schedule (seconds)
             if (t < 3.0) return Cruise();
-            if (t < 5.0) return new DriverControls { Brake = 0.9 };
+            if (t < 5.0) return new DriverControls { Brake = 0.8 };
             if (t < 8.0) return Cruise();
-            if (t < 10.0) return new DriverControls { Throttle = 0.3, Steer = 0.8 };
+            if (t < 10.0) return new DriverControls { Throttle = 0.3, Steer = 0.7 };
             if (t < 12.0) return Cruise();
-            if (t < 14.0) return new DriverControls { Throttle = 0.3, Steer = -0.8 };
+            if (t < 14.0) return new DriverControls { Throttle = 0.3, Steer = -0.7 };
             if (t < 16.0) return Cruise();
             if (t < 19.0) return new DriverControls { Throttle = 1.0 };
             return Cruise();

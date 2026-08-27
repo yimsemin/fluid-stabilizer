@@ -48,13 +48,17 @@ namespace FluidStabilizer.Core.Sim
         public double Mass = 4000.0;
 
         /// <summary>Max forward acceleration from full throttle on level ground (m/s²).</summary>
-        public double MaxAccel = 2.5;
+        public double MaxAccel = 2.2;
 
-        /// <summary>Max deceleration from full brake (m/s²).</summary>
-        public double MaxBrake = 7.0;
+        /// <summary>Max deceleration from full brake (m/s²). ~0.45 g — a hard brake for a laden truck.</summary>
+        public double MaxBrake = 4.5;
 
-        /// <summary>Tyre–road friction limit used for the accel/steer friction circle (m/s²).</summary>
-        public double FrictionLimit = 8.0;
+        /// <summary>
+        /// Tyre–road friction limit for the accel/steer friction circle (m/s²).
+        /// ~0.45 g — a laden truck near its handling limit; sustained lateral
+        /// beyond this is a rollover risk, not normal driving.
+        /// </summary>
+        public double FrictionLimit = 4.5;
 
         /// <summary>Wheelbase (m), rear-axle origin to front axle.</summary>
         public double Wheelbase = 4.0;
@@ -85,12 +89,12 @@ namespace FluidStabilizer.Core.Sim
         public Double3 PivotInVehicle = new Double3(2.6, 0.0, 1.4);
 
         public double MaxAngleRad = 30.0 * MathD.Deg2Rad;
-        public double MaxRateRadPerSec = 2.0;      // per axis
-        public double MaxTorqueNm = 400.0;         // peak, per axis
-        public double ContinuousTorqueNm = 180.0;  // thermal limit, per axis
+        public double MaxRateRadPerSec = 3.5;      // per axis
+        public double MaxTorqueNm = 650.0;         // peak, per axis
+        public double ContinuousTorqueNm = 280.0;  // thermal limit, per axis
 
         /// <summary>Closed-loop actuator bandwidth (Hz) and damping for the position/rate servo.</summary>
-        public double BandwidthHz = 3.5;
+        public double BandwidthHz = 4.0;
         public double DampingRatio = 0.9;
 
         /// <summary>
@@ -118,11 +122,11 @@ namespace FluidStabilizer.Core.Sim
     {
         public double TankLengthX = 1.2;
         public double TankWidthY = 0.7;
-        public double TankHeightZ = 0.6;
-        public double FillRatio = 0.55;
+        public double TankHeightZ = 0.8;
+        public double FillRatio = 0.5;      // 0.40 m liquid ⇒ 0.40 m freeboard (nominal)
         public double LiquidDensity = 1000.0;
         public double NaturalFrequencyScale = 1.0;
-        public double DampingRatio = 0.05;
+        public double DampingRatio = 0.10;
         public double ParticipatingMassScale = 1.0;
         public double SurfaceSlopePerPendulumAngle = 1.0;
         public double SpillDischargeCoefficient = 0.6;

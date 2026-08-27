@@ -162,7 +162,9 @@ namespace FluidStabilizer.Core.Sim
             if (step % _cfg.ControlDecimation == 0)
             {
                 SensorBundle delivered = _bundleQueue.Count > 0 ? _bundleQueue.Peek() : LatestSensorBundle;
-                _latchedCommand = _controller.ComputeCommand(delivered);
+                _latchedCommand = _controller is IPrivilegedController pc
+                    ? pc.ComputeCommand(delivered, BuildPrivilegedObservation())
+                    : _controller.ComputeCommand(delivered);
                 _commandCount++;
                 _effortAccum += 0.5 * (Math.Abs(_latchedCommand.PitchRateCommand) +
                                        Math.Abs(_latchedCommand.RollRateCommand));
@@ -212,6 +214,31 @@ namespace FluidStabilizer.Core.Sim
 
             _lastSloshLoadPitch = tauV.Y;                       // pitch joint axis = V.Y
             _lastSloshLoadRoll = Double3.Dot(tauV, rollAxisV);  // roll joint axis
+        }
+
+        /// <summary>Assemble the privileged observation for the current step (critic / ceiling baseline only).</summary>
+        public PrivilegedObservation BuildPrivilegedObservation()
+        {
+            GimbalState g = _gimbal.State;
+            SloshGroundTruth sg = _slosh.SampleGroundTruth();
+            double[] mode = sg.ModeState;
+
+            return new PrivilegedObservation
+            {
+                StampSeconds = _clock.SimTimeSeconds,
+                SpecificForceTankFrame = TankState.LinearAccelerationTankFrame - TankState.GravityTankFrame,
+                PitchAngle = g.Pitch.Angle,
+                RollAngle = g.Roll.Angle,
+                PitchRate = g.Pitch.Rate,
+                RollRate = g.Roll.Rate,
+                SloshPitchAngle = mode.Length > 0 ? mode[0] : 0.0,
+                SloshPitchRate = mode.Length > 1 ? mode[1] : 0.0,
+                SloshRollAngle = mode.Length > 2 ? mode[2] : 0.0,
+                SloshRollRate = mode.Length > 3 ? mode[3] : 0.0,
+                LiquidComTankFrame = sg.LiquidCenterOfMass,
+                SloshKineticEnergy = sg.SloshKineticEnergy,
+                MinFreeboard = double.IsPositiveInfinity(_worstFreeboard) ? 0.0 : _lastSlosh.MinFreeboard
+            };
         }
 
         private GroundTruthFrame BuildGroundTruth()
