@@ -43,18 +43,20 @@ transforms (left-handed, Y-up, degrees) are converted **only** at the
 
 | Loop | Rate | Period | Notes |
 |---|---|---|---|
-| Physics + slosh integration | **500 Hz** | 2 ms | Fixed `dt`. Sub-stepping allowed inside a step if a model needs it. |
-| Sensor sampling | **200 Hz** | 5 ms | Per-sensor; a sensor may sample slower. Every sample carries its sim-time stamp. |
-| Controller / policy | **100 Hz** | 10 ms | Zero-order hold on the action between ticks. |
+| Physics + slosh integration | **600 Hz** | 1.667 ms | Fixed `dt`. Sub-stepping allowed inside a step if a model needs it. |
+| Sensor sampling | **200 Hz** | 5 ms | Physics-step decimation ×3. Every sample carries its sim-time stamp. |
+| Controller / policy | **100 Hz** | 10 ms | Physics-step decimation ×6. Zero-order hold on the action between ticks. |
 | Command transport delay | **10–50 ms** | — | Modelled + randomised per episode (design-review §9, §14). |
 | Episode length | **20–40 s** sim time | — | Long enough to contain post-maneuver slosh ring-down. |
 | Rendering (human-drive mode only) | display rate | — | Never in the physics path. |
 
-Ratios are integers by construction: physics:sensor:control = 5:2:1 → every
-control tick lands on a sensor tick lands on a physics tick.
+Rates are chosen so the decimations are integers and a control tick always
+coincides with a sensor tick: physics:sensor:control = 6:2:1. 600 Hz was picked
+over 500 Hz precisely so 200 Hz sensors divide evenly.
 
-Unity's `Time.fixedDeltaTime` is set to **0.002 s**. The sim loop does not rely
-on `Update()` timing for anything physical.
+The managed simulation loop owns timing; it does **not** use Unity's
+`FixedUpdate`/`Time` for anything physical (decision D1 in `docs/decisions.md` —
+the mechanical sim runs in managed code, not PhysX).
 
 ## Time and determinism
 
