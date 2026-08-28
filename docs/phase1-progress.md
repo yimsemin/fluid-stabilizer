@@ -3,8 +3,11 @@
 Tracks the phase-1 scope from `design-review.md` §20. Design approved 2026-08-27.
 
 > **Resume here (next session):** step **A** done — `ShallowWaterSloshModel`
-> (+ wave-breaking + rim run-up), 13 tests, validation sweep, height-field mesh
-> viz + `M` scene toggle. **Finding F3 resolved:** the raw NLSW solver flipped
+> (+ wave-breaking + rim run-up), 13 tests, validation sweep. Visualisation
+> rebuilt: one closed deforming water body for both models + a transparent
+> water shader + open-box tank; fixed the half-tank vertical offset bug. **Owner
+> to visually confirm in `PlayScene` (Rebuild Play Scene first).** **Finding F3
+> resolved:** the raw NLSW solver flipped
 > F2, but with wave-breaking modelled the two slosh models agree on direction
 > everywhere — gentle highway fine, brisk-low-freeboard tilt helps a little,
 > aggressive transients defeat reactive tilt (the RL target). Adopted
