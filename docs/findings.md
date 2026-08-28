@@ -93,6 +93,38 @@ for the default suite, unlike the ROM guards in `EvaluatorTests`). Run
 after any change to the shallow-water model, the actuator, or the analytic
 controllers. `GridConvergence_…` if the scheme changes.
 
+### Addendum (2026-08-28) — shallow-water reaction ≈ 2× the ROM's → the Hold gimbal saturates
+
+Found while rebuilding the scene visualisation (`SceneCapture`). Under the
+aggressive `ScriptedManeuverDriver` + `Hold`:
+
+| slosh model | max gimbal pitch | angle-limited | spill |
+|---|---|---|---|
+| Pendulum ROM | ~0° (servo holds) | no | 0 L |
+| Shallow water | **30° (pegged at the travel limit)** | yes | 1.1 L |
+
+Under the realistic `HighwayDriver` (briskness 0.5) the shallow-water Hold gimbal
+stays at ~0° and does not spill — this is an aggressive-maneuver effect only.
+
+Why: the fore-aft reaction moment on a rigidly-held tank under a hard
+longitudinal maneuver is ~M·aₓ·(h/2 + L²/12h) ≈ 500 N·m at 3 m/s². The pendulum
+ROM returns roughly half that (~230 N·m): it caps the participating mass at 0.45
+and puts the remainder on-axis, where it makes little moment. The gimbal's
+`ContinuousTorqueNm = 280` sits between the two, so the Hold servo holds under
+the ROM and saturates under shallow water.
+
+Consequences:
+- F3's aggressive-regime rows still rank `Hold` best, but under shallow water
+  "Hold" there is *a saturated servo sagging toward its 30° limit*, not a rigid
+  tank. Part of why aggressive driving is hard under shallow water is that the
+  actuator is torque-limited against the true slosh moment.
+- The ROM is optimistic about **actuator loading**, not only about spill.
+- Open questions for the owner (not yet actioned): (a) is
+  `GimbalConfig.ContinuousTorqueNm` / `MaxTorqueNm` sized for the real slosh
+  moment, or is under-authority the intended challenge? (b) should the `Hold`
+  baseline model a *locked* joint (moment reacted by the truck, no sag) as the
+  true floor, distinct from "servo commanding 0"?
+
 ---
 
 ## F2 — 2026-08-28 — A realistic driver flips F1: tilt control works for highway driving

@@ -25,11 +25,18 @@ Re-run the menu item any time the scene looks wrong or you changed `SceneBuilder
 
 ## What you're looking at
 
-- The blue block is the truck; the faint open box on it is the tank (floor +
-  4 walls, no lid); inside is the liquid — a closed, deforming water body whose
-  top surface is the slosh model's free surface, drawn with a translucent water
-  shader (fresnel edge, specular glint, ripple). It never overhangs the tank
-  walls; anything cresting the rim is genuine overflow.
+- The blue flatbed is the truck; on a short dark mount above it sits the tank —
+  drawn as an **open edge frame** (12 beams, no panels) so you can see straight
+  in. The tank is lifted a small cosmetic amount (`SimView.TankVisualLift`) so
+  the surface tilt and any overflow are clearly visible; the physics is
+  unchanged. The frame flashes **red** on a spill.
+- Inside is the liquid — a closed, deforming water body whose top surface is the
+  slosh model's free surface, translucent (fresnel edge, specular glint,
+  ripple). It never overhangs the walls; anything cresting the rim is overflow.
+- Under a hard maneuver with the stabilizer **off** and the **shallow-water**
+  model the tank can visibly sag to its 30° travel limit — the gimbal servo
+  saturates against the slosh moment (see `docs/findings.md` F3 addendum). This
+  does not happen under gentle driving or the pendulum model.
 - **M** switches the slosh model. **Pendulum ROM** (default): the surface is a
   tilted plane from the two first-mode angles — a proxy, the ROM has no spatial
   surface. **Shallow water**: the surface is the 2-D solver's real height field —
