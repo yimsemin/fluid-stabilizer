@@ -46,33 +46,52 @@ namespace FluidStabilizer.SimEditor
             camGo.AddComponent<AudioListener>();
 
             // --- truck / tank rig ---
-            // "Rig" is the unscaled root the view moves as the truck body; the
-            // visible truck mesh is a scaled child so its scale never distorts
-            // the tank geometry hung off the (also unscaled) pivot.
+            // "Rig" is the unscaled root the view moves as the truck body. The
+            // truck is a low flatbed so the tank + liquid sit clearly ABOVE it,
+            // not buried in the body — the tank is lifted a cosmetic amount by
+            // SimView (SimView.TankVisualLift) purely so a viewer can see the
+            // surface tilt and any overflow. Physics is unchanged.
             var rig = new GameObject("TruckRig");
 
-            var truckMesh = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            truckMesh.name = "TruckMesh";
-            truckMesh.transform.SetParent(rig.transform, false);
-            truckMesh.transform.localScale = new Vector3(2.4f, 1.2f, 6.0f);
-            truckMesh.transform.localPosition = new Vector3(0, 0.9f, 2.2f); // origin = rear axle at ground
-            truckMesh.GetComponent<Renderer>().sharedMaterial =
-                SolidMaterial("Truck", new Color(0.30f, 0.45f, 0.75f));
-            Object.DestroyImmediate(truckMesh.GetComponent<BoxCollider>());
+            var chassis = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            chassis.name = "Chassis";
+            chassis.transform.SetParent(rig.transform, false);
+            chassis.transform.localScale = new Vector3(2.4f, 0.9f, 6.0f);
+            chassis.transform.localPosition = new Vector3(0, 0.45f, 2.0f); // origin = rear axle at ground
+            chassis.GetComponent<Renderer>().sharedMaterial =
+                SolidMaterial("Truck", new Color(0.28f, 0.38f, 0.6f));
+            Object.DestroyImmediate(chassis.GetComponent<BoxCollider>());
+
+            var cab = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            cab.name = "Cab";
+            cab.transform.SetParent(rig.transform, false);
+            cab.transform.localScale = new Vector3(2.3f, 1.5f, 1.6f);
+            cab.transform.localPosition = new Vector3(0, 1.15f, 4.4f);
+            cab.GetComponent<Renderer>().sharedMaterial =
+                SolidMaterial("Cab", new Color(0.22f, 0.30f, 0.5f));
+            Object.DestroyImmediate(cab.GetComponent<BoxCollider>());
 
             var pivot = new GameObject("TankPivot");
             pivot.transform.SetParent(rig.transform, false);
 
+            var mount = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            mount.name = "Mount";
+            mount.transform.SetParent(pivot.transform, false);
+            mount.transform.localScale = new Vector3(0.5f, 0.6f, 0.5f);
+            mount.transform.localPosition = new Vector3(0, -0.55f, 0); // links the bed up to the tank
+            mount.GetComponent<Renderer>().sharedMaterial = SolidMaterial("Mount", new Color(0.15f, 0.16f, 0.18f));
+            Object.DestroyImmediate(mount.GetComponent<BoxCollider>());
+
             var tank = new GameObject("TankBody");
             tank.transform.SetParent(pivot.transform, false);
 
-            // Open tank: floor + 4 walls, no lid (an open liquid tank). Centred
-            // on the tank body origin; SimView scales it from the config.
+            // The tank: an open edge frame (12 beams, no panels) so you can see
+            // straight in. Unit cube in [-0.5,0.5]^3; SimView scales it (w,h,l).
             var shell = new GameObject("Shell", typeof(MeshFilter), typeof(MeshRenderer));
             shell.transform.SetParent(tank.transform, false);
-            shell.GetComponent<MeshFilter>().sharedMesh = OpenBoxMesh();
+            shell.GetComponent<MeshFilter>().sharedMesh = TankFrameMesh();
             var shellMr = shell.GetComponent<MeshRenderer>();
-            shellMr.sharedMaterial = TransparentMaterial("TankShell", new Color(0.82f, 0.86f, 0.9f, 0.14f));
+            shellMr.sharedMaterial = SolidMaterial("TankFrame", new Color(0.80f, 0.85f, 0.90f));
             shellMr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
 
             // The liquid: a closed, deforming water body (SimView builds/updates
@@ -138,36 +157,56 @@ namespace FluidStabilizer.SimEditor
         private static Material WaterMaterial()
         {
             var s = Shader.Find("FluidStabilizer/WaterSurface");
-            if (s != null) return new Material(s) { name = "Water" };
-            // fallback if the shader failed to import
-            return TransparentMaterial("Water", new Color(0.15f, 0.5f, 0.85f, 0.7f));
+            if (s != null)
+            {
+                var m = new Material(s) { name = "Water" };
+                m.SetFloat("_BaseAlpha", 0.72f);
+                m.SetColor("_DeepColor", new Color(0.05f, 0.24f, 0.42f));
+                m.SetColor("_ShallowColor", new Color(0.20f, 0.62f, 0.72f));
+                m.SetColor("_EdgeColor", new Color(0.82f, 0.95f, 1f));
+                return m;
+            }
+            return TransparentMaterial("Water", new Color(0.10f, 0.45f, 0.75f, 0.82f));
         }
 
-        /// <summary>Unit open box: floor + 4 walls (no lid), scaled by SimView.</summary>
-        private static Mesh OpenBoxMesh()
+        /// <summary>
+        /// Unit-cube edge frame (12 beams, [-0.5,0.5]^3) — the open tank drawn as
+        /// bars only so the liquid inside is fully visible. Scaled to (w,h,l) by
+        /// SimView; the top 4 beams mark the rim.
+        /// </summary>
+        private static Mesh TankFrameMesh()
         {
             var v = new System.Collections.Generic.List<Vector3>();
             var t = new System.Collections.Generic.List<int>();
+            const float r = 0.018f; // beam half-thickness (unit-cube fraction)
 
-            void Quad(Vector3 a, Vector3 b, Vector3 c, Vector3 d)
+            void Box(Vector3 c, Vector3 h)
             {
-                int i = v.Count;
-                v.Add(a); v.Add(b); v.Add(c); v.Add(d);
-                t.Add(i); t.Add(i + 1); t.Add(i + 2);
-                t.Add(i); t.Add(i + 2); t.Add(i + 3);
-                // back faces so the walls are visible from inside too
-                t.Add(i); t.Add(i + 2); t.Add(i + 1);
-                t.Add(i); t.Add(i + 3); t.Add(i + 2);
+                Vector3[] p =
+                {
+                    c + new Vector3(-h.x,-h.y,-h.z), c + new Vector3(h.x,-h.y,-h.z),
+                    c + new Vector3(h.x,-h.y,h.z),   c + new Vector3(-h.x,-h.y,h.z),
+                    c + new Vector3(-h.x,h.y,-h.z),  c + new Vector3(h.x,h.y,-h.z),
+                    c + new Vector3(h.x,h.y,h.z),    c + new Vector3(-h.x,h.y,h.z),
+                };
+                int b = v.Count;
+                foreach (var q in p) v.Add(q);
+                int[] f = { 0,1,2, 0,2,3,  4,6,5, 4,7,6,  0,5,1, 0,4,5,
+                            1,6,2, 1,5,6,  2,7,3, 2,6,7,  3,4,0, 3,7,4 };
+                foreach (var idx in f) t.Add(b + idx);
             }
 
             const float e = 0.5f;
-            Quad(new Vector3(-e, -e, -e), new Vector3(e, -e, -e), new Vector3(e, -e, e), new Vector3(-e, -e, e)); // floor
-            Quad(new Vector3(-e, -e, -e), new Vector3(-e, e, -e), new Vector3(e, e, -e), new Vector3(e, -e, -e)); // -z
-            Quad(new Vector3(e, -e, -e), new Vector3(e, e, -e), new Vector3(e, e, e), new Vector3(e, -e, e));     // +x
-            Quad(new Vector3(e, -e, e), new Vector3(e, e, e), new Vector3(-e, e, e), new Vector3(-e, -e, e));     // +z
-            Quad(new Vector3(-e, -e, e), new Vector3(-e, e, e), new Vector3(-e, e, -e), new Vector3(-e, -e, -e)); // -x
+            foreach (float sx in new[] { -e, e })
+            foreach (float sz in new[] { -e, e })
+                Box(new Vector3(sx, 0, sz), new Vector3(r, e, r));          // 4 verticals
+            foreach (float sy in new[] { -e, e })
+            {
+                foreach (float sz in new[] { -e, e }) Box(new Vector3(0, sy, sz), new Vector3(e, r, r));
+                foreach (float sx in new[] { -e, e }) Box(new Vector3(sx, sy, 0), new Vector3(r, r, e));
+            }
 
-            var m = new Mesh { name = "OpenTankShell" };
+            var m = new Mesh { name = "TankFrame" };
             m.SetVertices(v);
             m.SetTriangles(t, 0);
             m.RecalculateNormals();
