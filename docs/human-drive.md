@@ -25,12 +25,18 @@ Re-run the menu item any time the scene looks wrong or you changed `SceneBuilder
 
 ## What you're looking at
 
-- The blue block is the truck; the translucent box on it is the open tank; the
-  blue volume inside is the liquid. With the **pendulum ROM** (default) it is a
-  bulk block plus a brighter tilting surface quad — a proxy for the first
-  sloshing mode. Press **M** for the **shallow-water** model: the surface
-  becomes a deforming mesh driven by the 2-D solver's actual height field —
-  travelling waves that climb the walls and slop over the rim.
+- The blue block is the truck; the faint open box on it is the tank (floor +
+  4 walls, no lid); inside is the liquid — a closed, deforming water body whose
+  top surface is the slosh model's free surface, drawn with a translucent water
+  shader (fresnel edge, specular glint, ripple). It never overhangs the tank
+  walls; anything cresting the rim is genuine overflow.
+- **M** switches the slosh model. **Pendulum ROM** (default): the surface is a
+  tilted plane from the two first-mode angles — a proxy, the ROM has no spatial
+  surface. **Shallow water**: the surface is the 2-D solver's real height field —
+  travelling waves that run up the walls and slop over the rim.
+- It is not photoreal and never will be — no particles, foam or spray. Full
+  SPH/FLIP fluid breaks determinism and the RL step budget (design-review §6,
+  §21). "Clearly a body of sloshing liquid" is the target, not CGI water.
 - HUD: speed, longitudinal / lateral g, **min freeboard** (turns red near 0),
   litres spilled (flashes on a spill), slosh energy, and which stabilizer is on.
 
