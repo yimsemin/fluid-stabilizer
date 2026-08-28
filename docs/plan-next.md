@@ -10,7 +10,9 @@ changes. Truck feel: **realistic** (heavy, long braking, lazy steering).
 Input: **keyboard + gamepad**.
 
 **Status 2026-08-28:** B done (see finding F2), C done (see `docs/human-drive.md`).
-**A is next** — start of the next session.
+**A: solver landed** — `ShallowWaterSloshModel` + 13 tests, decision D4. Remaining
+for A: the validation experiment (re-run `PlantControllabilityTests` + baseline
+eval against this model, update F1) and the height-field mesh viz + scene toggle.
 
 ### Liquid visualization (owner asked)
 

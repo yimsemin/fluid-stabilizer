@@ -5,6 +5,49 @@ reasoning. Newest first. These refine `design-review.md`; they do not replace it
 
 ---
 
+## D4 — 2026-08-28 — Shallow-water slosh model: scheme and coupling choices
+
+`ShallowWaterSloshModel` (phase-2 model A, design-review §6) is a 2-D
+depth-averaged Saint-Venant solver behind the unchanged `ISloshModel`
+interface. Choices made:
+
+- **Scheme.** First-order finite-volume, **Rusanov (local Lax–Friedrichs)**
+  flux, forward Euler, on a ~48 × 28 grid (nominal tank) derived from a ~25 mm
+  target cell size. Reflective walls (only the hydrostatic pressure passes),
+  weir overflow once a wall cell tops the rim. Chosen for robustness and
+  guaranteed positivity over accuracy; it is numerically diffusive but the
+  first mode is resolved by ~90 cells/wavelength so the frequency is still
+  within the same ±15 % band the pendulum model meets. A MUSCL/limited
+  reconstruction is a drop-in upgrade if a later result needs less damping.
+- **Determinism.** Sub-step count each 600 Hz tick is `ceil(1.5·dt·s_max/CFL)`
+  (CFL 0.40), a deterministic function of the field — no wall-clock, no
+  threading. Hard clamps (h ≥ 1e-6, |u| ≤ 8 m/s) mirror the pendulum model's
+  anti-NaN guards.
+- **Frame.** Internal grid origin at the **tank floor centre**, matching the
+  effective convention of `PendulumSloshModel` (which also returns torque
+  about the floor centre). If the true gimbal-pivot height ever needs to be
+  the torque reference, both models change together.
+- **Reaction (decision D3 applied).** The solver integrates the *true* motion
+  including the tank angular-acceleration (Euler) term. The reaction fed back
+  to the tank is **quasi-steady**: Σ mₖ·(g − a_O − ω×(ω×r) − 2ω×v_rel) per
+  cell, i.e. the liquid mass distribution × its body force with the Euler term
+  omitted. That term is delivered as a constant **reflected inertia** computed
+  from the *same* analytic equivalent-mechanical estimate the pendulum model
+  uses — so the actuator sees an identical rotational load under both models
+  and only the wave dynamics differ. The wave's own momentum flux against the
+  walls (a second-order reaction correction) is not fed back in v1.
+- **Not used from `SloshParameters`:** `ParticipatingMassScale` (inherent in
+  the field) except for the reflected-inertia estimate, `SurfaceSlopePer­
+  PendulumAngle` (there is a real surface). `NaturalFrequencyScale` is applied
+  by scaling the gravity-wave term only.
+- **`ModeState`** is reported as an *equivalent* pitch/roll slosh angle+rate
+  from the mean free-surface slope, so the privileged baselines keep working.
+
+The pendulum ROM stays the default for bulk RL (cheaper); shallow water is the
+fidelity check and an optional higher-fidelity eval/training model.
+
+---
+
 ## D3 — 2026-08-28 — Slosh ↔ actuator coupling: split inertia vs. load
 
 The slosh model and the gimbal actuator are coupled both ways. Feeding the full
