@@ -35,13 +35,31 @@ namespace FluidStabilizer.Core.Sim.SloshModels
 
         private readonly double _targetCell;
 
+        private readonly double _breakVisc;
+        private readonly double _rimTau;
+
         /// <param name="targetCellSize">Nominal grid spacing (m). The tank is
         /// divided into the nearest whole number of cells, clamped to a sane
         /// range. 0.025 m over the nominal 1.2 × 0.7 m tank ⇒ 48 × 28.</param>
-        public ShallowWaterSloshModel(double targetCellSize = 0.025)
+        /// <param name="breakingViscosity">Eddy-viscosity coefficient for the
+        /// wave-breaking energy sink (0 disables it). Momentum is diffused across
+        /// fronts steeper than <see cref="SBreak"/> — the depth-averaged proxy
+        /// for a wave white-capping instead of running further up the wall
+        /// (Kennedy et al. 2000, simplified to a slope trigger).</param>
+        /// <param name="rimReturnTau">Time constant (s) of the smoothed boundary
+        /// surface the weir overtopping is measured from. A brief wave slap that
+        /// tops the rim and recedes within ~this time barely spills; only a
+        /// sustained surge does. 0 falls back to the instantaneous surface.</param>
+        public ShallowWaterSloshModel(double targetCellSize = 0.025,
+            double breakingViscosity = 0.6, double rimReturnTau = 0.20)
         {
             _targetCell = targetCellSize > 0 ? targetCellSize : 0.025;
+            _breakVisc = Math.Max(0.0, breakingViscosity);
+            _rimTau = Math.Max(0.0, rimReturnTau);
         }
+
+        /// <summary>Surface slope at which a front is treated as breaking (~31°).</summary>
+        private const double SBreak = 0.6;
 
         // ---- geometry (per episode) ----
         private int _nx, _ny;
@@ -51,6 +69,8 @@ namespace FluidStabilizer.Core.Sim.SloshModels
 
         // ---- state, row-major k = i*_ny + j ----
         private double[] _h, _hu, _hv;
+        private double[] _rimBar;   // low-passed surface height, used for overtopping
+        private double _breakDissipation; // energy removed by the breaking sink this step (J)
         // x-face fluxes: (_nx+1) × _ny, index fi*_ny + j
         private double[] _fxh, _fxhu, _fxhv;
         // y-face fluxes: _nx × (_ny+1), index i*(_ny+1) + fj
@@ -75,6 +95,8 @@ namespace FluidStabilizer.Core.Sim.SloshModels
         public long SubStepCapHits { get; private set; }
         /// <summary>Cells clamped to the |u| ≤ VMax ceiling (should stay 0 in a healthy run).</summary>
         public long VelocityClampHits { get; private set; }
+        /// <summary>Cumulative kinetic energy removed by the wave-breaking sink (J).</summary>
+        public double BreakingEnergyRemoved { get; private set; }
 
         private const double HMin = 1e-6;   // never let a cell go negative
         private const double HDry = 1e-4;   // below this a cell carries no momentum
@@ -105,7 +127,8 @@ namespace FluidStabilizer.Core.Sim.SloshModels
             _h = new double[n];
             _hu = new double[n];
             _hv = new double[n];
-            for (int k = 0; k < n; k++) _h[k] = _h0;
+            _rimBar = new double[n];
+            for (int k = 0; k < n; k++) { _h[k] = _h0; _rimBar[k] = _h0; }
 
             _fxh = new double[(_nx + 1) * _ny];
             _fxhu = new double[(_nx + 1) * _ny];
@@ -135,6 +158,8 @@ namespace FluidStabilizer.Core.Sim.SloshModels
             MaxSubStepsUsed = 0;
             SubStepCapHits = 0;
             VelocityClampHits = 0;
+            BreakingEnergyRemoved = 0.0;
+            _breakDissipation = 0.0;
 
             // Reflected inertia — the analytic equivalent-mechanical estimate,
             // replicated from PendulumSloshModel so the actuator loop sees the
@@ -175,6 +200,10 @@ namespace FluidStabilizer.Core.Sim.SloshModels
                 double u = _hu[k] / h, v = _hv[k] / h;
                 double c = Math.Sqrt(gWave * h);
                 double s = (Math.Abs(u) + c) / _dx + (Math.Abs(v) + c) / _dy;
+                // breaking eddy viscosity adds a diffusive stability limit
+                // (ramp ≤ 2); assume it could be active anywhere.
+                if (_breakVisc > 0.0)
+                    s += 4.0 * _breakVisc * c * (1.0 / _dx + 1.0 / _dy);
                 if (s > smax) smax = s;
             }
             int wantSub = smax > 0 ? (int)Math.Ceiling(1.5 * dtp * smax / Cfl) : 1;
@@ -279,6 +308,7 @@ namespace FluidStabilizer.Core.Sim.SloshModels
                     int kL = (fi - 1) * ny + j, kR = fi * ny + j;
                     RusanovX(_h[kL], _hu[kL], _hv[kL], _h[kR], _hu[kR], _hv[kR], gWave,
                         out double a, out double b, out double c);
+                    BreakingFlux(kL, kR, gWave, dt, invdx, ref b, ref c);
                     int f = fi * ny + j;
                     _fxh[f] = a; _fxhu[f] = b; _fxhv[f] = c;
                 }
@@ -299,6 +329,7 @@ namespace FluidStabilizer.Core.Sim.SloshModels
                     int kL = i * ny + (fj - 1), kR = i * ny + fj;
                     RusanovY(_h[kL], _hu[kL], _hv[kL], _h[kR], _hu[kR], _hv[kR], gWave,
                         out double a, out double b, out double c);
+                    BreakingFlux(kL, kR, gWave, dt, invdy, ref b, ref c);
                     int f = rowBase + fj;
                     _fyh[f] = a; _fyhu[f] = b; _fyhv[f] = c;
                 }
@@ -365,10 +396,23 @@ namespace FluidStabilizer.Core.Sim.SloshModels
                         else if (vv < -VMax) { hv = -VMax * h; VelocityClampHits++; }
                     }
 
-                    // weir overflow once the surface tops the rim at a wall cell
+                    // weir overflow once the surface tops the rim at a wall cell.
+                    // The head is measured from a low-passed boundary surface, not
+                    // the instantaneous peak: a wave that slaps the rim and
+                    // recedes within ~_rimTau barely spills, only a sustained
+                    // surge does (run-up return). _rimTau = 0 → instantaneous.
                     if (xEdge || j == 0 || j == ny - 1)
                     {
-                        double head = h - _rimZ;
+                        double bar = _rimBar[k];
+                        if (_rimTau > 0.0)
+                        {
+                            double a = dt / _rimTau;
+                            bar += (h - bar) * (a < 1.0 ? a : 1.0);
+                        }
+                        else bar = h;
+                        _rimBar[k] = bar;
+
+                        double head = Math.Min(h, bar) - _rimZ;
                         if (head > 0.0)
                         {
                             double weirPerLen = _cd * (2.0 / 3.0)
@@ -376,9 +420,12 @@ namespace FluidStabilizer.Core.Sim.SloshModels
                             double dh = 0.0;
                             if (xEdge) dh += weirPerLen * dt * invdx;
                             if (j == 0 || j == ny - 1) dh += weirPerLen * dt * invdy;
-                            dh = Math.Min(dh, head * 0.9);
-                            h -= dh;
-                            spill += dh * _cellA;
+                            dh = Math.Min(dh, (h - _rimZ) * 0.9);
+                            if (dh > 0.0)
+                            {
+                                h -= dh;
+                                spill += dh * _cellA;
+                            }
                         }
                     }
 
@@ -386,6 +433,38 @@ namespace FluidStabilizer.Core.Sim.SloshModels
                 }
             }
             return spill;
+        }
+
+        /// <summary>
+        /// Wave-breaking energy sink: across a front steeper than <see cref="SBreak"/>
+        /// add a diffusive momentum flux with eddy viscosity ν = C·Δ·√(g·h̄)·ramp
+        /// (mixing-length form, Δ = cell size). The flux sign matches the update
+        /// convention <c>hu −= dt·(F_right − F_left)/Δ</c>, so it damps the front
+        /// — the depth-averaged stand-in for a wave white-capping instead of
+        /// running further up the wall. No effect on the mass flux, so positivity
+        /// is unaffected.
+        /// </summary>
+        private void BreakingFlux(int kL, int kR, double gWave, double dt, double invd,
+            ref double fhu, ref double fhv)
+        {
+            if (_breakVisc <= 0.0) return;
+            double hL = _h[kL], hR = _h[kR];
+            double hbar = 0.5 * (hL + hR);
+            if (hbar < HDry) return;
+            double slope = Math.Abs(hR - hL) * invd;
+            if (slope <= SBreak) return;
+
+            double ramp = Math.Min(2.0, (slope - SBreak) / SBreak);
+            double nu = _breakVisc * (1.0 / invd) * Math.Sqrt(gWave * hbar) * ramp;
+            double uL = hL > HDry ? _hu[kL] / hL : 0.0;
+            double uR = hR > HDry ? _hu[kR] / hR : 0.0;
+            double vL = hL > HDry ? _hv[kL] / hL : 0.0;
+            double vR = hR > HDry ? _hv[kR] / hR : 0.0;
+            double gradU = (uR - uL) * invd, gradV = (vR - vL) * invd;
+
+            fhu -= nu * hbar * gradU;
+            fhv -= nu * hbar * gradV;
+            BreakingEnergyRemoved += _density * nu * hbar * (gradU * gradU + gradV * gradV) * _cellA * dt;
         }
 
         private static void RusanovX(
