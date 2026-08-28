@@ -13,14 +13,12 @@ Input: **keyboard + gamepad**.
 **A done** — `ShallowWaterSloshModel` + 13 tests (decision D4), validation
 experiment run, height-field mesh viz + `M` scene toggle.
 
-**⚠ The validation experiment produced finding F3 and a pending decision.**
-The shallow-water model contradicts F2: no analytic tilt controller beats
-holding the tank rigid, on any highway scenario. Result is grid-converged and
-CFL-stable. Before phase-1 items 12/13 the owner needs to pick a direction —
-see `docs/findings.md` F3 "Interpretations (the decision)":
-1. believe shallow water → pivot to anticipatory/learned control + re-fit the ROM;
-2. add wave-breaking dissipation to the shallow-water model and re-run;
-3. keep both as bracket models, validate every result under both.
+**Finding F3 resolved** (see `docs/findings.md` F3). The raw NLSW solver flipped
+F2, but adding a wave-breaking energy sink + rim run-up return (owner's call:
+"fix shallow water first") brings the two slosh models into agreement on
+direction everywhere. Adopted **bracket-model discipline**: RL trains on the
+pendulum ROM (cheap), every result is validated on shallow water. Phase-1 items
+12 (RL socket adapter) + 13 (domain randomization) are unblocked — resume there.
 
 ### Liquid visualization (owner asked)
 

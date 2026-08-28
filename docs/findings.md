@@ -4,98 +4,94 @@ Empirical results from the simulation as it is built. Newest first.
 
 ---
 
-## F3 — 2026-08-28 — The shallow-water reference model contradicts F2: tilt control never beats "hold rigid"
-
-**Status: project-shaping. Needs a direction decision (see end).**
+## F3 — 2026-08-28 — Shallow-water reference model: raw run flipped F2; with wave-breaking it reconciles F1 + F2
 
 The deciding experiment promised in F1 (interpretation 1). `ShallowWaterSloshModel`
-— a 2-D depth-averaged Saint-Venant solver on a ~48×28 grid (decision D4) — was
-dropped in behind `ISloshModel` and the whole baseline evaluation re-run
-(6 scenarios × 4 controllers × 6 seeds, `ShallowWaterValidationTests`).
+— a 2-D depth-averaged Saint-Venant solver on a ~48×28 grid (decision D4) —
+dropped in behind `ISloshModel`; the whole baseline evaluation re-run
+(6 scenarios × 4 controllers × 6 seeds, `ShallowWaterValidationTests`, all
+`[Explicit]`, full sweep ~25–40 min).
 
-### Result — mean spill [L], `Hold` vs the best tilt controller
+### Stage 1 — raw NLSW solver: tilt control never beat `Hold`
 
-| scenario | Hold (ROM → SW) | best tilt (ROM → SW) | ROM verdict | SW verdict |
-|---|---|---|---|---|
-| HighwayCalm | 0 → **0** | 0 → 0.37 | tie | tilt slightly worse |
-| HighwayBrisk | — → **0** | — → 1.1 | — | tilt worse |
-| HighwayBriskLowFreeboard (0.27 m) | 6.98 → **42.1** | 0.39 → 45.6 | **tilt wins ~15×** | **tilt ties/worse** |
-| ScriptedManeuver | — → 99.8 | — → **17.3** | — | tilt wins ~6× |
-| AggressiveRandom | — → 111 | — → 126 | tilt worse (F1) | tilt worse |
-| HighFillAggressive | — → 264 | — → 283 | tilt worse (F1) | tilt worse |
+The first run said **no analytic tilt controller beats holding the tank rigid on
+any highway scenario**, and `HighwayBriskLowFreeboard` — where F2 had tilt
+control winning 15× under the ROM — had tilt tying/losing while `Hold` itself
+spilled ~6× more than the ROM predicted. Grid-converged (27.6/27.0/27.0 L across
+30×18/48×28/71×41) and CFL-stable (sub-steps 2–4 of 64, no clamps) — **not a
+numerical artifact**. Low-amplitude agreement with the ROM still held (surface
+tilt within ~2 %, 13 % at 5 m/s²); the models only diverged at large amplitude.
 
-Under the shallow-water model **no analytic tilt controller beats holding the
-tank rigid on any highway scenario**, and the one scenario where F2 said tilt
-control wins by 15× (`HighwayBriskLowFreeboard`) now has tilt control tying or
-slightly losing — while `Hold` itself spills ~6× more than the pendulum ROM
-predicted. `PrivilegedFeedforward` (most aggressive tilting) is the worst
-controller in every scenario. Only the single-axis `ScriptedManeuver` still
-favours tilt control (~6×).
+Cause: shallow-water equations **cannot break a wave** — it steepens into a bore
+that carries water up the wall instead of white-capping and dissipating — so
+NLSW is known to over-predict wall run-up, and every wave that touched the rim
+was counted as spilled.
 
-### The result is not a numerical artifact
+### Stage 2 — add the missing physics (owner's call: "fix shallow water first")
 
-- **Grid convergence** (`GridConvergence_…`): spill on `HighwayBriskLowFreeboard`/
-  `Hold` is 27.6 → 27.0 → 27.0 L across 30×18, 48×28, 71×41 grids. Mesh-independent.
-- **Solver health** (`SolverHealth_AcrossScenarios`): sub-step count peaks at
-  2–4 (cap 64), the CFL cap is never hit, the |u| ≤ 8 m/s clamp never fires — in
-  *any* scenario including the aggressive ones. The scheme runs well inside its
-  stability envelope.
-- **Low-amplitude agreement** holds: under a gentle step acceleration the
-  shallow-water surface tilt tracks the pendulum ROM within ~2 % (13 % at
-  5 m/s²). The models only diverge at large amplitude — which is exactly where
-  the ROM caps wave elevation at 0.8·depth and leans on tuned quadratic damping.
-- **Kinematic controllability still exists**: with *perfect* tank-tilt tracking
-  the wall wave drops to 0.40× "held" (0.52× through a 2 Hz lag,
-  `IdealTiltTracking_Helps_UnderShallowWater`). The plant *is* controllable by
-  tilt — the sensor-driven analytic laws just don't capture it in closed loop
-  (same story as F1's lagged-tracking diagnostic).
+Two physically-standard additions to `ShallowWaterSloshModel` (decision D4):
 
-### Why the two models disagree
+- **Wave-breaking eddy viscosity** — across a front steeper than ~31° a
+  diffusive momentum flux `ν = C·Δ·√(g·h̄)·ramp` damps the front (Kennedy et al.
+  2000, simplified to a slope trigger). `C = 0.6`.
+- **Rim run-up return** — the weir head is measured from a low-passed boundary
+  surface (`τ = 0.2 s`), not the instantaneous peak: a wave that slaps the rim
+  and recedes barely spills, only a sustained surge does.
 
-The pendulum ROM has one DOF per axis. Commanding the tank to a low-passed felt
-tilt slows the effective gravity rotation the pendulum sees and it settles. The
-shallow-water field has spatial structure: rotating the tank physically sweeps
-the walls through the liquid and rotates the gravity vector across the whole
-surface, launching a travelling wave that runs up the far wall and tops the rim
-mid-manoeuvre. The ROM cannot represent "the wave sloshed to the other end and
-climbed the wall while the tank was rotating"; the shallow-water model can, and
-says that is the dominant spill mechanism.
+Both constants are within the literature range and were fixed before re-running.
+Solver still healthy (sub-steps 4–14, no clamps), grid-converged
+(37.8/39.2/40.3 L), low-amplitude ROM agreement unchanged.
 
-### Which model to believe
+### Stage 3 — result with wave-breaking: F1 and F2 reconciled
 
-Shallow-water equations are known to **over-predict wall run-up** — they cannot
-break a wave, so it steepens into a bore that carries water up the wall instead
-of white-capping and dissipating. So the truth is likely **bracketed**: the
-pendulum ROM (elevation capped, amplitude damping tuned) is an optimistic lower
-bound on spill; the raw shallow-water solver is a pessimistic upper bound. Both
-agree on **direction** — moving the tank makes waves — and on the ranking
-(`Hold` ≤ `SFA` ≈ `PID` < `PrivilegedFeedforward`).
+Mean spill [L] over 6 seeds — `Hold` vs the best analytic tilt controller:
 
-### Interpretations (the decision)
+| scenario | ROM Hold→tilt | SW Hold→tilt | verdict (both models) |
+|---|---|---|---|
+| HighwayCalm | 0 → 0 | **0 → 0** | nobody spills |
+| HighwayBrisk | — | **0 → 0** | nobody spills |
+| HighwayBriskLowFreeboard (0.27 m) | 6.98 → 0.39 | **22.4 → 15.5** | tilt helps (ROM 15×, SW ~1.4×) |
+| ScriptedManeuver (clean 1-axis) | — | **27.1 → 0.0004** | tilt helps enormously |
+| AggressiveRandom | tilt worse | **0.72 → 8.4** | **tilt hurts** (pumps slosh) |
+| HighFillAggressive | tilt worse | **90.9 → 138** | **tilt hurts** |
 
-1. **Believe the shallow-water model (roughly).** Then 2-axis tank-tilt
-   stabilization by any *reactive* law is close to useless for spill control,
-   even on highways, and the project's value is in (a) anticipatory / learned
-   control — the ideal-tilt diagnostic shows 2.5× headroom a preview-based MPC
-   or RL policy might reach — and/or (b) reframing to "robustness under mild
-   conditions + graceful degradation". The pendulum ROM would need its
-   elevation/spill calibration re-fit against shallow water before it is used as
-   the RL training model.
-2. **The shallow-water model is still too violent.** Add a wave-breaking energy
-   sink (cap the local Froude number / add roller dissipation), or a rim
-   run-up/return term so not every wave that touches the rim leaves. Re-run and
-   see whether the highway scenarios come back to "tilt control helps".
-3. **Keep both as bracket models.** Report every controller against *both* the
-   ROM and shallow water; treat a result as real only if it holds under both.
-   RL trains on the ROM (cheap) and is validated on shallow water.
+`PrivilegedFeedforward` (most aggressive tilting) is the **worst** controller in
+every scenario under stress (`AggressiveRandom` 70 L, `HighFillAggressive`
+210 L). Over-actuation is the enemy.
+
+**The two independent slosh models now agree on direction everywhere:**
+- gentle / moderate highway → nobody spills;
+- brisk highway at tight freeboard → reactive tilt control helps (ROM says a
+  lot, shallow water says a little);
+- clean single-axis manoeuvre → tilt control nearly eliminates the spill;
+- aggressive / adversarial transients → reactive tilt control *pumps* the slosh
+  and loses to holding rigid — **this is the RL / anticipation target** (F1 stands).
+
+They differ on magnitude: the ROM is optimistic about how much tilt helps on
+highways, shallow water is pessimistic about aggressive driving being
+controllable. The `HighwayBriskLowFreeboard` "tilt helps ~1.4×" sits in the
+regime where the breaking constants matter — treat it as "small positive", not a
+precise number.
+
+### Net effect on the project
+
+- The premise is **not** broken. Tank-tilt stabilization is a real, well-posed
+  task for highway driving; a modest rule-based win, with headroom for a learned
+  policy (ideal-tilt tracking → 0.40× wall wave, `IdealTiltTracking_…`).
+- The pendulum ROM is **trustworthy enough for bulk RL training** — it agrees
+  with the 2-D model on direction and ranking. Shallow water is the fidelity
+  check.
+- **Adopted: bracket-model discipline** (interpretation 3). Report controllers
+  against both models; a result counts only if it holds under both. RL trains on
+  the ROM (cheap), is validated on shallow water.
 
 ### Guards / how to re-check
 
-`ShallowWaterValidationTests` — all `[Explicit]` (the full sweep is ~25 min, one
-episode ~10–15 s; too slow for the default suite, unlike the ROM guards in
-`EvaluatorTests`). Run `SolverHealth_AcrossScenarios` +
-`BaselineEvaluation_UnderShallowWater_PrintsReport` after any change to the
-shallow-water model, the actuator, or the analytic controllers.
+`ShallowWaterValidationTests` — all `[Explicit]` (full sweep ~25–40 min; too slow
+for the default suite, unlike the ROM guards in `EvaluatorTests`). Run
+`SolverHealth_AcrossScenarios` + `BaselineEvaluation_UnderShallowWater_PrintsReport`
+after any change to the shallow-water model, the actuator, or the analytic
+controllers. `GridConvergence_…` if the scheme changes.
 
 ---
 

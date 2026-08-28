@@ -2,14 +2,16 @@
 
 Tracks the phase-1 scope from `design-review.md` §20. Design approved 2026-08-27.
 
-> **Resume here (next session):** step **A** is done — `ShallowWaterSloshModel`
-> + 13 tests, validation experiment run, height-field mesh viz + `M` scene
-> toggle. **The validation produced finding F3 (project-shaping): the
-> shallow-water model says tank-tilt control never beats holding rigid, even on
-> highways — it contradicts F2. A direction decision is pending** (see
-> `docs/findings.md` F3 end + `docs/plan-next.md`). Do not start phase-1 items 12
-> (RL adapter) / 13 (domain randomization) until that is settled — the RL
-> training model depends on it. EditMode: 64 pass / 3 skipped.
+> **Resume here (next session):** step **A** done — `ShallowWaterSloshModel`
+> (+ wave-breaking + rim run-up), 13 tests, validation sweep, height-field mesh
+> viz + `M` scene toggle. **Finding F3 resolved:** the raw NLSW solver flipped
+> F2, but with wave-breaking modelled the two slosh models agree on direction
+> everywhere — gentle highway fine, brisk-low-freeboard tilt helps a little,
+> aggressive transients defeat reactive tilt (the RL target). Adopted
+> **bracket-model discipline**: RL trains on the pendulum ROM, every result
+> validated on shallow water. **Phase-1 items 12 (RL socket adapter) + 13
+> (domain randomization) are unblocked** — that's the next work.
+> EditMode: 61 pass / 8 skipped (5 new `[Explicit]` SW diagnostics).
 
 | # | Item | Status |
 |---|---|---|

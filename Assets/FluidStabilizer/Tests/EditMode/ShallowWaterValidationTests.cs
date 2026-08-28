@@ -165,7 +165,13 @@ namespace FluidStabilizer.Tests
                 TestContext.WriteLine(
                     $"{sc.Name,-26} {ctrl,-5}  spill={r.TotalOverflowVolume * 1000,7:F1} L  " +
                     $"worstFB={r.WorstFreeboard,7:F3}  maxSub={sw.MaxSubStepsUsed,3}  " +
-                    $"capHits={sw.SubStepCapHits,6}  vClamp={sw.VelocityClampHits,8}");
+                    $"capHits={sw.SubStepCapHits,6}  vClamp={sw.VelocityClampHits,8}  " +
+                    $"breakE={sw.BreakingEnergyRemoved,8:F1} J");
+
+                // the solver must stay well inside its stability envelope in
+                // every scenario — no CFL sub-step starvation, no NaN-guard clamp.
+                Assert.AreEqual(0, sw.SubStepCapHits, $"{sc.Name}/{ctrl}: CFL sub-step cap hit");
+                Assert.AreEqual(0, sw.VelocityClampHits, $"{sc.Name}/{ctrl}: velocity clamp fired");
             }
         }
 
