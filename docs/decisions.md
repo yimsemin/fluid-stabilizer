@@ -36,6 +36,15 @@ interface. Choices made:
   uses — so the actuator sees an identical rotational load under both models
   and only the wave dynamics differ. The wave's own momentum flux against the
   walls (a second-order reaction correction) is not fed back in v1.
+- **Wave breaking + rim run-up** (added after finding F3 stage 1). NLSW cannot
+  break a wave, so it over-predicts wall run-up. Two additions: (1) a
+  wave-breaking eddy viscosity — across a front steeper than ~31° a diffusive
+  momentum flux `ν = C·Δ·√(g·h̄)·ramp` (Kennedy et al. 2000, slope-triggered),
+  `C = 0.6`, folded into the CFL estimate; (2) the weir overtopping head is
+  measured from a per-cell low-passed boundary surface (`τ = 0.2 s`) so a
+  transient wall slap that recedes barely spills. Both off when the relevant
+  constructor arg is 0. Constants are within the literature range; the
+  `HighwayBriskLowFreeboard` verdict is mildly sensitive to them (finding F3).
 - **Not used from `SloshParameters`:** `ParticipatingMassScale` (inherent in
   the field) except for the reflected-inertia estimate, `SurfaceSlopePer­
   PendulumAngle` (there is a real surface). `NaturalFrequencyScale` is applied
