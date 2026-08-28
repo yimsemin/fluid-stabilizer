@@ -1,0 +1,6 @@
+# External RL trainer for fluid-stabilizer. No Unity needed here — the C#
+# TrainingServer speaks a plain TCP socket (see ../docs/rl.md).
+gymnasium>=0.29
+numpy>=1.24
+torch>=2.1
+tensorboard>=2.14

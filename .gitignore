@@ -102,6 +102,7 @@ venv/
 # Training run outputs (kept out of git; back up separately)
 /training/results/
 /training/runs/
+/python/runs/
 *.onnx
 *.pt
 
