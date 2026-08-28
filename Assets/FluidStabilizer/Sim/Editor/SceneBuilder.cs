@@ -66,38 +66,22 @@ namespace FluidStabilizer.SimEditor
             var tank = new GameObject("TankBody");
             tank.transform.SetParent(pivot.transform, false);
 
-            var shell = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            shell.name = "Shell";
+            // Open tank: floor + 4 walls, no lid (an open liquid tank). Centred
+            // on the tank body origin; SimView scales it from the config.
+            var shell = new GameObject("Shell", typeof(MeshFilter), typeof(MeshRenderer));
             shell.transform.SetParent(tank.transform, false);
-            var shellMat = TransparentMaterial("TankShell", new Color(0.85f, 0.88f, 0.9f, 0.18f));
-            shell.GetComponent<Renderer>().sharedMaterial = shellMat;
-            Object.DestroyImmediate(shell.GetComponent<BoxCollider>());
+            shell.GetComponent<MeshFilter>().sharedMesh = OpenBoxMesh();
+            var shellMr = shell.GetComponent<MeshRenderer>();
+            shellMr.sharedMaterial = TransparentMaterial("TankShell", new Color(0.82f, 0.86f, 0.9f, 0.14f));
+            shellMr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
 
-            var bulk = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            bulk.name = "LiquidBulk";
-            bulk.transform.SetParent(tank.transform, false);
-            bulk.GetComponent<Renderer>().sharedMaterial =
-                TransparentMaterial("Liquid", new Color(0.20f, 0.55f, 0.95f, 0.55f));
-            Object.DestroyImmediate(bulk.GetComponent<BoxCollider>());
-
-            var surface = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            surface.name = "LiquidSurface";
-            surface.transform.SetParent(tank.transform, false);
-            surface.transform.localScale = new Vector3(1, 0.02f, 1);
-            surface.GetComponent<Renderer>().sharedMaterial =
-                SolidMaterial("LiquidSurface", new Color(0.35f, 0.7f, 1f));
-            Object.DestroyImmediate(surface.GetComponent<BoxCollider>());
-
-            // shallow-water height-field surface (SimView builds/updates the mesh)
+            // The liquid: a closed, deforming water body (SimView builds/updates
+            // the mesh each frame from the active slosh model's free surface).
             var liquidMeshGo = new GameObject("LiquidMesh", typeof(MeshFilter), typeof(MeshRenderer));
             liquidMeshGo.transform.SetParent(tank.transform, false);
-            var waterMat = TransparentMaterial("Water", new Color(0.15f, 0.5f, 0.9f, 0.72f));
-            waterMat.SetFloat("_Glossiness", 0.9f);
-            waterMat.SetFloat("_Metallic", 0.1f);
             var liquidMeshMr = liquidMeshGo.GetComponent<MeshRenderer>();
-            liquidMeshMr.sharedMaterial = waterMat;
+            liquidMeshMr.sharedMaterial = WaterMaterial();
             liquidMeshMr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-            liquidMeshGo.SetActive(false); // enabled by SimView only when shallow water is active
 
             // --- controllers ---
             var simGo = new GameObject("Simulation");
@@ -110,8 +94,6 @@ namespace FluidStabilizer.SimEditor
             view.TruckBody = rig.transform;
             view.TankPivot = pivot.transform;
             view.TankBody = tank.transform;
-            view.LiquidBulk = bulk.transform;
-            view.LiquidSurface = surface.transform;
             view.LiquidMesh = liquidMeshGo.GetComponent<MeshFilter>();
 
             hud.Runner = runner;
@@ -150,6 +132,46 @@ namespace FluidStabilizer.SimEditor
             m.DisableKeyword("_ALPHAPREMULTIPLY_ON");
             m.renderQueue = 3000;
             m.color = c;
+            return m;
+        }
+
+        private static Material WaterMaterial()
+        {
+            var s = Shader.Find("FluidStabilizer/WaterSurface");
+            if (s != null) return new Material(s) { name = "Water" };
+            // fallback if the shader failed to import
+            return TransparentMaterial("Water", new Color(0.15f, 0.5f, 0.85f, 0.7f));
+        }
+
+        /// <summary>Unit open box: floor + 4 walls (no lid), scaled by SimView.</summary>
+        private static Mesh OpenBoxMesh()
+        {
+            var v = new System.Collections.Generic.List<Vector3>();
+            var t = new System.Collections.Generic.List<int>();
+
+            void Quad(Vector3 a, Vector3 b, Vector3 c, Vector3 d)
+            {
+                int i = v.Count;
+                v.Add(a); v.Add(b); v.Add(c); v.Add(d);
+                t.Add(i); t.Add(i + 1); t.Add(i + 2);
+                t.Add(i); t.Add(i + 2); t.Add(i + 3);
+                // back faces so the walls are visible from inside too
+                t.Add(i); t.Add(i + 2); t.Add(i + 1);
+                t.Add(i); t.Add(i + 3); t.Add(i + 2);
+            }
+
+            const float e = 0.5f;
+            Quad(new Vector3(-e, -e, -e), new Vector3(e, -e, -e), new Vector3(e, -e, e), new Vector3(-e, -e, e)); // floor
+            Quad(new Vector3(-e, -e, -e), new Vector3(-e, e, -e), new Vector3(e, e, -e), new Vector3(e, -e, -e)); // -z
+            Quad(new Vector3(e, -e, -e), new Vector3(e, e, -e), new Vector3(e, e, e), new Vector3(e, -e, e));     // +x
+            Quad(new Vector3(e, -e, e), new Vector3(e, e, e), new Vector3(-e, e, e), new Vector3(-e, -e, e));     // +z
+            Quad(new Vector3(-e, -e, e), new Vector3(-e, e, e), new Vector3(-e, e, -e), new Vector3(-e, -e, -e)); // -x
+
+            var m = new Mesh { name = "OpenTankShell" };
+            m.SetVertices(v);
+            m.SetTriangles(t, 0);
+            m.RecalculateNormals();
+            m.RecalculateBounds();
             return m;
         }
     }
