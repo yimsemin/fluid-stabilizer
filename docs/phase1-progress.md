@@ -6,10 +6,11 @@ Tracks the phase-1 scope from `design-review.md` §20. Design approved 2026-08-2
 > discipline) and **F4** (rigid locked-joint `Hold` + resized/thermally-limited
 > actuator, decision D5) are in. Net: no analytic reactive tilt controller beats
 > a rigid tank — beating rigid needs anticipation/learning. Visualisation
-> rebuilt + screenshot-verified (`SceneCapture`). Shallow-water sweep with the
-> D5 config is the last confirmation. **Next: phase-1 item 12 — RL: Gymnasium
-> socket adapter + PPO, asymmetric critic, frame-stack** (the core remaining
-> work), then item 13 (domain randomization).
+> rebuilt + screenshot-verified (`SceneCapture`); shallow-water D5 sweep confirms
+> F4. **Item 12 (RL) C# side done + tested** — `FluidStabilizer.Rl` env +
+> `TrainingServer` socket + Python trainer scaffold (`python/`, needs `torch`,
+> not yet run; `docs/rl.md`). **Next: run a first training job and compare vs F4;
+> then item 13 (domain randomization) + curriculum automation.**
 
 | # | Item | Status |
 |---|---|---|
@@ -24,7 +25,7 @@ Tracks the phase-1 scope from `design-review.md` §20. Design approved 2026-08-2
 | 9 | Baseline controllers: specific-force alignment, PID, privileged MPC | 🟡 `Hold` (now a **locked rigid joint**, decision D5), `SpecificForceAlignment`, `SpecificForceAlignment+I`, `PrivilegedFeedforwardTilt` done + evaluated. `LqrSloshController`/`AxisLqr` built but **shelved** (design-model mismatch → resonates). **Finding F4: against a rigid `Hold`, no analytic reactive tilt controller wins on any scenario — beating rigid needs anticipation/learning.** (F2 superseded.) Privileged MPC on the real actuator is future work. |
 | 10 | Eval harness: fixed scenarios, metrics, baseline comparison, GT logging | ✅ `Evaluator` + `ScenarioSet` (6 scenarios) + `AggregateResult` + deterministic text report. |
 | 11 | Playable human-drive scene | ✅ `FluidStabilizer.Sim`: `SimulationRunner` (real-time stepping), `HumanDriverInput` (keyboard + gamepad), `SimView`, `Hud`, `PlayControls` (live stabilizer switch, cameras, slow-mo), `Frames` (SI↔Unity), `SceneBuilder` editor script → `Assets/FluidStabilizer/Scenes/PlayScene.unity`. See `docs/human-drive.md`. Liquid is a proxy (pendulum ROM); real height-field viz waits for shallow water. |
-| 12 | RL path: Gymnasium socket adapter + PPO, asymmetric critic, frame-stack | ⬜ not started |
+| 12 | RL path: Gymnasium socket adapter + PPO, asymmetric critic, frame-stack | 🟡 C# side done + tested: `FluidStabilizer.Rl` (`ObservationEncoder` frame-stack, `PrivilegedEncoder` for the asymmetric critic, `RewardFunction` §11, `RlEnvironment` deterministic reset/step, `TrainingServer` length-prefixed binary TCP — loopback-tested bit-identical to the in-process env) + `RlServerLauncher` (`-executeMethod` host). Python side written (`python/`: socket client, `gymnasium.Env`, CleanRL-style asymmetric-critic PPO, `play.py`) but **not yet run** (needs `torch`). See `docs/rl.md`. Curriculum automation + parallel rollouts pending. |
 | 13 | Domain-randomization config (narrow) + per-episode param logging | 🟡 config structs exist with nominal values; the randomizer + logging pending |
 | 14 | Keep docs in sync | ongoing |
 
