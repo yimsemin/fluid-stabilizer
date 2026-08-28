@@ -13,7 +13,17 @@ namespace FluidStabilizer.Contracts
         /// it. Used by the analytic baselines, which are fundamentally "point the
         /// tank at the right tilt" (design-review §11 — angle-command option).
         /// </summary>
-        JointAngle = 1
+        JointAngle = 1,
+
+        /// <summary>
+        /// Mechanically lock both joints at 0 — the tank is rigidly fixed to the
+        /// vehicle, the slosh moment is reacted by the vehicle structure, not the
+        /// actuator. This is the true "no stabilizer" floor (decision D5): it does
+        /// not consume actuator torque and cannot saturate or sag. Distinct from a
+        /// zero-angle servo command, which a large slosh load can still drag off
+        /// target.
+        /// </summary>
+        Locked = 2
     }
 
     /// <summary>
@@ -33,11 +43,12 @@ namespace FluidStabilizer.Contracts
         public double PitchCommand;
         public double RollCommand;
 
+        /// <summary>Mechanically locked at zero — the "no stabilizer" floor (see <see cref="StabilizerCommandMode.Locked"/>).</summary>
         public static StabilizerCommand Hold(long sequence, double fromStamp) => new StabilizerCommand
         {
             Sequence = sequence,
             FromStampSeconds = fromStamp,
-            Mode = StabilizerCommandMode.JointRate,
+            Mode = StabilizerCommandMode.Locked,
             PitchCommand = 0.0,
             RollCommand = 0.0
         };

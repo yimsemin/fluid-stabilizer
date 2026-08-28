@@ -18,6 +18,10 @@ namespace FluidStabilizer.Contracts
         public double PitchRate;
         public double RollRate;
 
+        /// <summary>Actuator winding heat per axis [0,1]; peak torque derates toward continuous as it rises.</summary>
+        public double PitchThermalLoad;
+        public double RollThermalLoad;
+
         /// <summary>True first-mode slosh pendulum state, per axis.</summary>
         public double SloshPitchAngle;
         public double SloshPitchRate;

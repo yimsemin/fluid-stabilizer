@@ -4,6 +4,69 @@ Empirical results from the simulation as it is built. Newest first.
 
 ---
 
+## F4 — 2026-08-28 — A rigid (locked) Hold baseline is near-unbeatable by reactive tilt control
+
+**Supersedes F2.** After the F3 addendum (the "Hold" servo saturates and sags
+under aggressive slosh loads), the owner set two things:
+
+- **`Hold` = a mechanically *locked* joint** (decision D5): the tank is rigid to
+  the vehicle, the slosh moment is reacted by the vehicle structure, not the
+  actuator. New `StabilizerCommandMode.Locked`; it consumes no torque and cannot
+  saturate or sag. This is the true "no stabilizer" floor.
+- **Actuator resized for realism, under-actuation kept deliberate:**
+  `MaxTorqueNm` 650 → **900** (covers the ≈ 740 N·m quasi-static slosh moment at
+  the 0.45 g friction limit with margin, still under-powered for aggressive
+  dynamic tracking); `ContinuousTorqueNm` 280 → **420** and now *enforced* by an
+  I²t winding-heat model (`ThermalTimeConstantSeconds` = 15 s) — bursts to peak
+  are fine, sustained hard maneuvers derate the peak toward continuous.
+
+### Baseline re-evaluation — pendulum ROM, mean spill [L], 6 seeds
+
+| scenario | Hold (locked) | SFA | PID | PrivFF |
+|---|---|---|---|---|
+| HighwayCalm | **0** | 0 | 0 | 0 |
+| HighwayBrisk | **0** | 0 | 0 | 0 |
+| HighwayBriskLowFreeboard (0.27 m) | **0** | 0.30 | 0.26 | 0.28 |
+| ScriptedManeuver | **0** | 0 | 0 | 0 |
+| AggressiveRandom | **0** | 0 | 0 | 0 |
+| HighFillAggressive (0.22 m) | **9.8** | 42.6 | 56.5 | 97.6 |
+
+**With a rigid Hold, no analytic tilt controller beats it on any scenario.** On
+low-freeboard highway driving the reactive laws now *spill where Hold does not*
+(they add slosh energy by rotating the tank — F1's mechanism). In the one
+scenario that defeats even a rigid tank (`HighFillAggressive`), reactive tilt
+control spills 4–10× more and the actuator sits at 90–100 % torque-saturated —
+authority-limited, exactly as intended.
+
+F2's headline ("tilt beats Hold ~15× on brisk highway") was an artefact of the
+*sagging servo* Hold it compared against. Against a rigid Hold that advantage is
+gone.
+
+### What this means for the project
+
+The value proposition is now unambiguous: **rigid is a strong baseline, and
+beating it needs anticipation / learning, not reactive feedback.** The
+ideal-tilt diagnostic still shows head-room (perfect tank-tilt tracking → 0.40×
+wall wave, `IdealTiltTracking_…`), but no causal reactive law reaches it. This is
+the gap the RL policy (phase-1 item 12) and a privileged MPC exist to close.
+`PrivilegedFeedforward` (most aggressive tilting) remains the *worst* controller
+under stress — over-actuation is the enemy.
+
+Bracket-model discipline (F3) still stands. **Shallow-water re-run with the D5
+config confirms it** — locked Hold beats every reactive tilt controller on every
+scenario (`HighwayBriskLowFreeboard`: Hold 0.0004 L vs 15–20 L; `AggressiveRandom`:
+0.48 vs 7–50 L; `HighFillAggressive`: 56 vs 94–231 L). Shallow-water Hold does
+spill in the aggressive regime (a rigid tank still transmits the truck jerk to
+the liquid) — that residual is the real target for a learned/anticipatory policy.
+
+### Guards
+
+`EvaluatorTests.RigidHold_NotBeatenByReactiveTilt_OnLowFreeboardHighway`,
+`ReactiveTilt_LosesToRigidHold_UnderAggressiveHighFill`,
+`GimbalActuatorTests` (locked joint, thermal derate).
+
+---
+
 ## F3 — 2026-08-28 — Shallow-water reference model: raw run flipped F2; with wave-breaking it reconciles F1 + F2
 
 The deciding experiment promised in F1 (interpretation 1). `ShallowWaterSloshModel`
@@ -95,6 +158,13 @@ controllers. `GridConvergence_…` if the scheme changes.
 
 ### Addendum (2026-08-28) — shallow-water reaction ≈ 2× the ROM's → the Hold gimbal saturates
 
+> **Resolved by decision D5 / finding F4.** The owner's call: the actuator was
+> resized (`MaxTorqueNm` 650 → 900, `ContinuousTorqueNm` 280 → 420 now enforced
+> via an I²t thermal model) and, more importantly, `Hold` is now a *mechanically
+> locked* joint that does not use the actuator at all — so "Hold" can no longer
+> sag. The 2× reaction difference between the models is real and still matters
+> for the *active* controllers; it no longer muddies the Hold baseline.
+
 Found while rebuilding the scene visualisation (`SceneCapture`). Under the
 aggressive `ScriptedManeuverDriver` + `Hold`:
 
@@ -128,6 +198,11 @@ Consequences:
 ---
 
 ## F2 — 2026-08-28 — A realistic driver flips F1: tilt control works for highway driving
+
+> **Superseded by F4.** The "tilt beats Hold ~15×" result here compared against a
+> Hold whose servo *sagged* under slosh load. Against the rigid locked-joint Hold
+> (decision D5) that advantage disappears — reactive tilt control does not beat a
+> rigid tank on any scenario. Kept for the driver-design reasoning.
 
 Interpretation 3 of F1 (the synthetic driver was too broadband) largely holds.
 

@@ -5,6 +5,41 @@ reasoning. Newest first. These refine `design-review.md`; they do not replace it
 
 ---
 
+## D5 — 2026-08-28 — `Hold` is a locked joint; actuator resized, thermal limit enforced
+
+Two linked decisions after the F3 addendum (the `Hold` position servo saturates
+and sags ~30° under the true slosh moment during aggressive maneuvers).
+
+**1. `Hold` = a mechanically locked joint, not a servo commanding zero.**
+New `StabilizerCommandMode.Locked`: both joints are pinned at 0, the slosh moment
+is reacted by the vehicle structure (infinitely massive in v1, decision D1), the
+actuator consumes no torque and cannot saturate, sag, or heat. `HoldController`
+emits it. This is the true "no active stabilization" floor — every controller and
+the RL policy is scored against a genuinely rigid tank, not one that a big load
+can drag off target. Rationale: the earlier "angle-hold at zero" `Hold` conflated
+"no stabilizer" with "a weak stabilizer", and F2's headline result turned out to
+be an artefact of that (see F4).
+
+**2. Actuator resized for realism; under-actuation stays a deliberate challenge.**
+The owner's framing: limited authority is the point — Physical AI has to overcome
+a real-robot constraint. But the values must be *plausible*, and a stabilizer
+that cannot even hold the quasi-static envelope is not.
+- `MaxTorqueNm` 650 → **900**. The worst quasi-static slosh moment at the 0.45 g
+  friction-circle limit is ≈ 740 N·m (`2·M·z_cm·a_lat` for roll, `M·a·(h/2 +
+  L²/12h)` for fore-aft); 900 covers it with ~20 % margin but leaves nothing for
+  aggressive *dynamic* tilt tracking (which also needs `inertia·α`).
+- `ContinuousTorqueNm` 280 → **420**, and now **enforced**: an I²t winding-heat
+  model in `GimbalActuator` (state `Thermal ∈ [0,1]`, `ThermalTimeConstant­
+  Seconds` = 15 s). Torque above continuous heats the winding and the available
+  peak derates from 900 toward 420; below continuous it cools. Bursts are free,
+  sustained hard maneuvers are not — an explicit authority budget for the policy
+  to manage. `Thermal` is exposed on `GimbalAxisState` and `PrivilegedObservation`.
+
+Consequence (F4): with a rigid `Hold`, no analytic reactive tilt controller beats
+it on any scenario; beating rigid needs anticipation / learning.
+
+---
+
 ## D4 — 2026-08-28 — Shallow-water slosh model: scheme and coupling choices
 
 `ShallowWaterSloshModel` (phase-2 model A, design-review §6) is a 2-D
