@@ -94,7 +94,7 @@ namespace FluidStabilizer.Core.Sim
             // --- integrate speed (no reverse) ---
             double newSpeed = _speed + aLongDesired * dt;
             double aLong;
-            if (newSpeed < 0.0)
+            if (newSpeed < 0.0 && dt > 0.0)
             {
                 aLong = -_speed / dt; // decelerate exactly to rest this step
                 newSpeed = 0.0;
@@ -119,7 +119,7 @@ namespace FluidStabilizer.Core.Sim
             _pitch.Step(pitchTarget, dt);
             _roll.Step(rollTarget, dt);
 
-            double yawAccel = (yawRate - _lastYawRate) / dt;
+            double yawAccel = dt > 0.0 ? (yawRate - _lastYawRate) / dt : 0.0;
             _lastYawRate = yawRate;
             _lastLongAccel = aLong;
             _lastLatAccel = aLat;
