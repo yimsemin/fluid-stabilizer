@@ -196,5 +196,66 @@ namespace FluidStabilizer.Tests
             for (int i = 0; i < 200; i++) act.Step(cmd, 0, 0, dt);
             Assert.Greater(act.State.Pitch.Rate, 0.1);
         }
+
+        [Test]
+        public void LockedCommand_HoldsExactlyZero_UnderAnyLoad_NoTorqueOrHeat()
+        {
+            double dt = 1.0 / 600.0;
+            var act = new GimbalActuator(Cfg(), dt);
+            act.SetReflectedInertia(6.0, 5.0);
+            var locked = StabilizerCommand.Hold(0, 0.0); // Locked mode (decision D5)
+
+            for (int i = 0; i < 6000; i++) act.Step(locked, 5000.0, -4000.0, dt); // absurd slosh load
+
+            var s = act.State;
+            Assert.AreEqual(0.0, s.Pitch.Angle, 1e-12, "a locked joint must not move");
+            Assert.AreEqual(0.0, s.Roll.Angle, 1e-12);
+            Assert.AreEqual(0.0, s.Pitch.AppliedTorque, 1e-12, "a locked joint consumes no actuator torque");
+            Assert.IsFalse(s.Pitch.TorqueSaturated);
+            Assert.IsFalse(s.Roll.AtAngleLimit);
+            Assert.AreEqual(0.0, s.Pitch.ThermalLoad, 1e-12, "a locked joint does not heat");
+        }
+
+        [Test]
+        public void ThermalDerate_SustainedOverload_ReducesAvailablePeakTowardContinuous()
+        {
+            var cfg = Cfg();
+            double dt = 1.0 / 600.0;
+            var act = new GimbalActuator(cfg, dt);
+            var holdZero = StabilizerCommand.Angle(0, 0.0, 0.0, 0.0);
+
+            const double load = 700.0; // between continuous and peak
+            Assert.Greater(load, cfg.ContinuousTorqueNm);
+            Assert.Less(load, cfg.MaxTorqueNm);
+
+            double early = 0.0;
+            for (int i = 0; i < 600 * 60; i++) // ≫ the 15 s thermal time constant
+            {
+                act.Step(holdZero, load, 0.0, dt);
+                if (i == 300) early = Math.Abs(act.State.Pitch.AppliedTorque);
+            }
+            double late = Math.Abs(act.State.Pitch.AppliedTorque);
+
+            Assert.Greater(early, cfg.ContinuousTorqueNm, "early on it can exceed the continuous rating");
+            Assert.Greater(act.State.Pitch.ThermalLoad, 0.8, "sustained overload heats the winding");
+            Assert.Less(late, early, "available torque derates under sustained overload");
+            Assert.Less(late, cfg.ContinuousTorqueNm * 1.15, "it derates toward the continuous rating");
+        }
+
+        [Test]
+        public void ThermalLoad_Recovers_WhenLoadDropsBelowContinuous()
+        {
+            var cfg = Cfg();
+            double dt = 1.0 / 600.0;
+            var act = new GimbalActuator(cfg, dt);
+            var holdZero = StabilizerCommand.Angle(0, 0.0, 0.0, 0.0);
+
+            for (int i = 0; i < 600 * 20; i++) act.Step(holdZero, 800.0, 0.0, dt);
+            double hot = act.State.Pitch.ThermalLoad;
+            Assert.Greater(hot, 0.5);
+
+            for (int i = 0; i < 600 * 30; i++) act.Step(holdZero, 50.0, 0.0, dt);
+            Assert.Less(act.State.Pitch.ThermalLoad, hot * 0.5, "the winding cools below the continuous rating");
+        }
     }
 }

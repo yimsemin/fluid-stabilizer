@@ -46,13 +46,13 @@ namespace FluidStabilizer.Tests
         }
 
         [Test]
-        public void TiltControl_ClearlyBeatsHold_OnRealisticBriskDriving()
+        public void RigidHold_NotBeatenByReactiveTilt_OnLowFreeboardHighway()
         {
-            // Finding F1 follow-up (docs/findings.md): with a realistic
-            // band-limited highway driver, tilting the tank to track the felt
-            // specific force works — the analytic baselines spill far less than
-            // holding the tank rigid. (Under the aggressive/adversarial driver
-            // they still struggle — see the next test.)
+            // Finding F4 (docs/findings.md): with the locked-joint Hold baseline
+            // (decision D5) the rigid tank does not spill on brisk highway
+            // driving, and the reactive analytic tilt laws — which add slosh
+            // energy by rotating the tank — spill where Hold does not. F2's
+            // "tilt beats Hold 15x here" was an artefact of a sagging servo Hold.
             var scenario = ScenarioSet.Default().Where(s => s.Name == "HighwayBriskLowFreeboard").ToArray();
             var results = Evaluator.Run(scenario, Baselines(), Seeds);
 
@@ -60,27 +60,30 @@ namespace FluidStabilizer.Tests
             double pid = results.First(r => r.Controller == "PID").MeanOverflow;
             double sfa = results.First(r => r.Controller == "SpecificForceAlignment").MeanOverflow;
 
-            Assert.Greater(hold, 1e-3, "the scenario should actually challenge Hold");
-            Assert.Less(pid, hold * 0.35, "PID should spill far less than Hold on realistic driving");
-            Assert.Less(sfa, hold * 0.35, "specific-force alignment should spill far less than Hold");
+            // MeanOverflow is m³ (× 1000 = litres).
+            Assert.LessOrEqual(hold, 1e-4, "a rigidly locked tank should not spill on brisk highway driving");
+            Assert.Greater(pid, 5e-5, "reactive tilt control adds slosh and spills where rigid Hold does not");
+            Assert.Greater(sfa, 5e-5, "reactive tilt control adds slosh and spills where rigid Hold does not");
         }
 
         [Test]
-        public void NaiveTiltControl_StillExcitesSlosh_UnderAggressiveDriving()
+        public void ReactiveTilt_LosesToRigidHold_UnderAggressiveHighFill()
         {
-            // The remaining hard case (docs/findings.md F1): under sharp,
-            // broadband maneuvers the naive baselines still pump the slosh mode.
-            // This is the gap a learned/anticipatory policy must close, and a
-            // guard against the plant quietly becoming trivially controllable.
-            var scenario = ScenarioSet.Default().Where(s => s.Name == "AggressiveRandom").ToArray();
+            // Finding F4: in the hard regime the actuator is authority-limited
+            // (decision D5 — deliberate) and reactive tilt tracking saturates and
+            // pumps the slosh, spilling far more than a rigid tank. This is the
+            // gap a learned/anticipatory policy has to close.
+            var scenario = ScenarioSet.Default().Where(s => s.Name == "HighFillAggressive").ToArray();
             var results = Evaluator.Run(scenario, Baselines(), Seeds);
 
-            double holdSlosh = results.First(r => r.Controller == "Hold").MeanSloshEnergyIntegral;
-            double sfaSlosh = results.First(r => r.Controller == "SpecificForceAlignment").MeanSloshEnergyIntegral;
-            double pidSlosh = results.First(r => r.Controller == "PID").MeanSloshEnergyIntegral;
+            double hold = results.First(r => r.Controller == "Hold").MeanOverflow;
+            double sfa = results.First(r => r.Controller == "SpecificForceAlignment").MeanOverflow;
+            double pid = results.First(r => r.Controller == "PID").MeanOverflow;
 
-            Assert.Greater(sfaSlosh, holdSlosh, "SFA still excites slosh under aggressive driving");
-            Assert.Greater(pidSlosh, holdSlosh, "PID still excites slosh under aggressive driving");
+            // MeanOverflow is m³; Hold ≈ 0.010 m³ here, tilt controllers ≈ 0.04–0.10.
+            Assert.Greater(hold, 3e-3, "the scenario challenges even a rigid tank");
+            Assert.Greater(sfa, hold * 2.0, "reactive tilt control spills far more than holding rigid");
+            Assert.Greater(pid, hold * 2.0, "reactive tilt control spills far more than holding rigid");
         }
 
         [Test]

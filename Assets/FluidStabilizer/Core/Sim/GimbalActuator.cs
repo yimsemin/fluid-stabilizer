@@ -11,6 +11,7 @@ namespace FluidStabilizer.Core.Sim
         public double AngularAccel;     // rad/s²
         public double AppliedTorque;    // N·m at the joint output
         public double MotorCurrent;     // A (∝ applied torque)
+        public double ThermalLoad;      // [0,1] winding heat; peak torque is derated toward continuous as this rises
         public bool AtAngleLimit;
         public bool TorqueSaturated;
     }
@@ -43,6 +44,7 @@ namespace FluidStabilizer.Core.Sim
             public double LastAccelSmoothed;
             public double LastTorque;
             public double LastCurrent;
+            public double Thermal;       // [0,1] winding heat; 1 = fully derated to continuous
             public bool AtLimit;
             public bool Saturated;
             public DelayLine CommandDelay;
@@ -75,6 +77,7 @@ namespace FluidStabilizer.Core.Sim
             {
                 a.Angle = 0; a.Rate = 0; a.Setpoint = 0; a.Integral = 0; a.LastAccel = 0; a.LastTorque = 0;
                 a.LastAccelSmoothed = 0; a.LastCurrent = 0; a.AtLimit = false; a.Saturated = false;
+                a.Thermal = 0.0;
                 a.ReflectedInertia = 0.0;
                 a.CommandDelay.Reset(0.0);
                 a.AccelFilter.Reset(0.0);
@@ -109,9 +112,31 @@ namespace FluidStabilizer.Core.Sim
         public void Step(in StabilizerCommand command, double externalLoadTorquePitch,
             double externalLoadTorqueRoll, double dt)
         {
+            if (command.Mode == StabilizerCommandMode.Locked)
+            {
+                LockAxis(_pitch, dt);
+                LockAxis(_roll, dt);
+                return;
+            }
             bool angleMode = command.Mode == StabilizerCommandMode.JointAngle;
             StepAxis(_pitch, command.PitchCommand, angleMode, externalLoadTorquePitch, dt);
             StepAxis(_roll, command.RollCommand, angleMode, externalLoadTorqueRoll, dt);
+        }
+
+        /// <summary>
+        /// Joint mechanically locked at zero (decision D5): the tank is rigid to
+        /// the vehicle and the slosh moment is reacted by the vehicle structure,
+        /// not the actuator — so no torque is consumed, nothing saturates, and the
+        /// winding cools.
+        /// </summary>
+        private void LockAxis(AxisSim a, double dt)
+        {
+            a.Angle = 0.0; a.Rate = 0.0; a.Setpoint = 0.0; a.Integral = 0.0;
+            a.LastAccel = 0.0;
+            a.LastAccelSmoothed = a.AccelFilter.Step(0.0, _stepDt);
+            a.LastTorque = 0.0; a.LastCurrent = 0.0;
+            a.AtLimit = false; a.Saturated = false;
+            a.Thermal = Math.Max(0.0, a.Thermal - dt / _cfg.ThermalTimeConstantSeconds);
         }
 
         private void StepAxis(AxisSim a, double command, bool angleMode, double externalLoad, double dt)
@@ -155,8 +180,17 @@ namespace FluidStabilizer.Core.Sim
 
             double torqueDemand = inertia * accelDemand + friction - load;
 
-            double torqueApplied = MathD.ClampAbs(torqueDemand, _cfg.MaxTorqueNm);
-            a.Saturated = Math.Abs(torqueDemand) > _cfg.MaxTorqueNm + 1e-9;
+            // Thermal derate (I²t-style winding-heat model): the actuator can hit
+            // its peak torque briefly, but sustained torque above the continuous
+            // rating heats the winding and the available peak falls toward the
+            // continuous rating. Bursts are fine; holding a hard maneuver is not.
+            double availablePeak = MathD.Lerp(_cfg.MaxTorqueNm, _cfg.ContinuousTorqueNm, a.Thermal);
+            double torqueApplied = MathD.ClampAbs(torqueDemand, availablePeak);
+            a.Saturated = Math.Abs(torqueDemand) > availablePeak + 1e-9;
+
+            double span = Math.Max(1.0, _cfg.MaxTorqueNm - _cfg.ContinuousTorqueNm);
+            double heatRate = (Math.Abs(torqueApplied) - _cfg.ContinuousTorqueNm) / span; // + heats, − cools
+            a.Thermal = MathD.Clamp(a.Thermal + dt / _cfg.ThermalTimeConstantSeconds * heatRate, 0.0, 1.0);
 
             double accel = (torqueApplied - friction + load) / inertia;
 
@@ -193,6 +227,7 @@ namespace FluidStabilizer.Core.Sim
             AngularAccel = a.LastAccelSmoothed,
             AppliedTorque = a.LastTorque,
             MotorCurrent = a.LastCurrent,
+            ThermalLoad = a.Thermal,
             AtAngleLimit = a.AtLimit,
             TorqueSaturated = a.Saturated
         };

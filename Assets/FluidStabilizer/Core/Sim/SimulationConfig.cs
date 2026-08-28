@@ -91,8 +91,26 @@ namespace FluidStabilizer.Core.Sim
 
         public double MaxAngleRad = 30.0 * MathD.Deg2Rad;
         public double MaxRateRadPerSec = 3.5;      // per axis
-        public double MaxTorqueNm = 650.0;         // peak, per axis
-        public double ContinuousTorqueNm = 280.0;  // thermal limit, per axis
+
+        /// <summary>
+        /// Peak (short-term) output torque per axis. 900 N·m covers the
+        /// quasi-static slosh moment at the 0.45 g friction-circle limit
+        /// (≈ 740 N·m) with modest margin, but leaves the actuator clearly
+        /// under-powered for aggressive dynamic tilt tracking — the deliberate
+        /// authority-limited challenge (decision D5).
+        /// </summary>
+        public double MaxTorqueNm = 900.0;
+
+        /// <summary>
+        /// Continuous (thermally sustainable) torque per axis. Above this the
+        /// winding heats and the available peak derates toward this value
+        /// (I²t model in <see cref="GimbalActuator"/>); bursts are fine,
+        /// sustained hard maneuvers are not.
+        /// </summary>
+        public double ContinuousTorqueNm = 420.0;
+
+        /// <summary>Winding thermal time constant (s) for the peak-torque derate.</summary>
+        public double ThermalTimeConstantSeconds = 15.0;
 
         /// <summary>Closed-loop actuator bandwidth (Hz) and damping for the position/rate servo.</summary>
         public double BandwidthHz = 4.0;

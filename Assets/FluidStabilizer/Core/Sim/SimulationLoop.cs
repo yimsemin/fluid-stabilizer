@@ -249,6 +249,8 @@ namespace FluidStabilizer.Core.Sim
                 RollAngle = g.Roll.Angle,
                 PitchRate = g.Pitch.Rate,
                 RollRate = g.Roll.Rate,
+                PitchThermalLoad = g.Pitch.ThermalLoad,
+                RollThermalLoad = g.Roll.ThermalLoad,
                 SloshPitchAngle = mode.Length > 0 ? mode[0] : 0.0,
                 SloshPitchRate = mode.Length > 1 ? mode[1] : 0.0,
                 SloshRollAngle = mode.Length > 2 ? mode[2] : 0.0,
