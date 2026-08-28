@@ -45,6 +45,11 @@ namespace FluidStabilizer.Sim
 
             if (kb.rKey.wasPressedThisFrame) Runner.ResetEpisode();
 
+            if (kb.mKey.wasPressedThisFrame) // cycle the slosh model (pendulum ROM / shallow water)
+                Runner.SetSloshModel(Runner.ActiveSloshModel == SloshModelChoice.PendulumRom
+                    ? SloshModelChoice.ShallowWater
+                    : SloshModelChoice.PendulumRom);
+
             if (kb.tKey.wasPressedThisFrame)
             {
                 _slowMo = !_slowMo;

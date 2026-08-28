@@ -64,6 +64,9 @@ namespace FluidStabilizer.Core.Sim
         public IClock Clock => _clock;
         public SimulationConfig Config => _cfg;
         public IController Controller => _controller;
+
+        /// <summary>The slosh model this loop is integrating (read-only; for the view).</summary>
+        public ISloshModel SloshModel => _slosh;
         public long PhysicsStep => _clock.StepCount;
         public double SimTime => _clock.SimTimeSeconds;
         public bool EpisodeComplete =>

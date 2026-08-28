@@ -54,6 +54,33 @@ namespace FluidStabilizer.Tests
         }
 
         [Test]
+        public void Runner_ShallowWaterModel_StepsAndSwitchesLive()
+        {
+            var go = new GameObject("runner-test-3");
+            try
+            {
+                var runner = go.AddComponent<SimulationRunner>();
+                runner.SloshModel = SloshModelChoice.ShallowWater;
+                runner.BuildLoop();
+                Assert.AreEqual(SloshModelChoice.ShallowWater, runner.ActiveSloshModel);
+                Assert.AreEqual("Shallow water (2-D Saint-Venant)", runner.Loop.SloshModel.Name);
+
+                for (int i = 0; i < 120; i++) runner.Advance(1.0 / 60.0);
+                Assert.Greater(runner.Loop.SimTime, 1.9);
+                Assert.IsFalse(double.IsNaN(runner.Loop.LatestGroundTruth.SloshKineticEnergy));
+
+                runner.SetSloshModel(SloshModelChoice.PendulumRom);
+                Assert.AreEqual(SloshModelChoice.PendulumRom, runner.ActiveSloshModel);
+                for (int i = 0; i < 60; i++) runner.Advance(1.0 / 60.0);
+                Assert.Greater(runner.Loop.SimTime, 0.9);
+            }
+            finally
+            {
+                Object.DestroyImmediate(go);
+            }
+        }
+
+        [Test]
         public void Frames_RoundTripsAndFlipsHandedness()
         {
             var v = new Double3(1, 2, 3); // forward, left, up

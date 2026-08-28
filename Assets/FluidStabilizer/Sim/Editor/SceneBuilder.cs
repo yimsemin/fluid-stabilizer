@@ -88,6 +88,17 @@ namespace FluidStabilizer.SimEditor
                 SolidMaterial("LiquidSurface", new Color(0.35f, 0.7f, 1f));
             Object.DestroyImmediate(surface.GetComponent<BoxCollider>());
 
+            // shallow-water height-field surface (SimView builds/updates the mesh)
+            var liquidMeshGo = new GameObject("LiquidMesh", typeof(MeshFilter), typeof(MeshRenderer));
+            liquidMeshGo.transform.SetParent(tank.transform, false);
+            var waterMat = TransparentMaterial("Water", new Color(0.15f, 0.5f, 0.9f, 0.72f));
+            waterMat.SetFloat("_Glossiness", 0.9f);
+            waterMat.SetFloat("_Metallic", 0.1f);
+            var liquidMeshMr = liquidMeshGo.GetComponent<MeshRenderer>();
+            liquidMeshMr.sharedMaterial = waterMat;
+            liquidMeshMr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            liquidMeshGo.SetActive(false); // enabled by SimView only when shallow water is active
+
             // --- controllers ---
             var simGo = new GameObject("Simulation");
             var runner = simGo.AddComponent<SimulationRunner>();
@@ -101,6 +112,7 @@ namespace FluidStabilizer.SimEditor
             view.TankBody = tank.transform;
             view.LiquidBulk = bulk.transform;
             view.LiquidSurface = surface.transform;
+            view.LiquidMesh = liquidMeshGo.GetComponent<MeshFilter>();
 
             hud.Runner = runner;
 

@@ -15,6 +15,12 @@ namespace FluidStabilizer.Sim
         PrivilegedFeedforward,  // cheats (true slosh-free tilt) — for comparison only
     }
 
+    public enum SloshModelChoice
+    {
+        PendulumRom,    // 1 pendulum / axis — the cheap default (PendulumSloshModel)
+        ShallowWater,   // 2-D Saint-Venant height field (ShallowWaterSloshModel)
+    }
+
     /// <summary>
     /// Drives a <see cref="SimulationLoop"/> in real time for interactive play.
     /// The loop and every model it owns are engine-free; this MonoBehaviour only
@@ -25,6 +31,7 @@ namespace FluidStabilizer.Sim
         [Header("Setup")]
         public double FillRatio = 0.55;
         public StabilizerChoice Stabilizer = StabilizerChoice.Off;
+        public SloshModelChoice SloshModel = SloshModelChoice.PendulumRom;
         [Range(0.05f, 1f)] public float TimeScale = 1f;
         public ulong Seed = 1;
 
@@ -37,6 +44,7 @@ namespace FluidStabilizer.Sim
         public SimulationLoop Loop { get; private set; }
         public HumanDriverInput Driver { get; private set; }
         public StabilizerChoice ActiveStabilizer { get; private set; }
+        public SloshModelChoice ActiveSloshModel { get; private set; }
 
         private double _accumulator;
         private const int MaxStepsPerFrame = 40;
@@ -49,9 +57,10 @@ namespace FluidStabilizer.Sim
             cfg.Slosh.FillRatio = FillRatio;
 
             Driver = new HumanDriverInput();
-            Loop = new SimulationLoop(cfg, MakeController(Stabilizer), Driver, new PendulumSloshModel());
+            Loop = new SimulationLoop(cfg, MakeController(Stabilizer), Driver, MakeSlosh(SloshModel));
             Loop.BeginEpisode(Seed);
             ActiveStabilizer = Stabilizer;
+            ActiveSloshModel = SloshModel;
             _accumulator = 0;
         }
 
@@ -60,6 +69,16 @@ namespace FluidStabilizer.Sim
             Loop.SetController(MakeController(ActiveStabilizer));
             Loop.BeginEpisode(Seed);
             _accumulator = 0;
+        }
+
+        /// <summary>
+        /// Swap the slosh model live. The loop takes its model at construction,
+        /// so this rebuilds the loop and restarts the episode.
+        /// </summary>
+        public void SetSloshModel(SloshModelChoice choice)
+        {
+            SloshModel = choice;
+            BuildLoop();
         }
 
         public void SetStabilizer(StabilizerChoice choice)
@@ -75,6 +94,12 @@ namespace FluidStabilizer.Sim
             StabilizerChoice.SpecificForceAlignmentPlusI => new PidController(),
             StabilizerChoice.PrivilegedFeedforward => new PrivilegedFullStateController(),
             _ => new HoldController(),
+        };
+
+        private static ISloshModel MakeSlosh(SloshModelChoice c) => c switch
+        {
+            SloshModelChoice.ShallowWater => new ShallowWaterSloshModel(),
+            _ => new PendulumSloshModel(),
         };
 
         private void Update() => Advance(Time.deltaTime);
