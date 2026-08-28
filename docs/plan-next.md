@@ -10,9 +10,17 @@ changes. Truck feel: **realistic** (heavy, long braking, lazy steering).
 Input: **keyboard + gamepad**.
 
 **Status 2026-08-28:** B done (see finding F2), C done (see `docs/human-drive.md`).
-**A: solver landed** — `ShallowWaterSloshModel` + 13 tests, decision D4. Remaining
-for A: the validation experiment (re-run `PlantControllabilityTests` + baseline
-eval against this model, update F1) and the height-field mesh viz + scene toggle.
+**A done** — `ShallowWaterSloshModel` + 13 tests (decision D4), validation
+experiment run, height-field mesh viz + `M` scene toggle.
+
+**⚠ The validation experiment produced finding F3 and a pending decision.**
+The shallow-water model contradicts F2: no analytic tilt controller beats
+holding the tank rigid, on any highway scenario. Result is grid-converged and
+CFL-stable. Before phase-1 items 12/13 the owner needs to pick a direction —
+see `docs/findings.md` F3 "Interpretations (the decision)":
+1. believe shallow water → pivot to anticipatory/learned control + re-fit the ROM;
+2. add wave-breaking dissipation to the shallow-water model and re-run;
+3. keep both as bracket models, validate every result under both.
 
 ### Liquid visualization (owner asked)
 
