@@ -2,12 +2,14 @@
 
 Tracks the phase-1 scope from `design-review.md` §20. Design approved 2026-08-27.
 
-> **Resume here (next session):** step **A** solver is in (`ShallowWaterSloshModel`,
-> 13 tests). Next: the validation experiment — re-run `PlantControllabilityTests`
-> and the baseline evaluation against this model and update `docs/findings.md`
-> (F1's aggressive-regime verdict), then the height-field mesh viz + scene toggle,
-> then phase-1 items 12 (RL socket adapter) and 13 (domain randomization).
-> EditMode: 60 pass / 3 skipped.
+> **Resume here (next session):** step **A** is done — `ShallowWaterSloshModel`
+> + 13 tests, validation experiment run, height-field mesh viz + `M` scene
+> toggle. **The validation produced finding F3 (project-shaping): the
+> shallow-water model says tank-tilt control never beats holding rigid, even on
+> highways — it contradicts F2. A direction decision is pending** (see
+> `docs/findings.md` F3 end + `docs/plan-next.md`). Do not start phase-1 items 12
+> (RL adapter) / 13 (domain randomization) until that is settled — the RL
+> training model depends on it. EditMode: 64 pass / 3 skipped.
 
 | # | Item | Status |
 |---|---|---|
@@ -15,7 +17,7 @@ Tracks the phase-1 scope from `design-review.md` §20. Design approved 2026-08-2
 | 2 | `SimulationCore`: fixed-step scheduler, `IClock`, seeded RNG | ✅ done — `ManualClock`, `DeterministicRandom` (PCG32), `SimulationLoop` (600/200/100 Hz cadence, bundle latency, GT recording), engine-free |
 | 3 | Vehicle: sprung mass + friction-circle bicycle model + road; `IDriverInput` | 🟡 `VehicleModel` done. Drivers: `ConstantDriver`, `ScriptedManeuverDriver`, `RandomManeuverDriver` (aggressive), `HighwayDriver` (realistic band-limited — see finding F2). Road grade/bank/bumps hook present but unused; **human input (next) + trace record/replay** not started. |
 | 4 | Tank on 2-DOF actuated gimbal, pivot at CoM | ✅ `TankKinematics` + two-way slosh↔joint coupling (decision D3: reflected inertia + lagged load, pivot not translated by joint motion) |
-| 5 | `ISloshModel` + pendulum ROM + continuous overflow volume | ✅ `PendulumSloshModel`: 1 planar pendulum/axis + fixed mass, rectangular-tank first-mode ωₙ & participating mass, rotating-frame EOM, full liquid reaction, weir-style continuous overflow that drains the fill. Verified: natural frequency matches theory ±15%, damping decays, response direction correct, spills under resonant shake / not when calm. Surface-slope gain still needs calibration. **Phase-2 model A landed:** `ShallowWaterSloshModel` — 2-D Saint-Venant, ~48×28 grid, Rusanov FV, reflective walls + weir overflow, deterministic CFL sub-stepping, quasi-steady reaction + shared reflected-inertia estimate (decision D4). 13 tests: lake-at-rest exact, ring-down frequency vs theory ±15%, mass+spill conservation, low-amplitude agreement with the pendulum ROM, determinism, 40 s no-blow-up. Multi-mode still deferred. |
+| 5 | `ISloshModel` + pendulum ROM + continuous overflow volume | ✅ `PendulumSloshModel`: 1 planar pendulum/axis + fixed mass, rectangular-tank first-mode ωₙ & participating mass, rotating-frame EOM, full liquid reaction, weir-style continuous overflow that drains the fill. Verified: natural frequency matches theory ±15%, damping decays, response direction correct, spills under resonant shake / not when calm. Surface-slope gain still needs calibration. **Phase-2 model A landed:** `ShallowWaterSloshModel` — 2-D Saint-Venant, ~48×28 grid, Rusanov FV, reflective walls + weir overflow, deterministic CFL sub-stepping, quasi-steady reaction + shared reflected-inertia estimate (decision D4). 13 tests: lake-at-rest exact, ring-down frequency vs theory ±15%, mass+spill conservation, low-amplitude agreement with the pendulum ROM, determinism, 40 s no-blow-up. Grid-converged + CFL-stable across all scenarios (`SolverHealth`/`GridConvergence`). **→ finding F3** (tilt control never beats Hold under this model; decision pending). Multi-mode still deferred. |
 | 6 | Actuator model per axis | 🟡 `GimbalActuator`: transport delay, **PD+I position servo** (rate cmd → setpoint), peak-torque saturation, Coulomb+viscous friction, rate + travel limits with anti-windup, reflected-inertia input, external-load clamp, current estimate. Backlash present but off by default; motor+gearbox detail + continuous-torque thermal model pending |
 | 7 | Sensor layer + DTOs + noise/bias/delay/rate | 🟡 `SensorSuite`: vehicle+tank IMU (specific force, no gravity split), encoders (quantised), motors, 4 load cells, optional level/CAN; per-sample noise + per-episode bias; bundle latency in the loop. Load-cell slosh redistribution + bias random-walk/misalignment pending |
 | 8 | `ISensorBus` / `IActuatorBus` + in-process impl | 🟡 `IController` seam + DTOs carry the contract; explicit bus deferred |

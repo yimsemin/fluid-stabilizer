@@ -68,6 +68,14 @@ namespace FluidStabilizer.Core.Sim.SloshModels
         public double ReflectedInertiaPitch { get; private set; }
         public double ReflectedInertiaRoll { get; private set; }
 
+        // ---- solver health counters (diagnostics; reset in Reset) ----
+        /// <summary>Largest sub-step count used in any single physics step so far.</summary>
+        public int MaxSubStepsUsed { get; private set; }
+        /// <summary>Physics steps whose CFL estimate wanted more than <c>MaxSub</c> sub-steps.</summary>
+        public long SubStepCapHits { get; private set; }
+        /// <summary>Cells clamped to the |u| ≤ VMax ceiling (should stay 0 in a healthy run).</summary>
+        public long VelocityClampHits { get; private set; }
+
         private const double HMin = 1e-6;   // never let a cell go negative
         private const double HDry = 1e-4;   // below this a cell carries no momentum
         private const double VMax = 8.0;    // hard velocity clamp (anti-NaN, see D3)
@@ -124,6 +132,9 @@ namespace FluidStabilizer.Core.Sim.SloshModels
             _thx = _thxDot = _thy = _thyDot = _thxPrev = _thyPrev = 0.0;
             _com = new Double3(0, 0, 0.5 * _h0);
             _ke = 0.0;
+            MaxSubStepsUsed = 0;
+            SubStepCapHits = 0;
+            VelocityClampHits = 0;
 
             // Reflected inertia — the analytic equivalent-mechanical estimate,
             // replicated from PendulumSloshModel so the actuator loop sees the
@@ -166,8 +177,10 @@ namespace FluidStabilizer.Core.Sim.SloshModels
                 double s = (Math.Abs(u) + c) / _dx + (Math.Abs(v) + c) / _dy;
                 if (s > smax) smax = s;
             }
-            int nSub = smax > 0 ? (int)Math.Ceiling(1.5 * dtp * smax / Cfl) : 1;
-            nSub = Math.Max(1, Math.Min(MaxSub, nSub));
+            int wantSub = smax > 0 ? (int)Math.Ceiling(1.5 * dtp * smax / Cfl) : 1;
+            int nSub = Math.Max(1, Math.Min(MaxSub, wantSub));
+            if (wantSub > MaxSub) SubStepCapHits++;
+            if (nSub > MaxSubStepsUsed) MaxSubStepsUsed = nSub;
             double dt = dtp / nSub;
 
             double spill = 0.0;
@@ -346,8 +359,10 @@ namespace FluidStabilizer.Core.Sim.SloshModels
                     else
                     {
                         double uu = hu / h, vv = hv / h;
-                        if (uu > VMax) hu = VMax * h; else if (uu < -VMax) hu = -VMax * h;
-                        if (vv > VMax) hv = VMax * h; else if (vv < -VMax) hv = -VMax * h;
+                        if (uu > VMax) { hu = VMax * h; VelocityClampHits++; }
+                        else if (uu < -VMax) { hu = -VMax * h; VelocityClampHits++; }
+                        if (vv > VMax) { hv = VMax * h; VelocityClampHits++; }
+                        else if (vv < -VMax) { hv = -VMax * h; VelocityClampHits++; }
                     }
 
                     // weir overflow once the surface tops the rim at a wall cell
