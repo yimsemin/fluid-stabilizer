@@ -18,6 +18,7 @@ Re-run the menu item any time the scene looks wrong or you changed `SceneBuilder
 | **A / D**  or  left **stick** | steer |
 | **Space** | stabilizer **on / off** (feel the difference) |
 | **0 / 1 / 2 / 3** | pick stabilizer: 0 = off, 1 = specific-force align, 2 = + integral, 3 = privileged feed-forward (cheats — comparison only) |
+| **M** | slosh model: pendulum ROM ⇄ shallow water (restarts the run) |
 | **R** | reset the run |
 | **T** | slow-mo (0.25×) |
 | **Tab** | camera: chase → side → top |
@@ -25,8 +26,11 @@ Re-run the menu item any time the scene looks wrong or you changed `SceneBuilder
 ## What you're looking at
 
 - The blue block is the truck; the translucent box on it is the open tank; the
-  blue volume inside is the liquid, with a brighter tilting surface showing the
-  first sloshing mode.
+  blue volume inside is the liquid. With the **pendulum ROM** (default) it is a
+  bulk block plus a brighter tilting surface quad — a proxy for the first
+  sloshing mode. Press **M** for the **shallow-water** model: the surface
+  becomes a deforming mesh driven by the 2-D solver's actual height field —
+  travelling waves that climb the walls and slop over the rim.
 - HUD: speed, longitudinal / lateral g, **min freeboard** (turns red near 0),
   litres spilled (flashes on a spill), slosh energy, and which stabilizer is on.
 
@@ -41,9 +45,10 @@ Re-run the menu item any time the scene looks wrong or you changed `SceneBuilder
 
 ## Notes / current limitations
 
-- The slosh is the reduced-order pendulum model — the surface is a proxy, not a
-  real fluid mesh. The shallow-water model (next) will render an actual height
-  field.
+- Two slosh models are available (**M**): the cheap pendulum ROM (proxy
+  surface) and the 2-D shallow-water solver (real height-field mesh). Neither is
+  a particle/SPH fluid — no foam or splashes (out of scope: determinism + RL
+  step budget).
 - Vehicle is a reduced sprung-mass model on flat ground (no road bumps/hills
   yet). Feel is "laden truck": heavy, long braking, lazy steering.
 - Stabilizer option 3 uses information a real sensor could not give — it is only

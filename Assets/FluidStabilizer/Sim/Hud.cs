@@ -56,11 +56,12 @@ namespace FluidStabilizer.Sim
 
             GUILayout.Label($"stabilizer: {Runner.ActiveStabilizer}" +
                             (Runner.TimeScale < 1f ? "   [slow-mo]" : ""), _label);
+            GUILayout.Label($"slosh model: {loop.SloshModel.Name}", _label);
             GUILayout.EndArea();
 
-            GUILayout.BeginArea(new Rect(16, Screen.height - 92, 720, 88));
+            GUILayout.BeginArea(new Rect(16, Screen.height - 92, 760, 88));
             GUILayout.Label("W/S or triggers: throttle/brake   A/D or stick: steer", _label);
-            GUILayout.Label("Space: stabilizer on/off   0-3: pick stabilizer   R: reset   T: slow-mo   Tab: camera", _label);
+            GUILayout.Label("Space: stabilizer on/off   0-3: pick stabilizer   M: slosh model   R: reset   T: slow-mo   Tab: camera", _label);
             GUILayout.EndArea();
         }
 
