@@ -31,6 +31,11 @@ namespace FluidStabilizer.Sim
         public Transform TankBody;    // child of TankPivot, carries the gimbal rotation
         public MeshFilter LiquidMesh; // child of TankBody — the water body
 
+        [Header("Presentation")]
+        [Tooltip("Cosmetic upward offset of the tank so the surface tilt and any " +
+                 "overflow are clearly visible above the truck body. Physics is unaffected.")]
+        public float TankVisualLift = 0.35f;
+
         // pendulum-ROM proxy surface resolution (a tilted plane needs little)
         private const int ProxyNx = 24;
         private const int ProxyNy = 14;
@@ -40,6 +45,11 @@ namespace FluidStabilizer.Sim
         private double _lx, _ly, _tankH, _restLevel;
         private Vector3[] _verts;   // [0, n) top, [n, 2n) floor
         private Mesh _mesh;
+
+        private Renderer _frame;
+        private Color _frameBase;
+        private double _lastOverflow;
+        private float _spillFlash;
 
         private void LateUpdate() => RenderTick();
 
@@ -67,6 +77,19 @@ namespace FluidStabilizer.Sim
 
             if (loop.SloshModel is ShallowWaterSloshModel sw) UpdateFromShallowWater(sw);
             else UpdateFromPendulum(loop);
+
+            UpdateSpillFlash(loop);
+        }
+
+        private void UpdateSpillFlash(SimulationLoop loop)
+        {
+            if (_frame == null) return;
+            double spill = loop.LatestGroundTruth.CumulativeOverflowVolume;
+            if (spill > _lastOverflow + 1e-9) _spillFlash = 1f;
+            _lastOverflow = spill;
+            float dt = Time.deltaTime > 0f ? Time.deltaTime : 1f / 60f;
+            _spillFlash = Mathf.Max(0f, _spillFlash - dt * 1.5f);
+            _frame.material.color = Color.Lerp(_frameBase, new Color(1f, 0.25f, 0.15f), _spillFlash);
         }
 
         // ---- height sources ----
@@ -180,12 +203,17 @@ namespace FluidStabilizer.Sim
 
         private void ApplyStaticGeometry(SimulationConfig cfg)
         {
-            TankPivot.localPosition = Frames.ToUnity(cfg.Gimbal.PivotInVehicle);
+            TankPivot.localPosition =
+                Frames.ToUnity(cfg.Gimbal.PivotInVehicle) + Vector3.up * TankVisualLift;
 
             var shell = TankBody.Find("Shell");
             if (shell != null)
+            {
                 shell.localScale = new Vector3(
                     (float)cfg.Slosh.TankWidthY, (float)cfg.Slosh.TankHeightZ, (float)cfg.Slosh.TankLengthX);
+                _frame = shell.GetComponent<Renderer>();
+                if (_frame != null) _frameBase = _frame.sharedMaterial.color;
+            }
 
             _rigged = true;
         }

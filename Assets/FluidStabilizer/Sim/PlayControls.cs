@@ -76,16 +76,16 @@ namespace FluidStabilizer.Sim
             switch (_cam)
             {
                 case CamMode.Side:
-                    targetPos = t.position + t.right * -8f + Vector3.up * 3f;
-                    targetRot = Quaternion.LookRotation(t.position + Vector3.up * 1.5f - targetPos);
+                    targetPos = t.position + t.right * -6f + Vector3.up * 3.2f;
+                    targetRot = Quaternion.LookRotation(t.position + Vector3.up * 2.4f - targetPos);
                     break;
                 case CamMode.Top:
-                    targetPos = t.position + Vector3.up * 16f + t.forward * 2f;
+                    targetPos = t.position + Vector3.up * 14f + t.forward * 2.6f;
                     targetRot = Quaternion.LookRotation(Vector3.down, t.forward);
                     break;
                 default: // Chase
-                    targetPos = t.position + t.forward * -9f + Vector3.up * 4.5f;
-                    targetRot = Quaternion.LookRotation(t.position + Vector3.up * 1.5f - targetPos);
+                    targetPos = t.position + t.forward * -8f + Vector3.up * 4.8f;
+                    targetRot = Quaternion.LookRotation(t.position + Vector3.up * 2.4f - targetPos);
                     break;
             }
 

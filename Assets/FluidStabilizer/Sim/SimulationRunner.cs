@@ -41,6 +41,9 @@ namespace FluidStabilizer.Sim
         [SerializeField] private double _minFreeboard;
         [SerializeField] private double _spillLitres;
 
+        /// <summary>Tooling/test hook: drive with this instead of keyboard/gamepad. Set before BuildLoop.</summary>
+        public IDriverInput DriverOverride;
+
         public SimulationLoop Loop { get; private set; }
         public HumanDriverInput Driver { get; private set; }
         public StabilizerChoice ActiveStabilizer { get; private set; }
@@ -57,7 +60,8 @@ namespace FluidStabilizer.Sim
             cfg.Slosh.FillRatio = FillRatio;
 
             Driver = new HumanDriverInput();
-            Loop = new SimulationLoop(cfg, MakeController(Stabilizer), Driver, MakeSlosh(SloshModel));
+            Loop = new SimulationLoop(cfg, MakeController(Stabilizer),
+                DriverOverride ?? Driver, MakeSlosh(SloshModel));
             Loop.BeginEpisode(Seed);
             ActiveStabilizer = Stabilizer;
             ActiveSloshModel = SloshModel;
