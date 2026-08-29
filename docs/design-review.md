@@ -1,720 +1,640 @@
-# Design review — fluid stabilizer
+# 설계 리뷰 — fluid stabilizer
 
-Status: **draft for owner decision.** No implementation has started based on this.
+이 문서는 프로젝트를 비판적으로 검토하고, 아키텍처를 권장하며, 프로젝트를
+가라앉힐 가능성이 가장 큰 실패 모드를 짚는다. **설계 결정의 근거 출처.**
+전체 목적은 [project-goals.md](project-goals.md) 참고.
 
-This document critically reviews the project brief, recommends an architecture,
-and calls out the failure modes most likely to sink the project. Read
-`project-brief.md` first.
-
----
-
-## 0. Executive summary
-
-The idea is a **legitimate Physical AI problem**, but only if the plant is
-deliberately tuned into the regime where reactive rule-based control fails. Left
-naive, a hand-written "keep the liquid surface perpendicular to the felt
-acceleration" controller will solve most of it, and RL will have little to prove.
-
-The main recommendations:
-
-1. **Do not use a particle fluid (SPH/FLIP) or PhysX joint pendulums for the
-   slosh model.** Use a custom-integrated **equivalent mechanical model** (one
-   pendulum per axis, analytically integrated), behind an interface so a
-   shallow-water model can replace it later. Reasons: determinism, speed,
-   calibration, RL step budget.
-2. **Do not adopt Unity ML-Agents as the backbone.** Keep a clean
-   sensor/actuator message boundary; make the trainer swappable. ML-Agents, if
-   used at all, sits behind an adapter.
-3. **Build the baseline controllers first** (specific-force alignment, tuned
-   PID, and a privileged full-state MPC/LQR). They define the floor and ceiling.
-   If RL cannot get meaningfully above the PID floor, the task or the sim is
-   wrong — find that out in week 2, not month 6.
-4. **Use residual RL**: the policy outputs a correction on top of the analytic
-   baseline. Guarantees a sane floor and focuses learning on the hard residual
-   (slosh state, actuator delay/limits, plant variation).
-5. **Model latency, discrete-time control, sensor noise/bias, and actuator
-   non-idealities from day one.** These are the sim-to-real killers and they are
-   cheap to include.
-6. **Asymmetric actor-critic**: critic sees ground truth, actor sees only
-   sensors. Enforced by the interface — the actor literally cannot call
-   ground-truth.
-7. **Spend fidelity on the actuator, not the vehicle.** The AI controls the
-   actuator; it only needs *believable bed motion* from the vehicle.
+> 원래 2026-08-27 승인 시점의 영어 리뷰를 2026-08-29 한글화. 이후 실제 구현에서
+> 갱신된 결정은 [decisions.md](decisions.md) (D1~D6) 와 [findings.md](findings.md)
+> (F1~F5) 에 있고, 여기서는 원래 판단의 논리를 보존한다.
 
 ---
 
-## 1. Is this an appropriate Physical AI learning problem?
+## 0. 요약
 
-**Yes, conditionally.** It has the ingredients that make a control problem
-RL-worthy:
+아이디어는 **정당한 Physical AI 문제**다. 단, 플랜트가 반응형 규칙기반 제어가
+실패하는 조건으로 의도적으로 튜닝됐을 때만. 순진하게 두면, 손으로 쓴 "액체
+표면을 느낀 가속에 수직으로 유지" 컨트롤러가 대부분을 풀고 RL 은 증명할 게
+별로 없다.
 
-- **Genuine partial observability.** Liquid CoM, slosh mode amplitudes, and the
-  gravity/acceleration split on a tilting vehicle are not directly measurable.
-- **Non-trivial temporal dynamics.** Sloshing is a lightly damped oscillator;
-  ring-down outlasts the maneuver; the control action shapes future state.
-- **Back-coupling.** Moving liquid changes tank CoM and the torque the actuator
-  feels — the plant is state-dependent.
-- **Non-ideal actuator.** Rate/torque limits + transport delay + backlash mean
-  you cannot purely react; you must anticipate.
-- **Unpredictable exogenous disturbance** (the human driver).
-- **Plant uncertainty** (fill level, liquid properties, actuator wear) that
-  rewards an adaptive policy over fixed gains.
+주요 권장:
 
-**The condition:** every one of those must be strong enough to matter. If the
-actuator is fast, the tank rigid, the freeboard generous, and the slosh heavily
-damped, the problem collapses to "point the tank at the felt gravity vector" and
-a first-year controls exercise beats RL. See §2 and §12.
-
-**Framing to keep honest:** RL's realistic contribution here is *adaptive
-disturbance rejection and slosh-state inference*, not "discovering control from
-nothing." That is still a real Physical AI result. Don't oversell it as more.
+1. **슬로시 모델에 입자 유체(SPH/FLIP)나 PhysX 관절 진자를 쓰지 마라.**
+   커스텀 적분 **등가역학 모델**(축당 진자 1개, 분석적 적분)을 인터페이스 뒤에
+   써서 나중에 얕은물 모델로 교체 가능하게. 이유: 결정론, 속도, 보정, RL 스텝 예산.
+2. **Unity ML-Agents 를 backbone 으로 채택하지 마라.** 깨끗한 센서/액추에이터
+   메시지 경계를 유지; 학습기를 교체 가능하게. ML-Agents 는 쓰더라도 어댑터 뒤에.
+3. **베이스라인 컨트롤러를 먼저 만들어라** (specific-force alignment, 튜닝된
+   PID, 특권 full-state MPC/LQR). 이것들이 바닥과 천장을 정의. RL 이 PID 바닥
+   위로 의미 있게 못 올라가면 과제나 시뮬이 틀린 것 — 6개월이 아니라 2주차에 알아라.
+4. **잔차 RL 사용**: 정책이 분석적 베이스라인 위에 보정을 출력. 멀쩡한 바닥을
+   보장하고 어려운 잔차(슬로시 상태, 액추에이터 지연/한계, 플랜트 변동)에 학습 집중.
+5. **지연, 이산시간 제어, 센서 노이즈/바이어스, 액추에이터 비이상성을 1일차부터
+   모델링.** 이것들이 sim-to-real killer 이고 넣는 비용은 싸다.
+6. **비대칭 actor-critic**: critic 은 ground truth 를, actor 는 센서만. 인터페이스로
+   강제 — actor 가 문자 그대로 ground-truth 를 호출할 수 없음.
+7. **정밀도 예산을 차량이 아니라 액추에이터에 써라.** AI 가 제어하는 건
+   액추에이터; 차량에서는 *믿을 만한 베드 운동*만 필요.
 
 ---
 
-## 2. Will a rule-based controller solve most of it?
+## 1. 이것이 적절한 Physical AI 학습 문제인가?
 
-**Risk: high, if the plant is not tuned against it.** The obvious baseline:
+**조건부로 예.** 제어 문제를 RL 가치 있게 만드는 요소를 갖췄다:
 
-> Estimate the specific-force vector **f = a − g** in the tank frame from the
-> tank IMU (low-pass to reject slosh-induced accel). Command the tank attitude
-> so the tank floor is perpendicular to **f**. Rate-limit the command. Add a
-> notch filter at the slosh natural frequency so the command does not excite the
-> slosh mode.
+- **진짜 부분 관측성.** 액체 CoM, 슬로시 모드 진폭, 기울어지는 차량에서의
+  중력/가속 분리는 직접 측정 불가.
+- **자명하지 않은 시간 동역학.** 슬로시는 약하게 감쇠된 진동자; ring-down 이
+  기동보다 오래 감; 제어 행동이 미래 상태를 만듦.
+- **역결합.** 움직이는 액체가 탱크 CoM 과 액추에이터가 느끼는 토크를 바꿈 —
+  플랜트가 상태의존.
+- **비이상적 액추에이터.** rate/torque 한계 + 전송 지연 + 백래시 → 순수 반응
+  불가; 예측해야 함.
+- **예측 불가능한 외생 disturbance** (인간 운전자).
+- **플랜트 불확실성** (fill 레벨, 액체 특성, 액추에이터 마모) — 고정 gain 보다
+  적응 정책에 보상.
 
-This is a pendulum-emulating controller and it is genuinely good for the
-quasi-static and slow-maneuver regime. A tuned PID on `(tank tilt error, tank
-gyro)` gets further. Together they will likely prevent spills for gentle-to-
-moderate driving.
+**조건:** 위 각각이 중요할 만큼 강해야 한다. 액추에이터가 빠르고, 탱크가 강체고,
+freeboard 가 넉넉하고, 슬로시가 많이 감쇠되면, 문제는 "탱크를 느낀 중력벡터에
+겨누기" 로 붕괴하고 1학년 제어 실습이 RL 을 이긴다. §2, §12 참고.
 
-**Where rule-based control breaks down — and where RL earns its place:**
+**정직하게 유지할 프레이밍:** 여기서 RL 의 현실적 기여는 *적응형 disturbance
+거부와 슬로시 상태 추론*이지 "무에서 제어를 발견" 이 아니다. 그것도 진짜
+Physical AI 결과다. 그 이상으로 과대선전하지 마라.
 
-| Regime | Why rule-based struggles |
+---
+
+## 2. 규칙기반 컨트롤러가 대부분을 풀 것인가?
+
+**리스크: 높음, 플랜트가 그것에 맞서 튜닝되지 않으면.** 명백한 베이스라인:
+
+> 탱크 IMU 에서 탱크 프레임의 specific-force 벡터 **f = a − g** 를 추정
+> (슬로시 유발 accel 을 거부하도록 low-pass). 탱크 바닥이 **f** 에 수직이 되게
+> 탱크 자세를 명령. 명령을 rate-limit. 슬로시 자연주파수에 notch 필터를 더해
+> 명령이 슬로시 모드를 여기하지 않게.
+
+이건 진자를 흉내내는 컨트롤러이고 quasi-static / 느린 기동 조건에는 진짜로
+좋다. `(탱크 틸트 오차, 탱크 자이로)` 에 대한 튜닝된 PID 가 더 나아감. 둘
+합치면 완만~중간 운전에서 스필을 막을 가능성이 높다.
+
+**규칙기반 제어가 무너지는 곳 — 그리고 RL 이 제 값을 하는 곳:**
+
+| 조건 | 규칙기반이 어려운 이유 |
 |---|---|
-| Actuator rate/torque-limited vs. the disturbance bandwidth | By the time you *feel* the acceleration and start moving, it is too late. Needs anticipation from disturbance trends and driver-intent signals. |
-| Slosh resonance | Naive tilt-tracking pumps energy into the slosh mode at certain maneuver frequencies. Needs active slosh damping, which fights the tilt-tracking objective. |
-| Actuator delay + backlash | Fixed-gain feedback goes unstable or chatters near the backlash dead zone; needs a learned compensator. |
-| Hidden slosh state | Feedforward from IMU alone is insufficient; benefits from an internal observer / memory. |
-| Plant variation (fill, damping, wear) | One gain set is a compromise; an adaptive policy that infers the plant from history wins. |
-| Post-maneuver ring-down while a *new* maneuver starts | Superposed slosh modes with phase that matters; hard to hand-tune. |
+| 액추에이터 rate/torque 가 disturbance 대역폭 대비 제한 | 가속을 *느끼고* 움직이기 시작할 때는 이미 늦음. disturbance 추세와 운전자 의도 신호로부터의 예측 필요 |
+| 슬로시 공진 | 순진한 틸트 추종이 특정 기동 주파수에서 슬로시 모드에 에너지를 펌핑. 능동 슬로시 감쇠가 필요한데 이는 틸트 추종 목표와 싸움 |
+| 액추에이터 지연 + 백래시 | 고정 gain 피드백이 백래시 dead zone 근처에서 불안정하거나 채터; 학습된 보상기 필요 |
+| 숨겨진 슬로시 상태 | IMU 단독 feedforward 로는 불충분; 내부 observer / 메모리로 이득 |
+| 플랜트 변동 (fill, 감쇠, 마모) | 하나의 gain 셋은 타협; 이력에서 플랜트를 추론하는 적응 정책이 이김 |
+| *새* 기동이 시작되는데 기동 후 ring-down 진행 중 | 위상이 중요한 중첩 슬로시 모드; 손 튜닝 어려움 |
 
-**Mitigations baked into the design:**
+**설계에 넣은 완화책:**
 
-- Choose tank geometry so the **first slosh natural frequency (~0.4–1.2 Hz)**
-  overlaps the band of real truck maneuvers and truck-suspension resonance.
-- Choose an actuator whose **closed-loop bandwidth (~2–5 Hz)** and **rate limit**
-  are low enough that anticipation beats reaction for aggressive driving.
-- Mount the gimbal pivot **near the tank CoM** (neutrally stable), so a free
-  gimbal does *not* passively solve the static case and active control is
-  actually required. Document this as a deliberate choice.
-- Keep **freeboard** (rim height above the still-liquid surface) small enough
-  that spillage is reachable under aggressive driving but not under gentle
-  driving.
-- **Domain-randomize** the plant so no single fixed-gain controller is optimal.
-- Use **residual RL** so the comparison is explicitly "baseline" vs.
-  "baseline + learned correction," and any RL win is unambiguous.
+- **첫 슬로시 자연주파수(~0.4~1.2 Hz)** 가 실제 트럭 기동과 트럭-서스펜션 공진
+  대역에 겹치도록 탱크 기하 선택.
+- **폐루프 대역폭(~2~5 Hz)** 과 **rate 한계** 가 공격적 운전에 대해 예측이
+  반응을 이길 만큼 낮은 액추에이터 선택.
+- 짐벌 피벗을 **탱크 CoM 근처** (중립 안정)에 마운트, 그래서 자유 짐벌이
+  정적 케이스를 수동으로 *안* 풀고 능동 제어가 실제로 필요하게. 의도적 선택으로
+  문서화.
+- **freeboard** (정지 액면 위 rim 높이)를 공격적 운전에는 스필 도달 가능하지만
+  완만한 운전에는 아니게 작게.
+- 하나의 고정 gain 컨트롤러도 최적이 아니게 플랜트를 **도메인 랜덤화**.
+- **잔차 RL** 을 써서 비교가 명시적으로 "베이스라인" vs "베이스라인 + 학습된
+  보정" 이고 어떤 RL 승리도 명확하게.
 
-**Methodological rule:** the analytic + PID baselines are deliverables, not
-throwaways. Every RL result is reported against them and against a privileged
-full-state MPC (the performance ceiling, §12).
+**방법론적 규칙:** 분석적 + PID 베이스라인은 산출물이지 버릴 것이 아니다. 모든
+RL 결과는 그것들 상대로 + 특권 full-state MPC (성능 천장, §12) 상대로 보고.
 
 ---
 
-## 3. What is needed to make slosh temporal dynamics a real learning problem?
+## 3. 슬로시 시간 동역학을 진짜 학습 문제로 만들려면 무엇이 필요한가?
 
-1. **A slosh model with real dynamics**, not a quasi-static CoM shift. It must
-   represent at minimum the **first mode's natural frequency and damping ratio**
-   per axis, and its force/moment reaction on the tank.
-2. **Two-way coupling.** Slosh reaction force/torque is applied to the tank
-   rigid body and to the actuated joint (varying load torque).
-3. **Slosh state hidden from the actor.** The policy must infer it from the
-   history of tank IMU, motor current, and load cells → forces a memory
-   (frame-stack or recurrent) and rewards an internal observer.
-4. **Disturbance spectrum overlapping the slosh band**, so maneuvers can excite
-   resonance and the "when do I move" decision is non-trivial.
-5. **Episodes long enough to contain ring-down** — several slosh periods after
-   the last maneuver — so the cost of leaving energy in the liquid is felt.
-6. **Reward that penalizes slosh energy and near-rim margin**, not only spill
-   events (§11), so fine continuous control is rewarded.
-7. **Pre-excited initial conditions** in some episodes (liquid already moving at
-   t=0) so the policy cannot assume a calm start.
-
----
-
-## 4. Important physics / variables the brief did not mention
-
-- **Freeboard / rim height.** The single most important geometric parameter for
-  "does it spill." Must be an explicit, randomized parameter.
-- **Slosh natural frequency and damping ratio as first-class parameters.** The
-  brief lists "amount of liquid" but not the dynamic response it produces.
-- **Vehicle suspension.** The truck bed does not see the road directly — the
-  suspension is a low-pass with a ~1–2 Hz resonance that *shapes* the
-  disturbance the tank feels. Must be modeled at least as a simple sprung mass.
-- **Gravity/acceleration ambiguity.** An IMU measures specific force
-  **f = a − g**. Separating gravity from motion on a tilting truck needs an
-  attitude estimator. Keep this in the problem — do **not** hand the policy a
-  clean gravity vector.
-- **Actuator holding torque (thermal limit).** On a long hill the actuator holds
-  a tilted tank against gravity indefinitely. Continuous-torque limit ≠ peak
-  torque. Model both, or the real motor overheats.
-- **Two-axis kinematic coupling.** Rotation order matters; near ±90° the axes
-  degenerate. Keep max travel well under 90° (≈ ±25–35°) and fix the rotation
-  order.
-- **Rotary / swirl slosh** in near-square or cylindrical tanks (diagonal
-  excitation drives a rotating wave). Real and hard. **Avoid it in v1** by using
-  a distinctly rectangular tank (aspect ratio ≥ ~1.6).
-- **Continuous spill measure.** "Spilled / not spilled" is too sparse for a
-  reward gradient. Need overflow volume per step.
-- **Sensor imperfections as concrete models** — noise density, bias, bias random
-  walk, scale-factor error, axis misalignment, quantization, update rate,
-  latency, jitter, dropped frames. "Realistic sensors" must be numbers, or the
-  policy overfits to clean data.
-- **Control/actuation latency and its jitter.** The #1 sim-to-real gap for
-  feedback control.
-- **Time-scale separation.** Physics/slosh integration (200–500 Hz), sensor
-  sampling (100–200 Hz), control (50–100 Hz) — must be designed explicitly, not
-  left to Unity's frame rate.
-- **Mounting misalignment** tank↔vehicle and IMU↔body (small unknown rotations
-  and offsets) — a classic reality gap, trivial to randomize.
-- **Driver-in-the-loop data problem.** You cannot have a human drive 10^8
-  training steps. Synthetic driver profiles must cover the real input
-  distribution or the policy overfits (§14, §17).
-
-Lower priority / can defer: baffles and multi-compartment tanks, mount
-structural compliance, tire slip dynamics, aerodynamics, thermal/battery droop,
-wave breaking / air entrainment / surface tension.
+1. **진짜 동역학을 가진 슬로시 모델**, quasi-static CoM 이동이 아님. 최소한
+   축당 **1차 모드의 자연주파수와 감쇠비**, 그리고 탱크에 대한 힘/모멘트 반응을
+   표현해야 함.
+2. **양방향 결합.** 슬로시 반응 힘/토크가 탱크 강체와 작동 관절(변하는 하중
+   토크)에 적용.
+3. **actor 로부터 숨겨진 슬로시 상태.** 정책이 탱크 IMU, 모터 전류, 로드셀
+   이력에서 추론해야 함 → 메모리(프레임스택 또는 recurrent) 강제하고 내부
+   observer 에 보상.
+4. **슬로시 대역에 겹치는 disturbance 스펙트럼**, 그래서 기동이 공진을 여기할
+   수 있고 "언제 움직이나" 결정이 자명하지 않게.
+5. **ring-down 을 담을 만큼 긴 에피소드** — 마지막 기동 후 슬로시 주기 여러 개
+   — 그래서 액체에 에너지를 남기는 비용이 느껴지게.
+6. **스필 이벤트뿐 아니라 슬로시 에너지와 rim 근접 마진을 벌하는 reward**
+   (§11), 그래서 세밀한 연속 제어에 보상.
+7. 일부 에피소드에서 **미리 여기된 초기 조건** (t=0 에 액체가 이미 움직임),
+   그래서 정책이 차분한 시작을 가정 못 하게.
 
 ---
 
-## 5. Must-model vs. can-skip
+## 4. 브리프가 언급하지 않은 중요한 물리 / 변수
 
-### Must model (v1)
+- **Freeboard / rim 높이.** "넘치나" 에 가장 중요한 단일 기하 파라미터.
+  명시적이고 랜덤화된 파라미터여야 함.
+- **슬로시 자연주파수와 감쇠비를 일급 파라미터로.** 브리프는 "액체량" 을
+  나열하지만 그것이 만드는 동적 응답은 아님.
+- **차량 서스펜션.** 트럭 베드가 도로를 직접 보지 않음 — 서스펜션이 ~1~2 Hz
+  공진을 가진 low-pass 로 탱크가 느끼는 disturbance 를 *shape*. 최소한 단순
+  스프렁매스로 모델링해야 함.
+- **중력/가속 모호성.** IMU 는 specific force **f = a − g** 를 측정. 기울어지는
+  트럭에서 중력을 운동에서 분리하려면 자세 추정기 필요. 이걸 문제에 유지 —
+  정책에 깨끗한 중력벡터를 **주지 마라**.
+- **액추에이터 유지 토크 (열 한계).** 긴 언덕에서 액추에이터가 기울어진 탱크를
+  중력에 맞서 무한히 유지. 연속토크 한계 ≠ 피크 토크. 둘 다 모델링, 안 하면
+  실제 모터 과열.
+- **2축 운동학 결합.** 회전 순서 중요; ±90° 근처에서 축이 퇴화. 최대 travel 을
+  90° 훨씬 아래(≈ ±25~35°)로 유지하고 회전 순서 고정.
+- **회전/swirl 슬로시** 정사각형에 가깝거나 원통형 탱크에서 (대각 여기가 회전
+  파동을 구동). 실재하고 어려움. **v1 에서 회피** — 뚜렷이 직사각형 탱크
+  (aspect ratio ≥ ~1.6) 사용.
+- **연속 스필 측정.** "넘침 / 안 넘침" 은 reward gradient 에 너무 sparse.
+  스텝당 overflow 부피 필요.
+- **구체적 모델로서의 센서 결함** — 노이즈 밀도, 바이어스, 바이어스 random
+  walk, scale-factor 오차, 축 오정렬, 양자화, 갱신율, 지연, jitter, dropped
+  frame. "현실적 센서" 는 숫자여야 함, 안 그러면 정책이 깨끗한 데이터에 overfit.
+- **제어/작동 지연과 그 jitter.** 피드백 제어의 #1 sim-to-real 갭.
+- **시간척도 분리.** 물리/슬로시 적분, 센서 샘플링, 제어 — Unity 프레임율에
+  맡기지 말고 명시적으로 설계. (v1 값은 600/200/100 Hz — [frames-units-conventions.md](frames-units-conventions.md).)
+- **마운팅 오정렬** 탱크↔차량, IMU↔body (작은 미지의 회전과 오프셋) — 고전적
+  현실 갭, 랜덤화하기 자명.
+- **운전자-in-the-loop 데이터 문제.** 인간이 10^8 학습 스텝을 운전할 수 없음.
+  합성 운전자 프로파일이 실제 입력 분포를 커버해야 함, 안 그러면 정책이 overfit
+  (§14, §17).
 
-- Vehicle as a sprung mass with a simple suspension → realistic 6-DOF bed motion.
-- Tank as a rigid body on a 2-DOF actuated gimbal, pivot near tank CoM.
-- Reduced-order slosh model with correct first-mode natural frequency + damping,
-  coupled both ways to tank and joint.
-- Actuator per axis: 2nd-order response OR motor+gearbox, plus torque saturation
-  (peak + continuous), rate limit, travel limit, backlash dead zone, Coulomb +
-  viscous friction, transport delay.
-- Sensors with concrete noise/bias/delay/rate: vehicle IMU, tank IMU, 3–4 load
-  cells, 2 joint encoders, 2 motor-current estimates. Optional 1–3 point
-  liquid-level sensors.
-- Continuous spill measure (overflow volume per step).
-- Road with grade, bank, and roughness (sinusoids + discrete steps).
-- Discrete-time control loop at a fixed realistic rate with zero-order hold.
-- Seeded RNG for every stochastic element; fixed timestep.
-
-### Can skip (v1)
-
-- Particle fluid (SPH/FLIP), CFD.
-- Wave breaking, splash, surface tension, air entrainment.
-- Baffles, multi-compartment tanks.
-- Rotary/swirl slosh (avoid via tank aspect ratio).
-- Mount structural compliance.
-- Detailed tire model / tire slip (use a friction-circle point model).
-- Aerodynamics, temperature, battery droop.
-- Photoreal liquid rendering (a simple visual proxy is fine).
-- Yaw or vertical (heave) stabilization axes — 2-axis rotational is the right
-  scope.
+우선순위 낮음 / 연기 가능: 배플과 다중격실 탱크, 마운트 구조 컴플라이언스,
+타이어 slip 동역학, 공력, 열/배터리 droop, 파동 breaking / 공기 혼입 / 표면장력.
 
 ---
 
-## 6. Liquid slosh implementation options compared
+## 5. 반드시 모델링 vs 건너뛰기 가능
 
-| Option | Physical validity | Compute cost | RL suitability | Impl. difficulty | Verdict |
+### 반드시 모델링 (v1)
+
+- 차량을 단순 서스펜션을 가진 스프렁매스로 → 현실적 6-DOF 베드 운동.
+- 탱크를 2-DOF 작동 짐벌 위 강체로, 피벗 탱크 CoM 근처.
+- 축당 올바른 1차 모드 자연주파수 + 감쇠를 가진 reduced-order 슬로시 모델,
+  탱크와 관절에 양방향 결합.
+- 축당 액추에이터: 2차 응답 또는 모터+기어박스, + 토크 포화(피크 + 연속),
+  rate 한계, travel 한계, 백래시 dead zone, Coulomb + 점성 마찰, 전송 지연.
+- 구체적 노이즈/바이어스/지연/율을 가진 센서: 차량 IMU, 탱크 IMU, 로드셀 3~4개,
+  관절 엔코더 2개, 모터전류 추정 2개. 옵션 점 액체레벨 센서 1~3개.
+- 연속 스필 측정 (스텝당 overflow 부피).
+- grade, bank, 거칠기(사인 + 이산 스텝)를 가진 도로.
+- 고정 현실적 율의 이산시간 제어 루프, zero-order hold.
+- 모든 확률 요소에 seeded RNG; 고정 timestep.
+
+### 건너뛰기 가능 (v1)
+
+- 입자 유체 (SPH/FLIP), CFD.
+- 파동 breaking, splash, 표면장력, 공기 혼입.
+- 배플, 다중격실 탱크.
+- 회전/swirl 슬로시 (탱크 aspect ratio 로 회피).
+- 마운트 구조 컴플라이언스.
+- 상세 타이어 모델 / 타이어 slip (friction-circle 점 모델 사용).
+- 공력, 온도, 배터리 droop.
+- 포토리얼 액체 렌더링 (단순 시각 프록시로 충분).
+- yaw 또는 수직(heave) 안정화 축 — 2축 회전이 맞는 범위.
+  *(참조: heave 는 이후 D6 에서 disturbance 전달 경로로 추가됨, 안정화 축은 아님.)*
+
+---
+
+## 6. 액체 슬로시 구현 옵션 비교
+
+| 옵션 | 물리적 유효성 | 계산 비용 | RL 적합성 | 구현 난이도 | 판정 |
 |---|---|---|---|---|---|
-| **A. Quasi-static CoM shift** (point mass at equilibrium surface) | None (no dynamics) — violates the core requirement | Negligible | N/A | Trivial | **Sanity check only**, not the model |
-| **B. Equivalent mechanical model** — 1 pendulum (or spring-mass) per axis, analytically integrated, 2-way coupled | High for fill 20–80 %, low–moderate amplitude, first mode dominant. Well validated (NASA SP-106, automotive tank-slosh control literature) | Negligible (2–4 extra ODE states, closed form). 500+ Hz easily | **Excellent** — deterministic, fast, stable, parameters map 1:1 to domain randomization | Moderate | **Recommended for v1** |
-| **C. Multi-mode modal ROM** — superpose first N analytic slosh modes for a rectangular tank, each a damped driven oscillator | Better for higher amplitude / multi-frequency excitation; still linear-ish | Low (N × option B) | Very good | Moderate-high (need mode shapes) | **Recommended phase-2 upgrade** — same interface as B |
-| **D. Shallow-water (Saint-Venant) on a height field** — depth-averaged 2D solver, tank accel as body force | Good for shallow–moderate depth; captures traveling waves, hydraulic jumps, spatial surface, spill location. Misses vertical accel, breaking, deep-water dispersion | Low–moderate: a 64×32 grid at a few hundred Hz is cheap on CPU | Good, with care — larger state, determinism needs fixed dt and no threading races; solver can go unstable and disrupt training | Moderate-high (need a stable CFL-limited scheme) | **Recommended fidelity option for phase 2/3.** Gives spill-over-rim and level sensors directly |
-| **E. SPH / FLIP particle fluid** (Obi Fluid, Zibra, custom compute) | Highest visual; noisy, non-deterministic, parameter-fragile, hard to calibrate to a real natural frequency | 10–100× everything else; destroys the RL step budget (need 10^7–10^8 steps) | **Poor** — non-determinism breaks reproducibility; GPU contention with training | High; third-party license/dependency; sim-to-real calibration is guesswork | **Reject for training.** Optionally run once, offline, to tune/validate B–D |
-| **F. Many-rigidbody "ball pit"** (fill tank with small PhysX spheres) | Wrong wave physics, wrong damping, noisy; tuning natural frequency is a hack | Moderate-high | Poor (PhysX solver noise, non-determinism) | Low-moderate | **Reject** |
+| **A. Quasi-static CoM 이동** (평형 표면의 점질량) | 없음 (동역학 없음) — 핵심 요구 위반 | 무시 가능 | N/A | 자명 | **sanity check 만**, 모델 아님 |
+| **B. 등가역학 모델** — 축당 진자(또는 spring-mass) 1개, 분석적 적분, 양방향 결합 | fill 20~80%, 저~중 진폭, 1차 모드 지배에 대해 높음. 잘 검증됨 (NASA SP-106, 자동차 탱크-슬로시 제어 문헌) | 무시 가능 (2~4 추가 ODE 상태, 폐형). 500+ Hz 쉽게 | **훌륭** — 결정론적, 빠름, 안정, 파라미터가 도메인 랜덤화에 1:1 매핑 | 중간 | **v1 권장** |
+| **C. 다중모드 modal ROM** — 직사각형 탱크의 첫 N 분석 슬로시 모드 중첩, 각각 감쇠 구동 진동자 | 더 높은 진폭 / 다중주파수 여기에 더 나음; 여전히 선형에 가까움 | 낮음 (N × 옵션 B) | 매우 좋음 | 중~높음 (모드 형상 필요) | **phase-2 권장 업그레이드** — B 와 같은 인터페이스 |
+| **D. Shallow-water (Saint-Venant) on a height field** — 깊이평균 2D 솔버, 탱크 accel 을 body force 로 | 얕은~중간 깊이에 좋음; 이동 파동, hydraulic jump, 공간 표면, 스필 위치 포착. 수직 accel, breaking, 심해 분산 놓침 | 낮음~중간: 64×32 격자 수백 Hz 는 CPU 에서 쌈 | 조심하면 좋음 — 더 큰 상태, 결정론에 고정 dt 와 스레딩 race 없음 필요; 솔버가 불안정해져 학습 방해 가능 | 중~높음 (안정 CFL-limited 스킴 필요) | **phase 2/3 권장 정밀도 옵션.** rim overflow 와 레벨 센서를 직접 줌 |
+| **E. SPH / FLIP 입자 유체** | 최고 시각; 노이지, 비결정론적, 파라미터 취약, 실제 자연주파수 보정 어려움 | 나머지의 10~100×; RL 스텝 예산 파괴 | **나쁨** — 비결정론이 재현성 깸; 학습과 GPU 경합 | 높음; 서드파티 라이선스/의존성; sim-to-real 보정이 추측 | **학습에는 거부.** 선택적으로 오프라인 1회 실행해 B~D 튜닝/검증 |
+| **F. 다중강체 "ball pit"** (탱크를 작은 PhysX 구로 채움) | 잘못된 파동 물리, 잘못된 감쇠, 노이지; 자연주파수 튜닝이 hack | 중~높음 | 나쁨 (PhysX 솔버 노이즈, 비결정론) | 저~중 | **거부** |
 
-### Recommendation
+### 권장
 
-Start with **B**. Define a `ISloshModel` interface
-(`Step(tankAcceleration, tankAngularState, dt) → {reactionForce, reactionTorque,
-surfacePeakHeightPerEdge}`) so **C** and **D** are drop-in replacements without
-touching the actuator, sensor, or controller layers. Validate B/C/D against **E**
-or against published slosh data before trusting RL numbers.
+**B** 로 시작. `ISloshModel` 인터페이스를 정의해서 **C** 와 **D** 가
+액추에이터·센서·컨트롤러 층을 안 건드리고 drop-in 교체 가능하게. RL 수치를
+신뢰하기 전에 B/C/D 를 **E** 또는 발표된 슬로시 데이터에 대해 검증.
 
-**Caveat for option B:** it does not directly know that liquid crossed the rim.
-You estimate spill from `pendulum angle + fill level → surface peak at each rim
-edge → overflow volume`. This mapping is approximate; decide it early and
-validate it against a shallow-water run. Option D gives spill directly — that is
-a real reason to move to D in phase 2.
+**옵션 B 주의:** 액체가 rim 을 넘었는지 직접 모름. `진자 각 + fill 레벨 → 각
+rim 가장자리의 표면 피크 → overflow 부피` 로 스필 추정. 이 매핑은 근사; 일찍
+정하고 얕은물 실행에 대해 검증. 옵션 D 는 스필을 직접 줌 — phase 2 에서 D 로
+가는 진짜 이유. *(구현 결과: D3~D4, findings F3 참고.)*
 
 ---
 
-## 7. (covered by the table in §6)
+## 7. (§6 의 표로 커버됨)
 
 ---
 
-## 8. Vehicle physics model — appropriate fidelity
+## 8. 차량 물리 모델 — 적절한 정밀도
 
-**Verdict: medium-low. Do not build a AAA vehicle sim.** The AI does not drive;
-it only needs believable 6-DOF motion of the tank base.
+**판정: 중-저. AAA 차량 시뮬을 만들지 마라.** AI 는 운전 안 함; 탱크 베이스의
+믿을 만한 6-DOF 운동만 필요.
 
-Recommended:
+권장:
 
-- **A 3-DOF sprung-mass model** (heave, pitch, roll) on a simple axle/suspension,
-  driven by:
-  - longitudinal acceleration from a **point-mass "bicycle" model** with a
-    **friction circle** (so hard braking / hard cornering plateau realistically),
-  - lateral acceleration from steering angle and speed,
-  - vertical excitation from the road profile,
-  - load transfer between axles/sides.
-- **Prefer a custom sprung-mass model over Unity `WheelCollider`s.** WheelColliders
-  are finicky, version-sensitive, and a determinism risk, for a subsystem the AI
-  never touches.
-- **Road** as parameterized grade + bank + roughness (sum of sinusoids + discrete
-  bumps / washboard).
-- **Driver input** behind an `IDriverInput` interface: a human implementation
-  (keyboard/gamepad) and scripted/stochastic profiles for training, plus
-  recorded human traces.
+- 단순 axle/서스펜션 위 **3-DOF 스프렁매스 모델** (heave, pitch, roll), 구동:
+  - **friction circle 을 가진 점질량 "bicycle" 모델** 의 종방향 가속 (그래서
+    하드 제동/코너링이 현실적으로 plateau),
+  - 조향각과 속도의 lateral 가속,
+  - 도로 프로파일의 수직 여기,
+  - axle/side 간 하중 이동.
+- **Unity `WheelCollider` 보다 커스텀 스프렁매스 모델 선호.** WheelCollider 는
+  까다롭고, 버전 민감하고, AI 가 절대 건드리지 않는 서브시스템에 결정론 리스크.
+- **도로** 를 파라미터화된 grade + bank + 거칠기 (사인 합 + 이산 범프 / washboard).
+- **운전자 입력** 을 `IDriverInput` 인터페이스 뒤에: 인간 구현(키보드/게임패드)
+  + 학습용 scripted/확률 프로파일 + 녹화 인간 트레이스.
 
-Fidelity you *do* want: correct steady-state and transient magnitudes of bed
-acceleration and tilt, and the suspension resonance. Fidelity you do not want:
-tire thermal models, differential/driveline detail, aero.
+*원하는* 정밀도: 베드 가속과 틸트의 올바른 정상상태·일시 크기, 서스펜션 공진.
+원하지 *않는* 정밀도: 타이어 열 모델, differential/driveline 상세, 공력.
 
 ---
 
-## 9. Stabilizer actuator model — appropriate fidelity
+## 9. 스태빌라이저 액추에이터 모델 — 적절한 정밀도
 
-**Verdict: high. This is where fidelity budget goes.** It is the thing the AI
-controls and the primary sim-to-real risk, and it is cheap to model (a few
-states per axis).
+**판정: 높음. 여기에 정밀도 예산을 쓴다.** AI 가 제어하는 것이고 주된
+sim-to-real 리스크이며 모델링이 싸다 (축당 몇 상태).
 
-Per axis, model:
+축당 모델링:
 
-- **Command interface:** target angle **or** target rate (recommended) **or**
-  torque. See §11.
-- **Drivetrain:** either a calibrated 2nd-order closed loop (bandwidth ~2–5 Hz,
-  damping ~0.7) **or** explicit motor + gearbox: `τ_motor = Kt·i`,
-  current-limited, voltage-limited (back-EMF → speed-dependent torque ceiling),
-  gear ratio `N`, efficiency `η`, reflected inertia.
-- **Hard limits:** peak torque, **continuous (thermal) torque**, max rate
-  `ω_max`, travel `±θ_max` with soft end-stops.
-- **Backlash:** dead zone `±δ` on reversals; output lags command through the
-  dead band.
-- **Friction:** Coulomb + viscous at the joint.
-- **Transport delay:** `τ_d` ≈ 10–50 ms on command receipt (bus + compute).
-- **Load sensitivity:** effective inertia = tank inertia + slosh reaction. This
-  emerges for free if the slosh reaction torque is applied to the joint — and it
-  is exactly the "same command, different result" behavior the brief wants.
-- **Sensors on the actuator:** output encoder (12–16 bit quantization, slight
-  noise), motor current (noisy, ∝ commanded torque) — the actuator's "felt
-  load," a proxy for slosh reaction.
+- **명령 인터페이스:** 목표 각도 **또는** 목표 rate (권장) **또는** 토크. §11.
+- **드라이브트레인:** 보정된 2차 폐루프 (대역폭 ~2~5 Hz, 감쇠 ~0.7) **또는**
+  명시적 모터 + 기어박스: `τ_motor = Kt·i`, 전류 제한, 전압 제한 (back-EMF →
+  속도의존 토크 천장), 기어비 `N`, 효율 `η`, reflected inertia.
+- **하드 한계:** 피크 토크, **연속(열) 토크**, 최대 rate `ω_max`, travel
+  `±θ_max` (soft end-stop).
+- **백래시:** 반전 시 dead zone `±δ`; 출력이 dead band 를 통해 명령에 뒤처짐.
+- **마찰:** 관절의 Coulomb + 점성.
+- **전송 지연:** 명령 수신에 `τ_d` ≈ 10~50 ms (버스 + 계산).
+- **하중 민감도:** 유효 관성 = 탱크 관성 + 슬로시 반응. 슬로시 반응 토크가
+  관절에 적용되면 자동으로 발생 — 정확히 브리프가 원하는 "같은 명령, 다른 결과".
+- **액추에이터 센서:** 출력 엔코더 (12~16비트 양자화, 약간 노이즈), 모터 전류
+  (노이지, ∝ 명령 토크) — 액추에이터의 "felt load", 슬로시 반응 프록시.
 
-Calibrate these numbers to a **real candidate servo/gearmotor datasheet** now,
-before hardware exists.
+이 숫자들을 하드웨어 존재 전에 **실제 후보 서보/기어모터 데이터시트** 에 보정.
 
 ---
 
-## 10. Sensor configuration — realism assessment
+## 10. 센서 구성 — 현실성 평가
 
-The proposed set is well chosen and realistic. Per sensor:
+제안된 셋은 잘 골랐고 현실적. 센서별:
 
-| Sensor | Realistic? | Keep? | Notes |
+| 센서 | 현실적? | 유지? | 메모 |
 |---|---|---|---|
-| Vehicle IMU (accel + gyro) | Yes | Yes | Add noise/bias/random-walk/delay, ~100–400 Hz. |
-| Tank IMU (accel + gyro) | Yes | Yes | Senses slosh-induced tilt + tank motion. Same imperfection model. Distinct mounting misalignment. |
-| Load cell(s) | Yes | Yes — use **3–4** in a pattern | One gives total weight (easy). 3–4 give a partial CoM estimate *the way real rigs do it* — partial slosh observability without cheating. |
-| Stabilizer encoder | Yes | Yes — essential | Output-side angle per axis; quantized. |
-| Motor current / torque estimate | Yes | Yes | Proxy for slosh reaction load; valuable. |
-| Limited liquid-level sensor | Only as **point** sensors (float / ultrasonic / capacitive rod) at fixed locations | Optional, 1–3 points | A single ultrasonic at tank center reads local surface height — heavily slosh-contaminated, which is *useful signal*. A full level field is **not** realistic — forbid it. |
+| 차량 IMU (accel + gyro) | 예 | 예 | 노이즈/바이어스/random-walk/지연 추가, ~100~400 Hz |
+| 탱크 IMU (accel + gyro) | 예 | 예 | 슬로시 유발 틸트 + 탱크 운동 감지. 같은 결함 모델. 별도 마운팅 오정렬 |
+| 로드셀 | 예 | 예 — 패턴으로 **3~4개** 사용 | 하나는 총 무게 (쉬움). 3~4개는 *실제 리그가 하는 방식으로* 부분 CoM 추정 — 치트 없는 부분 슬로시 관측성 |
+| 스태빌라이저 엔코더 | 예 | 예 — 필수 | 축당 출력측 각; 양자화 |
+| 모터 전류 / 토크 추정 | 예 | 예 | 슬로시 반응 하중 프록시; 가치 있음 |
+| 제한적 액체 레벨 센서 | 고정 위치의 **점** 센서(float / 초음파 / 정전용량 로드)로만 | 옵션, 1~3점 | 탱크 중심의 초음파 하나는 국소 표면 높이를 읽음 — 슬로시로 심하게 오염, 이게 *유용한 신호*. 전체 레벨 필드는 **비현실적** — 금지 |
 
-**Additions to consider:**
+**고려할 추가:**
 
-- **Vehicle speed / wheel speed** (from vehicle CAN) — realistic, cheap, helps
-  a lot (`a_lateral ≈ v²·yawrate`). **Recommend adding.**
-- **Steering angle + throttle/brake position** (from vehicle CAN) — realistic on
-  a real truck (OBD/CAN). Borderline: it is a partial *preview* of the
-  disturbance ("driver intent"). Real deployments do have this. **Recommend an
-  optional observation flag** — train with and without, measure how much the
-  policy leans on it.
-- **Forward-looking road/camera preview** — the brief explicitly excludes future
-  road info. **Honor that for v1.** But note: a look-ahead sensor enabling
-  preview control is the single largest possible performance gain. Flag it as a
-  future ablation, not a v1 feature.
+- **차량 속도 / 바퀴 속도** (차량 CAN 에서) — 현실적, 싸고, 많이 도움
+  (`a_lateral ≈ v²·yawrate`). **추가 권장.**
+- **조향각 + throttle/brake 위치** (차량 CAN 에서) — 실제 트럭에 현실적
+  (OBD/CAN). 경계선: disturbance 의 부분 *preview* ("운전자 의도"). 실제 배포는
+  이걸 가짐. **옵션 관측 플래그 권장** — 있을 때와 없을 때 학습, 정책이 얼마나
+  의존하는지 측정.
+- **전방 도로/카메라 preview** — 브리프가 미래 도로 정보를 명시적으로 제외.
+  **v1 에서 존중.** 그러나: look-ahead 센서가 가능케 하는 preview 제어가 가장
+  큰 잠재적 성능 이득. v1 기능이 아니라 미래 ablation 으로 flag.
 
-**Remove:** nothing. **Redundant, skip:** tank barometer/inclinometer (covered
-by IMU fusion).
+**제거:** 없음. **중복, 건너뛰기:** 탱크 barometer/inclinometer (IMU fusion 이 커버).
 
 ---
 
-## 11. Observation / Action / Reward candidates
+## 11. 관측 / 행동 / Reward 후보
 
-### Observation (actor) — all sensor-derived, noisy, delayed
+### 관측 (actor) — 전부 센서 유래, 노이지, 지연됨
 
-- Vehicle IMU: 3-axis accel + 3-axis gyro (body frame)
-- Tank IMU: 3-axis accel + 3-axis gyro (tank frame)
-- Joint state: 2 angles, 2 rates (encoder-differenced), 2 motor currents
-- Load cells: 3–4 scalars
-- Optional: 1–3 point liquid-level readings
-- Optional flag: vehicle CAN (speed, steer, throttle, brake)
-- **Last action(s)** — essential for delay/backlash compensation
-- Allowed derived features (computable on-board): low-passed specific-force
-  direction in tank frame and its recent rate of change
-- **Memory:** frame stack of the last 5–10 control steps, or a recurrent hidden
-  state — required for slosh-state inference
+- 차량 IMU: 3축 accel + 3축 gyro (body 프레임)
+- 탱크 IMU: 3축 accel + 3축 gyro (탱크 프레임)
+- 관절 상태: 각 2개, rate 2개 (엔코더 차분), 모터 전류 2개
+- 로드셀: 스칼라 3~4개
+- 옵션: 점 액체레벨 1~3개
+- 옵션 플래그: 차량 CAN (속도, 조향, throttle, brake)
+- **마지막 행동(들)** — 지연/백래시 보상에 필수
+- 허용된 유도 특징 (온보드 계산 가능): 탱크 프레임의 low-pass specific-force
+  방향과 그 최근 변화율
+- **메모리:** 마지막 5~10 컨트롤 스텝의 프레임스택, 또는 recurrent hidden
+  state — 슬로시 상태 추론에 필수
 
-**Never in the actor observation:** true liquid CoM, particle positions, true
-slosh mode amplitudes, true attitude/velocity, future road, future driver input,
-physics internals. These go to the critic and to logging only.
+**actor 관측에 절대 안 됨:** 실제 액체 CoM, 입자 위치, 실제 슬로시 모드 진폭,
+실제 자세/속도, 미래 도로, 미래 운전자 입력, 물리 내부. 이것들은 critic 과
+로깅에만.
 
-### Action
+### 행동
 
-- **Recommended v1:** joint **angular-rate** command per axis (2 values),
-  integrated by a low-level actuator controller. Smoother than step angle
-  commands, avoids chatter. (Target-angle command is an acceptable alternative.)
-- **Torque command:** most faithful to hardware, hardest to learn, least safe —
-  an advanced option, not v1.
-- **Strongly recommended: residual action.** Action = analytic-baseline command
-  + learned correction. Guarantees a sane floor, focuses learning on the hard
-  residual, and de-risks "RL cannot beat PID."
-- Always include an **action-rate penalty**.
+- **v1 권장:** 축당 관절 **각속도** 명령 (2 값), 저수준 액추에이터 컨트롤러가
+  적분. 스텝 각도 명령보다 매끄럽고 채터 회피. (목표 각도 명령도 허용 대안.)
+- **토크 명령:** 하드웨어에 가장 충실, 학습 가장 어려움, 가장 안 안전 — 고급
+  옵션, v1 아님.
+- **강력 권장: 잔차 행동.** 행동 = 분석적 베이스라인 명령 + 학습된 보정. 멀쩡한
+  바닥 보장, 어려운 잔차에 학습 집중, "RL 이 PID 를 못 이김" 리스크 제거.
+- 항상 **action-rate 패널티** 포함.
 
-### Reward (per step, continuous)
+### Reward (스텝당, 연속)
 
 ```
-r = − k1 · overflow_volume                     (primary)
-    − k2 · near_rim_margin_cost                 (smooth cost as surface peak nears the rim)
-    − k3 · slosh_kinetic_energy                 (reward actively damping the liquid)
+r = − k1 · overflow_volume                     (1차)
+    − k2 · near_rim_margin_cost                 (표면 피크가 rim 에 근접하는 매끄러운 비용)
+    − k3 · slosh_kinetic_energy                 (액체를 능동 감쇠하면 보상)
     − k4 · |action_rate|
-    − k5 · actuator_effort (|torque| or power)
+    − k5 · actuator_effort (|torque| 또는 power)
     − k6 · joint_limit_proximity_cost
-    − k7 · |tank_tilt_relative_to_vehicle|      (optional, small — discourages wild gymnastics)
-    + k8  (small alive bonus, optional)
-    − K_term  on a large spill event (terminal)
+    − k7 · |tank_tilt_relative_to_vehicle|      (옵션, 작게 — 과격한 곡예 억제)
+    + k8  (작은 alive 보너스, 옵션)
+    − K_term  큰 스필 이벤트에 (종료)
 ```
 
-Curriculum: start with gentle driver profiles, low fill, generous freeboard;
-widen over training.
+커리큘럼: 완만한 운전자 프로파일, 낮은 fill, 넉넉한 freeboard 로 시작; 학습
+동안 넓힘.
 
-**Reward-hacking watch:** a policy may slam the tank to a hard end-stop to
-"cage" the liquid, or exploit slosh-model artifacts. Mitigate with the effort /
-limit-proximity penalties and by validating the trained policy on a
-higher-fidelity slosh model it never trained on.
+**Reward-hacking 감시:** 정책이 탱크를 하드 end-stop 에 slam 해 액체를 "가두"
+거나, 슬로시 모델 아티팩트를 exploit 할 수 있음. effort / limit-proximity
+패널티로 완화하고, 학습한 적 없는 고정밀 슬로시 모델에 학습된 정책을 검증.
 
-### Critic (training only) — privileged observation
+### Critic (학습만) — 특권 관측
 
-Everything the actor sees, **plus**: true slosh mode amplitudes/velocities, true
-liquid CoM, true specific force, true tank attitude/velocity, true actuator
-state. Asymmetric actor-critic → large training speedup, zero deployment
-cheating.
+actor 가 보는 모든 것, **+**: 실제 슬로시 모드 진폭/속도, 실제 액체 CoM, 실제
+specific force, 실제 탱크 자세/속도, 실제 액추에이터 상태. 비대칭 actor-critic
+→ 큰 학습 속도 향상, 배포 치트 0.
 
 ---
 
-## 12. AI architecture for temporal state
+## 12. 시간 상태를 위한 AI 아키텍처
 
-- **Memory is required** (hidden slosh state). Progression:
-  1. **Frame-stack + MLP, PPO** — start here. Often sufficient.
-  2. **GRU/LSTM recurrent policy** — if frame-stack plateaus.
-  3. Transformer over a window — overkill for v1.
-  4. Explicit learned state estimator (Kalman / learned observer) feeding an MLP
-     — a strong, interpretable option; good for sim-to-real.
-- **Asymmetric actor-critic** (critic sees ground truth). Strongly recommended.
-- **Auxiliary self-supervised head:** predict the true slosh state from the
-  observation history. Improves the learned representation at low cost.
-- **Implicit system identification** (RMA-style): an encoder maps recent history
-  to a latent plant-parameter vector; trained by distillation from a privileged
-  encoder that sees the true randomized parameters. This is how the policy
-  adapts to fill level / damping / actuator wear at deployment.
-- **Algorithm:** PPO first (robust, forgiving). Consider SAC later for sample
-  efficiency.
+- **메모리 필수** (숨겨진 슬로시 상태). 진행:
+  1. **프레임스택 + MLP, PPO** — 여기서 시작. 종종 충분.
+  2. **GRU/LSTM recurrent 정책** — 프레임스택이 plateau 하면.
+  3. window 에 대한 Transformer — v1 에 과함.
+  4. 명시적 학습된 상태 추정기 (Kalman / 학습된 observer) 가 MLP 에 feed —
+     강하고 해석 가능한 옵션; sim-to-real 에 좋음.
+- **비대칭 actor-critic** (critic 이 ground truth 를 봄). 강력 권장.
+- **보조 self-supervised head:** 관측 이력에서 실제 슬로시 상태 예측. 낮은
+  비용에 학습된 표현 개선.
+- **암묵적 시스템 식별** (RMA 스타일): 인코더가 최근 이력을 잠재 플랜트-파라미터
+  벡터로 매핑; 실제 랜덤화 파라미터를 보는 특권 인코더에서 distillation 으로
+  학습. 이게 정책이 배포 시 fill 레벨 / 감쇠 / 액추에이터 마모에 적응하는 방법.
+- **알고리즘:** PPO 먼저 (견고, 관대). 나중에 샘플 효율 위해 SAC 고려.
 
-### On Unity ML-Agents
+### Unity ML-Agents 에 대해
 
-ML-Agents gives a lot for free (PPO/SAC, the Unity↔Python plumbing) and, for a
-non-professional developer, is genuinely tempting. **But it couples training to
-Unity, its API churns across versions, and it works against the stated
-Sensor→Controller→Actuator decoupling and the ROS-2 goal.** Later, wanting an
-external trainer or a real robot, you would find the environment welded to
-ML-Agents.
+ML-Agents 는 많은 걸 공짜로 주고 (PPO/SAC, Unity↔Python 배관), 비전문 개발자에게
+진짜로 유혹적. **그러나 학습을 Unity 에 결합하고, API 가 버전 간 churn 하며,
+명시된 Sensor→Controller→Actuator 분리와 ROS-2 목표에 맞서 작동.** 나중에 외부
+학습기나 실제 로봇을 원하면 환경이 ML-Agents 에 용접된 걸 발견.
 
-**Recommendation:** do **not** make ML-Agents the backbone. Define a
-language-agnostic env boundary:
+**권장:** ML-Agents 를 backbone 으로 **만들지 마라.** 언어중립 env 경계 정의:
 
-- In-process C# `ISensorBus` / `IActuatorBus` for a C# controller now.
-- A thin socket / gRPC bridge exposing a **Gymnasium-style** `reset()/step()`
-  API for an external Python trainer (Stable-Baselines3, CleanRL, `rsl_rl`).
+- 지금 C# 컨트롤러용 in-process C# `IController` seam (+ DTO 가 계약을 담음).
+- 외부 Python 학습기 (Stable-Baselines3, CleanRL, `rsl_rl`)용 **Gymnasium
+  스타일** `reset()/step()` API 를 노출하는 얇은 소켓 / gRPC 브릿지.
 
-If the bridge later becomes a throughput bottleneck, *then* evaluate ML-Agents
-behind an adapter. Not before.
+브릿지가 나중에 처리량 병목이 되면, *그때* 어댑터 뒤에서 ML-Agents 평가. 그 전엔 안 함.
 
-### On deployment — the policy is a separate process (owner decision 2026-08-29)
+### 배포에 대해 — 정책은 별도 프로세스 (소유자 결정 2026-08-29)
 
-The finished demo does **not** bake the trained policy into the Unity binary
-(the earlier "ONNX-in-Unity, no Python at runtime" idea). A real robot keeps its
-body, its brain and its training rig as separate things that talk over a link, so
-the sim mirrors that:
+완성된 데모는 학습된 정책을 Unity 바이너리에 **굽지 않음** (예전 "ONNX-in-Unity,
+런타임 Python 없음" 아이디어). 실제 로봇은 몸·뇌·학습 장비를 링크로 대화하는
+별개의 것들로 두고, 시뮬도 그렇게 미러링:
 
-- **Unity = the plant** — world + body + sensors + actuators. Publishes sensor
-  messages, consumes command messages. ① rigid is a mechanical config and lives
-  here; ② rule-based is an engine-free `IController` (in-process now, portable);
-  it does **not** contain the learned policy.
-- **The policy is its own process** (`serve_policy.py`), connected over the same
-  length-prefixed TCP bridge that fronts training — the stand-in for the
-  onboard-compute ↔ sensors/actuators link. Unity's `RemotePolicyController`
-  (engine-free, in `FluidStabilizer.Rl`) is the client; it runs
-  `ObservationEncoder` locally and sends the encoded vector, gets an action back,
-  and falls back to a locked hold if the server is absent.
-- **ONNX is an interchange format** for handing a trained checkpoint to that
-  process — a hand-rolled weights file is an acceptable draft substitute.
+- **Unity = 플랜트** — 세계 + 몸체 + 센서 + 액추에이터. 센서 메시지 발행, 명령
+  메시지 소비. ① 강체는 여기 사는 기계적 설정; ② 규칙기반은 엔진프리
+  `IController` (지금은 in-process, 이식가능); 학습 정책은 **안 들어있음**.
+- **정책은 자기 프로세스** (`serve_policy.py`), 학습을 front 하는 같은
+  length-prefixed TCP 브릿지로 연결 — 온보드컴퓨트 ↔ 센서/액추에이터 링크의
+  대역. Unity 의 `RemotePolicyController` (엔진프리, `FluidStabilizer.Rl`)가
+  클라이언트; `ObservationEncoder` 를 로컬로 돌리고 인코딩된 벡터를 보내고,
+  행동을 받고, 서버 없으면 잠근 hold 로 폴백.
+- **ONNX 는 교환 포맷** — 학습된 체크포인트를 그 프로세스에 넘기는 것. 손수 만든
+  가중치 파일도 초안 대체로 허용.
 
-Trade-off: the demo is "run the Unity app **and** the policy process". For a
-learning artefact that is the point. Full rationale in
-[project-goals.md](project-goals.md) → "Final-product architecture".
+트레이드오프: 데모가 "Unity 앱 **과** 정책 프로세스를 실행". 학습 산출물로는
+그게 요점. 전체 근거는 [project-goals.md](project-goals.md) → "최종 제품 아키텍처".
 
 ---
 
-## 13. Domain randomization targets
+## 13. 도메인 랜덤화 대상
 
-Per episode (some also as per-step noise):
+에피소드당 (일부는 스텝당 노이즈로도):
 
-- **Liquid:** fill ratio (0.3–0.8), density, first-mode natural frequency
-  (±20–40 %), damping ratio (×0.3–3), participating mass fraction.
-- **Tank:** empty mass, inertia tensor, freeboard / rim height.
-- **Actuator:** peak & continuous torque, rate limit, bandwidth, backlash width,
-  transport delay (10–50 ms), Coulomb + viscous friction, gear efficiency.
-- **Sensors:** noise σ, bias, bias random-walk rate, scale-factor error, axis
-  misalignment, added latency, update-rate jitter, quantization step, occasional
-  dropped frame.
-- **Geometry:** tank↔vehicle mounting misalignment, IMU mounting rotation/offset.
-- **Vehicle:** mass, CoG height, suspension stiffness/damping.
-- **Road:** grade, bank, roughness spectrum, discrete bump size/spacing.
-- **Driver:** profile aggressiveness, reaction-time noise, input quantization &
-  latency.
-- **Control loop:** rate jitter, occasional dropped command.
-- **Initial condition:** pre-excited slosh state.
+- **액체:** fill ratio (0.3~0.8), 밀도, 1차 모드 자연주파수 (±20~40%), 감쇠비
+  (×0.3~3), participating mass 비율.
+- **탱크:** 빈 질량, 관성 텐서, freeboard / rim 높이.
+- **액추에이터:** 피크 & 연속 토크, rate 한계, 대역폭, 백래시 폭, 전송 지연
+  (10~50 ms), Coulomb + 점성 마찰, 기어 효율.
+- **센서:** 노이즈 σ, 바이어스, 바이어스 random-walk 율, scale-factor 오차,
+  축 오정렬, 추가 지연, 갱신율 jitter, 양자화 스텝, 가끔 dropped frame.
+- **기하:** 탱크↔차량 마운팅 오정렬, IMU 마운팅 회전/오프셋.
+- **차량:** 질량, CoG 높이, 서스펜션 강성/감쇠.
+- **도로:** grade, bank, 거칠기 스펙트럼, 이산 범프 크기/간격.
+- **운전자:** 프로파일 공격성, 반응시간 노이즈, 입력 양자화 & 지연.
+- **제어 루프:** rate jitter, 가끔 dropped command.
+- **초기 조건:** 미리 여기된 슬로시 상태.
 
-Curriculum: start near nominal, widen over training. Log the sampled parameters
-with every episode for later analysis.
+커리큘럼: 명목 근처에서 시작, 학습 동안 넓힘. 나중 분석 위해 모든 에피소드에
+샘플된 파라미터 로깅.
 
 ---
 
-## 14. Sim-to-real — what to do from day one
+## 14. Sim-to-real — 1일차부터 할 것
 
-- **Latency budget.** Model and log every delay: sensor acquisition, bus,
-  compute, actuation. Randomize them. This is the #1 reality gap for feedback
-  control.
-- **Discrete-time control** at a fixed realistic embedded rate (50–100 Hz),
-  zero-order hold on actions. No continuous-time cheating.
-- **Units, frames, timestamps everywhere.** SI units. Right-handed frames
-  defined once (see `frames-units-conventions.md`). Every sensor sample carries
-  a timestamp; the controller works off timestamps, not frame counts.
-- **Calibrate actuator and sensor models to real datasheets** of candidate parts
-  now.
-- **Asymmetric info stays out of the actor**, enforced by the interface.
-- **Domain randomization + implicit system-ID** as the transfer mechanism.
-- **Log everything in a replayable, ROS-bag-compatible schema** even before ROS,
-  so real logs can later be replayed through the same controller.
-- **Controller is a separate module/process** with a defined message API; the
-  same controller binary runs against sim now and a ROS 2 bridge later, no code
-  change.
-- **Reality-gap tests:** held-out driver traces, held-out road profiles, and —
-  critically — evaluate on a *different slosh model class* (shallow-water) the
-  policy never trained on. Surviving a model-class change is the best cheap
-  predictor of surviving reality.
-- **Safety envelope** (angle/rate/torque limiting) lives in the low-level
-  actuator layer, not the policy — the policy cannot command what the real rig
-  would refuse.
+- **지연 예산.** 모든 지연을 모델링하고 로깅: 센서 획득, 버스, 계산, 작동.
+  랜덤화. 피드백 제어의 #1 현실 갭.
+- **이산시간 제어** 를 고정 현실적 임베디드 율 (50~100 Hz)로, 행동에 zero-order
+  hold. 연속시간 치트 없음.
+- **어디서나 단위, 프레임, 타임스탬프.** SI 단위. 한 번 정의된 오른손 프레임
+  (`frames-units-conventions.md`). 모든 센서 샘플이 타임스탬프를 지님; 컨트롤러가
+  프레임 카운트가 아니라 타임스탬프로 작동.
+- **액추에이터와 센서 모델을 후보 부품의 실제 데이터시트에 보정** — 지금.
+- **비대칭 정보는 actor 밖에** 유지, 인터페이스로 강제.
+- **도메인 랜덤화 + 암묵적 시스템-ID** 를 전이 메커니즘으로.
+- **모든 것을 재생 가능한 ROS-bag 호환 스키마로 로깅** — ROS 전에도, 그래서
+  실제 로그를 나중에 같은 컨트롤러로 재생 가능.
+- **컨트롤러는 정의된 메시지 API 를 가진 별도 모듈/프로세스**; 같은 컨트롤러
+  바이너리가 지금 시뮬과 나중 ROS 2 브릿지에서, 코드 변경 없이.
+- **현실-갭 테스트:** 홀드아웃 운전자 트레이스, 홀드아웃 도로 프로파일, 그리고
+  결정적으로 — 정책이 학습한 적 없는 *다른 슬로시 모델 클래스*(얕은물)에서 평가.
+  모델-클래스 변경을 견디는 것이 현실을 견디는 것의 가장 좋은 싼 예측자.
+- **안전 봉투** (각/rate/토크 제한)는 정책이 아니라 저수준 액추에이터 층에 —
+  정책이 실제 리그가 거부할 것을 명령할 수 없음.
 
 ---
 
-## 15. ROS 2 / minimal-restructuring plan
+## 15. ROS 2 / 최소 재구조화 계획
 
-Do **not** build the ROS layer now. Do **not** block it either:
+지금 ROS 층을 **만들지 마라.** 막지도 **마라**:
 
-- **Message DTOs now**, plain serializable C# structs mapping 1:1 to future ROS 2
-  messages, with field names/types matching `sensor_msgs` where possible:
-  `VehicleImu` ↔ `sensor_msgs/Imu`, `TankImu` ↔ `sensor_msgs/Imu`,
-  `JointState` ↔ `sensor_msgs/JointState`, plus `LoadCells`, `MotorState`,
-  `LevelSensors`, `StabilizerCommand`.
-- **Message bus interface** `IMessageBus` with an in-process implementation now
-  and a ROS 2 implementation later (via `ros2-for-unity` or an external bridge
-  process). The ROS 2 dependency stays out of the Unity project — a separate
-  `ros2_ws/` appears only when hardware is connected.
-- **Controller has zero `UnityEngine` references.** Plain C# library (or Python).
-  Messages in, messages out. This is the one hard rule that makes the rest work.
-- **`IClock` abstraction** (sim time now, wall time later); fixed-rate scheduler.
-- No global mutable state; everything timestamped.
+- **지금 메시지 DTO**, 미래 ROS 2 메시지에 1:1 매핑되는 평범한 직렬화 가능 C#
+  struct, 가능하면 `sensor_msgs` 와 필드명/타입 일치: `VehicleImu` ↔
+  `sensor_msgs/Imu`, `TankImu` ↔ `sensor_msgs/Imu`, `JointState` ↔
+  `sensor_msgs/JointState`, + `LoadCells`, `MotorState`, `LevelSensors`,
+  `StabilizerCommand`.
+- **메시지 버스 인터페이스** — 지금 in-process 구현, 나중 ROS 2 구현 (`ros2-for-unity`
+  또는 외부 브릿지 프로세스). ROS 2 의존성은 Unity 프로젝트 밖에 — 하드웨어가
+  연결될 때만 별도 `ros2_ws/` 가 나타남. *(현 구현: 명시적 `IMessageBus` 타입은
+  아직 없고 `IController` seam + DTO 가 계약을 담음.)*
+- **컨트롤러는 `UnityEngine` 참조 0.** 평범한 C# 라이브러리 (또는 Python).
+  메시지 in, 메시지 out. 나머지가 작동하게 하는 유일한 하드 룰.
+- **`IClock` 추상화** (지금 sim time, 나중 wall time); 고정율 스케줄러.
+- 전역 가변 상태 없음; 모든 것 타임스탬프.
 
-That is the entire "future-proofing" budget. Anything more is over-abstraction.
-
----
-
-## 16. (merged into §15)
+그게 "미래 대비" 예산 전부. 그 이상은 과도한 추상화.
 
 ---
 
-## 17. Training environment vs. human-drive test environment
+## 16. (§15 에 병합)
 
-One `SimulationCore`, two front-ends selected by an `IDriverInput`
-implementation:
+---
 
-| | Human-drive / test | Training |
+## 17. 학습 환경 vs 수동 주행 테스트 환경
+
+`IDriverInput` 구현으로 선택되는 두 프론트엔드를 가진 하나의 `SimulationCore`:
+
+| | 수동 주행 / 테스트 | 학습 |
 |---|---|---|
-| Driver input | Keyboard / gamepad, real time | Scripted + stochastic driver profiles; replayed human traces |
-| Rendering | On | Off (headless) |
-| Time | Real time | Time-scaled, many parallel instances |
-| Purpose | Qualitative testing, demos, **recording human traces** | Policy optimization |
-| Ground-truth logging | Full | Full (for the critic + eval) |
+| 운전자 입력 | 키보드 / 게임패드, 실시간 | Scripted + 확률 운전자 프로파일; 재생된 인간 트레이스 |
+| 렌더링 | 켜짐 | 꺼짐 (헤드리스) |
+| 시간 | 실시간 | 시간 스케일, 여러 병렬 인스턴스 |
+| 목적 | 정성적 테스트, 데모, **인간 트레이스 녹화** | 정책 최적화 |
+| Ground-truth 로깅 | 전체 | 전체 (critic + 평가용) |
 
-- **Determinism is mandatory:** fixed timestep, seedable RNG for every
-  stochastic element, no frame-rate-dependent logic. Without it you cannot debug
-  RL or trust evaluation.
-- **Eval env:** headless, full ground-truth logging, with the analytic baseline
-  and the privileged MPC running in parallel on the same scenarios for direct
-  comparison.
-- **Record human driving sessions** → a fixed held-out test set *and* real
-  disturbance data for training. This is the highest-value data in the project
-  (§14 driver problem).
+- **결정론 필수:** 고정 timestep, 모든 확률 요소에 seedable RNG, 프레임율 의존
+  로직 없음. 없으면 RL 디버깅 불가, 평가 신뢰 불가.
+- **평가 env:** 헤드리스, 전체 ground-truth 로깅, 직접 비교 위해 같은
+  시나리오에서 분석적 베이스라인과 특권 MPC 를 병렬 실행.
+- **인간 운전 세션 녹화** → 고정 홀드아웃 테스트 셋 *과* 학습용 실제 disturbance
+  데이터. 프로젝트에서 가장 가치 높은 데이터 (§14 운전자 문제).
 
 ---
 
-## 18. Additional failure modes (the "you'll have to rebuild it" list)
+## 18. 추가 실패 모드 ("다시 만들어야 할 것" 목록)
 
-### "Works first, then you rebuild it"
+### "처음엔 작동, 그다음 다시 만듦"
 
-1. **PhysX joint pendulums or particle fluid for slosh.** You will tune it, get
-   something plausible, then discover it is non-deterministic / slow /
-   uncalibratable and have to swap the whole slosh model — after the sensor and
-   reward code already depend on its quirks. → custom analytic ROM behind
-   `ISloshModel` from day one.
-2. **ML-Agents as the backbone.** Deep Unity coupling + API churn + fights the
-   ROS decoupling goal. → swappable trainer, clean env boundary.
-3. **Determinism not designed in.** Unity + PhysX + threads + variable dt →
-   non-reproducible episodes → cannot debug RL, cannot trust eval. → fixed
-   timestep, seed everything, keep the slosh ODE out of PhysX, control
-   parallelism carefully.
-4. **Coordinate-frame / unit chaos.** Retrofitting consistent frames, units, and
-   timestamps after physics + sensors + controller exist is a painful rewrite. →
-   `frames-units-conventions.md` filled in *before* physics code.
-5. **Spill defined only as a boolean, then reward won't train.** Adding a
-   continuous overflow measure later means re-deriving it inside the slosh model
-   and re-tuning every reward weight. → continuous overflow volume from the
-   start.
+1. **슬로시에 PhysX 관절 진자나 입자 유체.** 튜닝하고, 그럴듯한 걸 얻고,
+   비결정론적 / 느림 / 보정 불가를 발견하고 전체 슬로시 모델을 교체 — 센서와
+   reward 코드가 이미 그 quirk 에 의존한 후에. → 1일차부터 `ISloshModel` 뒤
+   커스텀 분석 ROM.
+2. **ML-Agents 를 backbone 으로.** 깊은 Unity 결합 + API churn + ROS 분리 목표와
+   싸움. → 교체 가능한 학습기, 깨끗한 env 경계.
+3. **결정론을 설계에 안 넣음.** Unity + PhysX + 스레드 + 가변 dt → 재현 불가
+   에피소드 → RL 디버깅 불가, 평가 신뢰 불가. → 고정 timestep, 모든 것 seed,
+   슬로시 ODE 를 PhysX 밖에, 병렬성 조심스럽게 제어.
+4. **좌표계 / 단위 혼돈.** 물리 + 센서 + 컨트롤러 존재 후에 일관된 프레임·단위·
+   타임스탬프를 retrofit 하는 건 고통스러운 재작성. → 물리 코드 *전에*
+   `frames-units-conventions.md` 채움.
+5. **스필을 불리언으로만 정의, 그러면 reward 가 학습 안 됨.** 나중에 연속
+   overflow 측정을 더하면 슬로시 모델 안에서 재유도하고 모든 reward 가중치를
+   재튜닝. → 처음부터 연속 overflow 부피.
 
-### "Intuitive, but wrong for the goal"
+### "직관적이지만 목표에 틀림"
 
-6. **Handing the policy a clean gravity / attitude / true-specific-force
-   vector.** Feels reasonable ("the IMU gives acceleration"). It deletes the
-   gravity/motion disambiguation problem that is core to the real task and
-   inflates sim performance. → raw IMU only; let the policy/estimator fuse.
-7. **Reward = spill events only.** Intuitive and clean, but sparse, mostly zero,
-   no gradient — the policy never learns fine control. → margin + slosh-energy
-   shaping.
-8. **A freely pendulous tank (pivot above CoM).** Mechanically "obviously
-   right," but it passively solves the static case and makes active control
-   nearly unnecessary — the learning problem evaporates. → pivot near CoM,
-   neutrally stable, by choice.
-9. **Full `WheelCollider` vehicle sim.** Feels like "proper" physics, but adds
-   fragility and a determinism risk to a subsystem the AI never controls. →
-   3-DOF sprung mass + friction-circle bicycle model.
+6. **정책에 깨끗한 중력 / 자세 / true-specific-force 벡터 주기.** 합리적으로
+   느껴짐 ("IMU 가 가속을 줌"). 실제 과제의 핵심인 중력/운동 disambiguation
+   문제를 삭제하고 시뮬 성능을 부풀림. → 원시 IMU 만; 정책/추정기가 fuse.
+7. **Reward = 스필 이벤트만.** 직관적이고 깨끗하지만 sparse, 대부분 0, gradient
+   없음 — 정책이 세밀한 제어를 절대 안 배움. → 마진 + 슬로시 에너지 shaping.
+8. **자유롭게 매달린 탱크 (피벗이 CoM 위).** 기계적으로 "명백히 맞음", 그러나
+   정적 케이스를 수동으로 풀고 능동 제어를 거의 불필요하게 만듦 — 학습 문제가
+   증발. → 선택으로 피벗 CoM 근처, 중립 안정.
+9. **전체 `WheelCollider` 차량 시뮬.** "제대로 된" 물리처럼 느껴지지만 AI 가
+   절대 제어 안 하는 서브시스템에 취약성과 결정론 리스크 추가. → 3-DOF
+   스프렁매스 + friction-circle bicycle 모델.
 
-### "Realistic-looking, but wrong conditions for RL"
+### "현실적으로 보이지만 RL 에 틀린 조건"
 
-10. **High-fidelity SPH fluid.** Looks great in a demo; destroys the step budget
-    (need 10^7–10^8 steps), breaks determinism, and its calibration to a real
-    natural frequency is guesswork anyway.
-11. **Sensors modeled as clean + Gaussian-only.** Real IMUs have bias random
-    walk, scale-factor error, misalignment, quantization, dropped frames. A
-    policy trained on clean-plus-white-noise data overfits and fails on
-    hardware.
-12. **Latency added "later, for the hardware phase."** The policy trained
-    effectively latency-free learns high-gain behavior that oscillates on the
-    real rig. → latency in from step 1.
+10. **고정밀 SPH 유체.** 데모에서 멋짐; 스텝 예산 파괴 (10^7~10^8 스텝 필요),
+    결정론 깸, 실제 자연주파수 보정이 어차피 추측.
+11. **센서를 깨끗 + Gaussian 만으로 모델링.** 실제 IMU 는 바이어스 random walk,
+    scale-factor 오차, 오정렬, 양자화, dropped frame 을 가짐. 깨끗+백색노이즈
+    데이터로 학습한 정책은 overfit 하고 하드웨어에서 실패.
+12. **지연을 "나중에, 하드웨어 단계에서" 추가.** 사실상 지연 없이 학습한 정책은
+    실제 리그에서 진동하는 고gain 동작을 배움. → 1스텝부터 지연.
 
-### Feasibility bracket
+### Feasibility 브래킷
 
-13. **The task may be too easy** → RL never beats PID. *Biggest project risk.* →
-    build baselines first; tune actuator bandwidth / slosh frequency / freeboard
-    / disturbance spectrum into the hard regime; use residual RL.
-14. **The task may be effectively uncontrollable** → for aggressive driving with
-    small freeboard, *no* controller prevents spills; reward is all negative and
-    learning collapses. → verify a privileged full-state MPC (no delay, full
-    observation) achieves near-zero spill on the target scenarios. That is the
-    ceiling. Keep the task strictly between the PID floor and the MPC ceiling.
-15. **The synthetic-driver distribution doesn't match real driving** → the
-    policy overfits to scripted maneuvers. → invest in a diverse driver-profile
-    generator + real recorded traces early.
+13. **과제가 너무 쉬울 수 있음** → RL 이 PID 를 절대 못 이김. *가장 큰 프로젝트
+    리스크.* → 베이스라인 먼저; 액추에이터 대역폭 / 슬로시 주파수 / freeboard /
+    disturbance 스펙트럼을 어려운 조건으로 튜닝; 잔차 RL.
+14. **과제가 사실상 제어 불가능할 수 있음** → 작은 freeboard 의 공격적 운전에
+    대해 *어떤* 컨트롤러도 스필을 못 막음; reward 가 전부 음수이고 학습 붕괴.
+    → 특권 full-state MPC (지연 없음, 완전 관측)가 타깃 시나리오에서 거의 0
+    스필을 달성하는지 검증. 그게 천장. 과제를 PID 바닥과 MPC 천장 사이에 엄격히
+    유지. *(구현 결과: findings F1, F4, F5 — 실제로 이 브래킷 문제에 부딪힘.)*
+15. **합성 운전자 분포가 실제 운전과 안 맞음** → 정책이 scripted 기동에 overfit.
+    → 다양한 운전자 프로파일 생성기 + 실제 녹화 트레이스에 일찍 투자.
 
 ---
 
-## 19. Biggest technical risks, ranked
+## 19. 가장 큰 기술 리스크, 순위
 
-1. **Feasibility bracket (too easy / too hard).** If RL cannot beat a tuned PID,
-   or if nothing can prevent spills, the project has no result. Mitigation:
-   baselines + MPC ceiling in phase 1; deliberate plant tuning; residual RL.
-2. **Slosh model choice.** Wrong choice (particle fluid) costs the step budget
-   and determinism; too-simple choice (quasi-static) removes the problem.
-   Mitigation: analytic ROM behind an interface, validated against a higher
-   fidelity model.
-3. **Sim-to-real gap.** Latency, sensor imperfections, actuator non-idealities,
-   unmodeled slosh dynamics. Mitigation: model all of it from day one;
-   domain-randomize; test across slosh model classes.
-4. **Determinism / reproducibility.** Without it, RL debugging and evaluation are
-   unreliable. Mitigation: fixed timestep, seeded RNG, slosh ODE outside PhysX.
-5. **Driver data distribution.** Synthetic drivers not covering real input.
-   Mitigation: driver-profile generator + recorded human traces as held-out
-   data.
-6. **Scope creep in the vehicle model.** Time sunk into WheelColliders / tire
-   models for a subsystem the AI does not control. Mitigation: fixed
-   medium-low-fidelity vehicle spec.
-7. **Reward hacking / sim-artifact exploitation.** Mitigation: effort/limit
-   penalties; cross-model validation.
+1. **Feasibility 브래킷 (너무 쉬움 / 너무 어려움).** RL 이 튜닝된 PID 를 못
+   이기거나 아무것도 스필을 못 막으면 프로젝트에 결과가 없음. 완화: phase 1 에
+   베이스라인 + MPC 천장; 의도적 플랜트 튜닝; 잔차 RL.
+2. **슬로시 모델 선택.** 잘못된 선택(입자 유체)은 스텝 예산과 결정론을 비용;
+   너무 단순(quasi-static)은 문제를 제거. 완화: 인터페이스 뒤 분석 ROM,
+   고정밀 모델에 검증.
+3. **Sim-to-real 갭.** 지연, 센서 결함, 액추에이터 비이상성, 미모델링 슬로시
+   동역학. 완화: 1일차부터 전부 모델링; 도메인 랜덤화; 슬로시 모델 클래스 간 테스트.
+4. **결정론 / 재현성.** 없으면 RL 디버깅과 평가가 신뢰 불가. 완화: 고정
+   timestep, seeded RNG, 슬로시 ODE PhysX 밖.
+5. **운전자 데이터 분포.** 합성 운전자가 실제 입력을 안 커버. 완화: 운전자
+   프로파일 생성기 + 홀드아웃 데이터로서 녹화 인간 트레이스.
+6. **차량 모델의 scope creep.** AI 가 제어 안 하는 서브시스템에 WheelCollider /
+   타이어 모델로 시간 소모. 완화: 고정된 중-저정밀도 차량 스펙.
+7. **Reward hacking / 시뮬 아티팩트 exploit.** 완화: effort/limit 패널티; 교차
+   모델 검증.
 
 ---
 
-## 20. Phase 1 — what to implement first
+## 20. Phase 1 — 무엇을 먼저 구현하나
 
-1. Unity project + this docs set + `frames-units-conventions.md` completed.
-2. `SimulationCore`: fixed-timestep scheduler, `IClock`, seeded RNG service.
-3. Vehicle: 3-DOF sprung mass + friction-circle bicycle model + parameterized
-   road. `IDriverInput` with a human (keyboard/gamepad) impl + 2–3 scripted
-   driver profiles + trace recording/playback.
-4. Tank rigid body on a 2-DOF actuated gimbal, pivot near tank CoM.
-5. `ISloshModel` + option B implementation (1 pendulum/axis, analytic, 2-way
-   coupled). Continuous overflow-volume estimate.
-6. Actuator model per axis: motor+gear OR calibrated 2nd-order, + torque
-   saturation (peak + continuous) + rate limit + travel limit + backlash +
-   friction + transport delay.
-7. Sensor layer: vehicle IMU, tank IMU, 3–4 load cells, 2 encoders, 2
-   motor-current estimates, all with concrete noise/bias/delay/rate. Message
-   DTOs. Optional 1–3 point level sensors behind a flag.
-8. `ISensorBus` / `IActuatorBus` interfaces + in-process implementation.
-9. Baseline controllers: (a) specific-force alignment, (b) tuned PID, (c)
-   privileged full-state LQR/MPC (ceiling).
-10. Eval harness: fixed scenario set, spill + slosh-energy + effort metrics,
-    baseline comparison, full ground-truth logging (replayable schema).
-11. Playable human-drive scene with a simple visual tank + liquid proxy.
-12. **One** RL integration path: Gymnasium-style socket adapter + PPO
-    (SB3/CleanRL), asymmetric critic, frame-stack observation.
-13. Domain-randomization config (start narrow) with per-episode parameter
-    logging.
-14. Keep the docs in sync as decisions change.
+1. Unity 프로젝트 + 이 문서 셋 + `frames-units-conventions.md` 완성.
+2. `SimulationCore`: 고정 timestep 스케줄러, `IClock`, seeded RNG 서비스.
+3. 차량: 3-DOF 스프렁매스 + friction-circle bicycle 모델 + 파라미터화 도로.
+   `IDriverInput` 에 인간 (키보드/게임패드) 구현 + scripted 운전자 프로파일 2~3
+   개 + 트레이스 녹화/재생.
+4. 2-DOF 작동 짐벌 위 탱크 강체, 피벗 탱크 CoM 근처.
+5. `ISloshModel` + 옵션 B 구현 (축당 진자 1개, 분석, 양방향 결합). 연속
+   overflow-부피 추정.
+6. 축당 액추에이터 모델: 모터+기어 또는 보정된 2차, + 토크 포화 (피크 + 연속)
+   + rate 한계 + travel 한계 + 백래시 + 마찰 + 전송 지연.
+7. 센서 층: 차량 IMU, 탱크 IMU, 로드셀 3~4개, 엔코더 2개, 모터전류 추정 2개,
+   전부 구체적 노이즈/바이어스/지연/율. 메시지 DTO. 플래그 뒤 옵션 점 레벨 센서.
+8. `ISensorBus` / `IActuatorBus` 인터페이스 + in-process 구현. *(현재: `IController`
+   seam + DTO 가 계약; 명시적 버스 타입은 연기.)*
+9. 베이스라인 컨트롤러: (a) specific-force alignment, (b) 튜닝된 PID, (c) 특권
+   full-state LQR/MPC (천장).
+10. 평가 하네스: 고정 시나리오 셋, 스필 + 슬로시-에너지 + effort 지표,
+    베이스라인 비교, 전체 ground-truth 로깅 (재생 가능 스키마).
+11. 단순 시각 탱크 + 액체 프록시를 가진 플레이 가능 수동 주행 씬.
+12. **하나의** RL 통합 경로: Gymnasium 스타일 소켓 어댑터 + PPO (SB3/CleanRL),
+    비대칭 critic, 프레임스택 관측.
+13. 도메인 랜덤화 config (좁게 시작), 에피소드당 파라미터 로깅.
+14. 결정이 바뀌면 문서를 동기화 유지.
 
-**Phase-1 done when:** a human can drive and see the tank stabilized by the
-analytic baseline; the RL adapter can run PPO end-to-end on the headless env;
-and the eval harness reports PID-floor and MPC-ceiling numbers on the fixed
-scenario set.
+**Phase-1 완료 조건:** 인간이 운전하고 분석적 베이스라인이 탱크를 안정화하는 걸
+볼 수 있음; RL 어댑터가 헤드리스 env 에서 PPO 를 end-to-end 실행 가능; 평가
+하네스가 고정 시나리오 셋에서 PID-바닥과 MPC-천장 수치를 보고.
 
 ---
 
-## 21. Explicitly NOT in phase 1
+## 21. Phase 1 에 명시적으로 없는 것
 
-- ROS 2 install or integration (only the message DTOs + bus interface).
-- Unity ML-Agents (unless it later replaces the socket adapter, behind an
-  adapter).
-- SPH / particle-fluid plugin (Obi, Zibra), CFD.
-- Shallow-water and multi-mode slosh models (phase 2 — interface only in
-  phase 1).
-- Recurrent / system-ID policy (phase 2).
-- Full vehicle / tire model, WheelColliders.
-- Second slosh mode, pitch-roll coupling, swirl slosh, baffles.
-- Look-ahead / preview sensors.
-- Photoreal rendering.
-- Hardware-in-the-loop, real servo/IMU calibration, physical rig (phase 3).
-- CI/CD, Docker/k8s, cloud training infrastructure.
+- ROS 2 설치나 통합 (메시지 DTO + 버스 인터페이스만).
+- Unity ML-Agents (나중에 어댑터 뒤에서 소켓 어댑터를 대체하지 않는 한).
+- SPH / 입자 유체 플러그인 (Obi, Zibra), CFD.
+- 얕은물과 다중모드 슬로시 모델 (phase 2 — phase 1 에서는 인터페이스만).
+  *(실제로는 얕은물이 findings F3 때문에 phase 1 에 앞당겨짐.)*
+- Recurrent / 시스템-ID 정책 (phase 2).
+- 전체 차량 / 타이어 모델, WheelCollider.
+- 2번째 슬로시 모드, pitch-roll 결합, swirl 슬로시, 배플.
+- Look-ahead / preview 센서.
+- 포토리얼 렌더링.
+- Hardware-in-the-loop, 실제 서보/IMU 보정, 물리 리그 (phase 3).
+- CI/CD, Docker/k8s, 클라우드 학습 인프라.
