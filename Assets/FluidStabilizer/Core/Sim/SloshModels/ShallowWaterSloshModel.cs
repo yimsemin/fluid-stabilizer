@@ -70,7 +70,6 @@ namespace FluidStabilizer.Core.Sim.SloshModels
         // ---- state, row-major k = i*_ny + j ----
         private double[] _h, _hu, _hv;
         private double[] _rimBar;   // low-passed surface height, used for overtopping
-        private double _breakDissipation; // energy removed by the breaking sink this step (J)
         // x-face fluxes: (_nx+1) × _ny, index fi*_ny + j
         private double[] _fxh, _fxhu, _fxhv;
         // y-face fluxes: _nx × (_ny+1), index i*(_ny+1) + fj
@@ -159,7 +158,6 @@ namespace FluidStabilizer.Core.Sim.SloshModels
             SubStepCapHits = 0;
             VelocityClampHits = 0;
             BreakingEnergyRemoved = 0.0;
-            _breakDissipation = 0.0;
 
             // Reflected inertia — the analytic equivalent-mechanical estimate,
             // replicated from PendulumSloshModel so the actuator loop sees the
