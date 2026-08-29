@@ -49,6 +49,7 @@ namespace FluidStabilizer.Rl
         private long _seq;
         private bool _connected, _warned;
         private long _retryAtSeq;   // while dropped, re-probe the server every ~2 s of control ticks
+        private int _retriesLeft = 3;
 
         public RemotePolicyController(
             string host = "127.0.0.1", int port = 5601, int frameStack = 6,
@@ -73,6 +74,8 @@ namespace FluidStabilizer.Rl
             _encoder = new ObservationEncoder(_frameStack);
             _lastAp = _lastAr = 0.0;
             _seq = 0;
+            _retriesLeft = 3;
+            _retryAtSeq = 0;
 
             TryConnect();
             if (_connected)
@@ -93,7 +96,12 @@ namespace FluidStabilizer.Rl
 
             if (!_connected)
             {
-                if (_seq >= _retryAtSeq) { TryConnect(); _retryAtSeq = _seq + 200; }
+                if (_seq >= _retryAtSeq && _retriesLeft > 0)
+                {
+                    _retriesLeft--;
+                    TryConnect();
+                    _retryAtSeq = _seq + 200;
+                }
                 if (!_connected) return StabilizerCommand.Hold(_seq++, sensors.StampSeconds);
             }
 
