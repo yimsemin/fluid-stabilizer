@@ -443,6 +443,30 @@ language-agnostic env boundary:
 If the bridge later becomes a throughput bottleneck, *then* evaluate ML-Agents
 behind an adapter. Not before.
 
+### On deployment — the policy is a separate process (owner decision 2026-08-29)
+
+The finished demo does **not** bake the trained policy into the Unity binary
+(the earlier "ONNX-in-Unity, no Python at runtime" idea). A real robot keeps its
+body, its brain and its training rig as separate things that talk over a link, so
+the sim mirrors that:
+
+- **Unity = the plant** — world + body + sensors + actuators. Publishes sensor
+  messages, consumes command messages. ① rigid is a mechanical config and lives
+  here; ② rule-based is an engine-free `IController` (in-process now, portable);
+  it does **not** contain the learned policy.
+- **The policy is its own process** (`serve_policy.py`), connected over the same
+  length-prefixed TCP bridge that fronts training — the stand-in for the
+  onboard-compute ↔ sensors/actuators link. Unity's `RemotePolicyController`
+  (engine-free, in `FluidStabilizer.Rl`) is the client; it runs
+  `ObservationEncoder` locally and sends the encoded vector, gets an action back,
+  and falls back to a locked hold if the server is absent.
+- **ONNX is an interchange format** for handing a trained checkpoint to that
+  process — a hand-rolled weights file is an acceptable draft substitute.
+
+Trade-off: the demo is "run the Unity app **and** the policy process". For a
+learning artefact that is the point. Full rationale in
+[project-goals.md](project-goals.md) → "Final-product architecture".
+
 ---
 
 ## 13. Domain randomization targets
