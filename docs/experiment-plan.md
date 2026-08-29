@@ -47,8 +47,10 @@ that the task is winnable at all). Those are the next work, before any more RL.
      replays one trace through three stabilizers at once, side by side, over the
      same road, with a per-lane spill / near-rim / slosh-energy panel. This is
      the visual headline.
-   - **2b** ⬜ — render the road (grade, bank, roughness, potholes) so the
-     disturbance is visible under each truck.
+   - **2b** ✅ *done 2026-08-29* — `RoadRibbon`: a scrolling road strip under
+     each truck showing grade, bank, roughness and potholes, rebuilt from an
+     independent `RoadModel` replica (same seed/config as the physics). Visible
+     only with the road on (`G`).
    - **2c** ⬜ — a headless `TraceEvaluator`: per-drive litre tables across
      controllers × both slosh models, for the written result.
 3. **Feasibility ceiling (hindsight).** For each fixed recorded drive, search
