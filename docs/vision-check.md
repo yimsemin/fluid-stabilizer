@@ -13,7 +13,7 @@ the play scene, a build) or a screenshot/short clip — not just a log file.
 |---|---|---|---|---|
 | A · experiment profile | 2026-08-29 | edit `experiment.txt`, press Play — the scene should follow the file | ⬜ ok / ⬜ off | |
 | B · residual RL wiring | 2026-08-29 | `RlServerLauncher.Serve` with `-rlBaseline hold` — server boots; the composed name reads "RL residual on Hold …" in the log | ⬜ | |
-| C · BC warm start | | | ⬜ | |
+| C · BC warm start | 2026-08-29 | `FluidStabilizer ▸ Export BC Dataset`, then `python bc_pretrain.py`, then `train_ppo.py --init-actor runs/bc/actor.pt --total-steps 20000` — trains, no crash, checkpoint written | ⬜ | draft ran: return flat ≈ −2280, stable (not the −3200 from-scratch cliff). Real training is a later compute step. |
 | D · ONNX in Unity | | | ⬜ | |
 | E · 3-way comparison in app | | | ⬜ | |
 | F · standalone build | | | ⬜ | |

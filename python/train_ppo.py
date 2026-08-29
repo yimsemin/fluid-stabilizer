@@ -112,6 +112,9 @@ def main():
     p.add_argument("--max-grad-norm", type=float, default=0.5)
     p.add_argument("--seed", type=int, default=1)
     p.add_argument("--run-name", default=None)
+    p.add_argument("--init-actor", default=None,
+                   help="behaviour-cloning checkpoint from bc_pretrain.py — warm-starts "
+                        "actor_mean + the obs whitener (experiment-plan step C)")
     args = p.parse_args()
 
     torch.manual_seed(args.seed)
@@ -136,6 +139,19 @@ def main():
     priv_rms = RunningMeanStd(priv_dim)
     ret_rms = RunningMeanStd()          # running std of the discounted return
     running_ret = 0.0
+
+    if args.init_actor:
+        ck = torch.load(args.init_actor, map_location=device, weights_only=False)
+        assert ck["obs_dim"] == obs_dim and ck["act_dim"] == act_dim, "BC checkpoint shape mismatch"
+        agent.actor_mean.load_state_dict({k: v.to(device) for k, v in ck["actor_mean"].items()})
+        if "actor_logstd" in ck:
+            agent.actor_logstd.data.copy_(torch.as_tensor(ck["actor_logstd"]).to(device))
+        # keep the BC whitener; nudge count high so rollouts barely shift it
+        obs_rms.mean = np.asarray(ck["obs_rms_mean"], dtype="float64").copy()
+        obs_rms.var = np.asarray(ck["obs_rms_var"], dtype="float64").copy()
+        obs_rms.count = 1.0e5
+        print(f"[init] actor warm-started from {args.init_actor} "
+              f"(bc={ck.get('bc', {})})")
 
     N = args.rollout
     obs_buf = torch.zeros(N, obs_dim, device=device)
