@@ -31,6 +31,7 @@ namespace FluidStabilizer.Core.Sim
         private readonly SensorSuite _sensors;
 
         private double _distanceTraveled;
+        private double _roadHeadingRad;
         private RoadInput _lastRoad;
 
         private readonly int _latencySensorSteps;
@@ -132,10 +133,12 @@ namespace FluidStabilizer.Core.Sim
             _worstFreeboard = double.PositiveInfinity;
             _sloshEnergyIntegral = 0;
             _distanceTraveled = 0.0;
+            _roadHeadingRad = 0.0;
             _lastRoad = _road.Sample(0.0);
 
             // Prime derived state at t = 0 without advancing time.
-            VehicleState = _vehicle.Step(DriverControls.Neutral, _lastRoad, 0.0);
+            VehicleState = _vehicle.Step(DriverControls.Neutral, _lastRoad,
+                _roadHeadingRad, _cfg.Road.RoadHalfWidthM, _cfg.Road.Enabled, 0.0);
             TankState = TankKinematics.Compute(VehicleState, _gimbal.State, _cfg.Gimbal.PivotInVehicle);
             LatestSensorBundle = _sensors.Sample(0.0, VehicleState, _gimbal.State, TankState, _lastSlosh);
             LatestGroundTruth = BuildGroundTruth();
@@ -153,8 +156,11 @@ namespace FluidStabilizer.Core.Sim
 
             RoadInput road = _road.Sample(_distanceTraveled);
             _lastRoad = road;
-            VehicleState v = _vehicle.Step(controls, road, dt);
-            _distanceTraveled += Math.Abs(v.Speed) * dt;
+            VehicleState v = _vehicle.Step(controls, road,
+                _roadHeadingRad, _cfg.Road.RoadHalfWidthM, _cfg.Road.Enabled, dt);
+            double dDistance = Math.Abs(v.Speed) * dt;
+            _distanceTraveled += dDistance;
+            _roadHeadingRad += road.Curvature * dDistance;
 
             // The gimbal sees the previous step's slosh reaction torque as an
             // external load (explicit one-step-lag coupling — stable at 600 Hz

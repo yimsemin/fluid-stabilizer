@@ -89,6 +89,17 @@ namespace FluidStabilizer.Core.Sim
 
         /// <summary>Initial speed (m/s).</summary>
         public double InitialSpeed = 12.0;
+
+        // --- lane-keeping (only active when the road is on) ---
+        // The driver has full steering authority. The road's curvature is
+        // followed automatically (so a hands-off truck doesn't leave the road on
+        // a bend), but there is only a *weak* pull back toward the road centre —
+        // enough that the driver can change lanes and hold a chosen lane for a
+        // while. The road edge is a firm wall.
+        /// <summary>Weak return-to-centre yaw gain (1/s per metre of offset, ÷ speed).</summary>
+        public double LaneReturnGain = 0.12;
+        /// <summary>Firm restoring yaw gain once past the road edge (per metre over).</summary>
+        public double RoadEdgeGain = 0.9;
     }
 
     [Serializable]
@@ -164,6 +175,14 @@ namespace FluidStabilizer.Core.Sim
         /// <summary>Peak centreline curvature, rad/m (~0.004 ≈ a 250 m-radius highway curve).</summary>
         public double CurvatureAmplitudeRadPerM = 0.004;
         public double CurvatureWavelengthM = 180.0;
+
+        // ---- road geometry (for the lane model + rendering) ----
+        /// <summary>Width of one lane, m.</summary>
+        public double LaneWidthM = 3.5;
+        /// <summary>Number of lanes (both directions). 4 → a ~14 m carriageway.</summary>
+        public int LaneCount = 4;
+        /// <summary>Half the drivable width (m). Past this the truck hits the firm edge.</summary>
+        public double RoadHalfWidthM => 0.5 * LaneCount * LaneWidthM;
 
         // ---- curve superelevation / cross-slope ----
         /// <summary>Banking into the curve: superelevation (rad) per unit curvature (rad/m). Clamped to ±0.08.</summary>

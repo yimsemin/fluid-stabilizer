@@ -36,15 +36,32 @@ drawn *last* in `Reset`, so the grade/bank/roughness/event RNG streams are
 byte-identical to before this channel existed (only the RoughRoad* scenarios,
 which opt in, see new behaviour — their baseline numbers need a re-sweep).
 
-## The truck follows the road (2026-08-29)
+## The truck drives the road — the lane model (2026-08-29)
 
-Originally the road was a pure vertical/tilt disturbance and the truck drove
-wherever the driver steered — there was nothing to *follow*. Now
-`VehicleModel.Step` adds `roadYawRate = speed · road.Curvature` to the steer-
-derived yaw rate, so on a curve the truck turns on its own and the driver is
-keeping it in the lane. This makes "record a drive on course N, replay it" a
-coherent idea, and adds cornering (a lateral slosh disturbance) to the mix. With
-the road off, `Curvature` is 0 and nothing changes.
+The road is a **course you drive**, not a rail. `VehicleModel.Step` (road on
+only):
+
+- **Driver has full steering authority** — `Steer` maps to a road-wheel angle
+  and yaws the truck like a normal bicycle model.
+- **The curvature is followed automatically** on top of that
+  (`roadYawRate = speed · road.Curvature`), so a hands-off truck tracks a bend
+  rather than driving off the outside of it.
+- **Weak return-to-centre** (`LaneReturnGain`) — a hands-off truck drifts back
+  toward the road centre over ~10 s, but the pull is light enough that the
+  driver can move to another lane and sit there.
+- **Firm road edge** — past `RoadHalfWidthM` a `RoadEdgeGain` yaw correction
+  (applied *outside* the friction circle — it's a guardrail, not a tyre force)
+  plus a hard position clamp at `RoadHalfWidthM + 1.2 m` keep the truck on the
+  road.
+
+`VehicleState` exposes `LateralOffsetFromRoadCentre`, `HeadingErrorFromRoad` and
+`RoadHeadingRad`; `SimulationLoop` integrates the road heading
+(`_roadHeadingRad += curvature · Δdistance`). `RoadRibbon` uses the lateral
+offset to draw the road at the truck's real lane position.
+
+Cornering also adds a lateral slosh disturbance. With the road off, `Curvature`
+is 0, the lane model is skipped entirely, and behaviour is byte-identical to
+before.
 
 ## Suspension heave
 

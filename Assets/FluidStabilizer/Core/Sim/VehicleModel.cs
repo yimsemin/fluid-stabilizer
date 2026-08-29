@@ -19,6 +19,13 @@ namespace FluidStabilizer.Core.Sim
         public double Speed;                         // forward speed, m/s
         public double LongitudinalAcceleration;      // m/s²
         public double LateralAcceleration;           // m/s²
+
+        /// <summary>Signed distance from the road centreline (m, +ve = toward road-left). 0 when the road is off.</summary>
+        public double LateralOffsetFromRoadCentre;
+        /// <summary>Truck heading minus the road heading (rad). 0 when the road is off.</summary>
+        public double HeadingErrorFromRoad;
+        /// <summary>Absolute road heading at the truck (rad, integrated curvature). 0 when the road is off.</summary>
+        public double RoadHeadingRad;
     }
 
     /// <summary>
@@ -38,6 +45,7 @@ namespace FluidStabilizer.Core.Sim
         private double _speed;
         private double _yaw;
         private Double3 _posWorld;
+        private double _lateralOffset;   // m from the road centreline (road on only)
         private double _lastLongAccel;
         private double _lastLatAccel;
         private double _lastYawRate;
@@ -56,6 +64,7 @@ namespace FluidStabilizer.Core.Sim
             _speed = _cfg.InitialSpeed;
             _yaw = 0.0;
             _posWorld = Double3.Zero;
+            _lateralOffset = 0.0;
             _pitch.Reset();
             _roll.Reset();
             _heave.Reset();
@@ -65,31 +74,53 @@ namespace FluidStabilizer.Core.Sim
         }
 
         public VehicleState Step(DriverControls controls, RoadInput road, double dt)
+            => Step(controls, road, roadHeadingRad: 0.0, roadHalfWidth: 0.0, roadActive: false, dt);
+
+        public VehicleState Step(DriverControls controls, RoadInput road,
+            double roadHeadingRad, double roadHalfWidth, bool roadActive, double dt)
         {
             // --- longitudinal ---
             double aLongDesired = controls.Throttle * _cfg.MaxAccel - controls.Brake * _cfg.MaxBrake;
             // gravity component along a graded road opposes climbing
             aLongDesired -= MathD.StandardGravity * Math.Sin(road.Grade);
 
-            // --- lateral from steering (bicycle) + following the road's curve ---
-            // The road curvature turns the truck on its own (the driver is
-            // "staying in the lane"); the steer input is a correction on top
-            // (lane changes, drift, recovering a badly-taken curve).
+            // --- lateral from steering (bicycle) ---
+            // The driver has full steering authority. With the road on, the
+            // curvature is followed automatically (so the truck doesn't leave the
+            // road on a bend), there is only a *weak* pull back toward centre —
+            // enough that the driver can change lanes and hold a chosen one — and
+            // a firm wall at the road edge.
             double steerAngle = controls.Steer * (25.0 * MathD.Deg2Rad); // ±25° road-wheel angle at full lock
             double driverYawRate = _speed * Math.Tan(steerAngle) / Math.Max(0.1, _cfg.Wheelbase);
-            double roadYawRate = _speed * road.Curvature;
-            double yawRate = roadYawRate + driverYawRate;
-            double aLat = _speed * yawRate;
 
-            // --- friction circle ---
+            // Tyre-force yaw (driver + follow the bend + weak centring) — this is
+            // what the friction circle limits.
+            double tyreYawRate = driverYawRate;
+            double headingErr = 0.0;
+            double edgeYawRate = 0.0;
+            if (roadActive)
+            {
+                headingErr = MathD.WrapPi(_yaw - roadHeadingRad);
+                tyreYawRate += _speed * road.Curvature
+                               - _cfg.LaneReturnGain * _lateralOffset / Math.Max(4.0, _speed);
+                double over = Math.Abs(_lateralOffset) - roadHalfWidth;
+                if (over > 0.0)
+                    edgeYawRate = -Math.Sign(_lateralOffset) * _cfg.RoadEdgeGain * over; // a guardrail, not a tyre force
+            }
+
+            double aLat = _speed * tyreYawRate;
+
+            // --- friction circle (tyre forces only) ---
             double aMag = Math.Sqrt(aLongDesired * aLongDesired + aLat * aLat);
             if (aMag > _cfg.FrictionLimit && aMag > 1e-9)
             {
                 double scale = _cfg.FrictionLimit / aMag;
                 aLongDesired *= scale;
                 aLat *= scale;
-                yawRate *= scale;
+                tyreYawRate *= scale;
             }
+
+            double yawRate = tyreYawRate + edgeYawRate;
 
             // --- integrate speed (no reverse) ---
             double newSpeed = _speed + aLongDesired * dt;
@@ -110,6 +141,20 @@ namespace FluidStabilizer.Core.Sim
             var headingDir = new Double3(Math.Cos(_yaw), Math.Sin(_yaw), 0.0);
             Double3 velWorld = headingDir * _speed;
             _posWorld += velWorld * dt;
+
+            // --- lateral position within the road ---
+            if (roadActive)
+            {
+                headingErr = MathD.WrapPi(_yaw - roadHeadingRad);
+                _lateralOffset += _speed * Math.Sin(headingErr) * dt;
+                // hard backstop: the truck physically cannot leave the road
+                double lim = roadHalfWidth + 1.2;
+                _lateralOffset = MathD.Clamp(_lateralOffset, -lim, lim);
+            }
+            else
+            {
+                _lateralOffset = 0.0;
+            }
 
             // --- suspension: body pitch/roll from load transfer ---
             double pitchTarget = _cfg.PitchPerLongAccel * aLong + road.Grade;
@@ -150,7 +195,10 @@ namespace FluidStabilizer.Core.Sim
                 AngularAccelerationBody = alphaBody,
                 Speed = _speed,
                 LongitudinalAcceleration = aLong,
-                LateralAcceleration = aLat
+                LateralAcceleration = aLat,
+                LateralOffsetFromRoadCentre = _lateralOffset,
+                HeadingErrorFromRoad = headingErr,
+                RoadHeadingRad = roadActive ? roadHeadingRad : 0.0
             };
         }
     }
