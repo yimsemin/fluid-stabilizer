@@ -170,10 +170,20 @@ No more RL runs until two things exist: **recorded human drives** (done — the
 (offline hindsight trajectory optimisation on a fixed recorded drive). The
 ceiling is a hard gate: if a privileged/hindsight solution cannot beat the
 locked-Hold baseline on the recorded drives, the premise is adjusted before any
-RL. When RL resumes it is **residual RL** — policy = baseline + small correction,
-warm-started by behaviour-cloning the hindsight-optimal trajectories — which
-needs `RlEnvironment` to compose (baseline action + policy action) and
-checkpoint-resume in `train_ppo.py`.
+RL.
+
+**Update 2026-08-29 — the ceiling was built and run (`HindsightOptimizer`), and
+the gate does NOT pass. See finding F5.** On 6 held-out drives, the
+hindsight-optimal gimbal-rate trajectory spills 2–6 L *more* than a locked tank
+(pendulum ROM; far worse under shallow water). The actuator's own servo,
+commanding zero, already loses ≈ 5–7 L to a mechanically locked joint. **Residual
+RL is on hold** until the premise is adjusted (freeboard, road severity, or a
+hybrid lock-capable action space so the residual baseline is the 19 L locked tank
+rather than the 25 L sagging servo) and a step-3 re-run shows hindsight beating
+locked Hold. When RL does resume it is still **residual RL** — policy = baseline +
+small correction, warm-started by behaviour-cloning the
+`Logs/hindsight/*.traj.csv` trajectories — which needs `RlEnvironment` to compose
+(baseline action + policy action) and checkpoint-resume in `train_ppo.py`.
 
 ## Notes / risks
 

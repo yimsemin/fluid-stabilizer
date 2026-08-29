@@ -89,11 +89,13 @@ happened — it does not learn (the F1/F4 anticipation cliff, not a bug;
 feature branches).
 
 **Next (the agreed plan — [docs/experiment-plan.md](docs/experiment-plan.md)):**
-rebuild the evaluation around the owner's recorded drives (per-drive litres, both
-slosh models); build a feasibility ceiling (offline hindsight trajectory
-optimisation) as a decision gate; then residual RL with a behaviour-cloning
-warm-start; then domain randomization and Phase 1.5. **Do not re-run
-PPO-from-scratch** — the plan is residual RL after the ceiling.
+the recorded-drive evaluation and the feasibility ceiling (`HindsightOptimizer`,
+step 3) are both built and run. **The decision gate did not pass — finding F5:**
+with full hindsight and real actuator limits the best gimbal trajectory still
+spills more than a mechanically locked tank on the owner's recorded drives.
+**Residual RL is on hold** pending a premise adjustment (tank freeboard, road
+severity, or a hybrid lock-capable action space) and a step-3 re-run. **Do not
+start residual RL or re-run PPO-from-scratch until that gate passes.**
 
 ## Docs discipline
 
