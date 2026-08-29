@@ -33,63 +33,77 @@ A clean **three-way comparison**, same scenarios, same metrics:
 |---|---|---|
 | ① | Tank bolted rigidly to the truck (no stabilizer) | ✅ `HoldController` = a mechanically locked joint (decision D5) |
 | ② | Tank tilted by a fixed rule (specific-force alignment / PID) | ✅ `SpecificForceAlignmentController`, `PidController` |
-| ③ | **Physical AI trained (partly) on the owner's own driving** | ⬜ RL not yet run; training-on-recorded-traces not yet built |
+| ③ | **Physical AI trained (partly) on the owner's own driving** | 🟡 residual-RL + BC-warm-start pipeline built and runs end-to-end (draft steps B–C); not yet a trained-and-winning policy |
+| ④ | Offline hindsight ceiling — best achievable spill with full future knowledge | ✅ `HindsightOptimizer` (decision gate, finding F5) |
 
-The goal is to reach a defensible conclusion that **③ beats ① and ②** in the
-regime that matters (realistic driving on a real road). Findings F1–F4 show ①
-and ② are already a strong bar — beating a rigid tank needs *anticipation*, which
-is exactly what ③ is for. That is a feature: it makes the comparison meaningful.
+The goal is a defensible conclusion about **how ③ compares to ①, ②, and the ④
+ceiling** in the regime that matters (realistic driving on a real road).
 
-If it turns out ③ cannot beat ① even with a real road and a good policy, that is
-still a valid, publishable learning outcome — but the plan is tuned to keep the
-task inside the bracket where a learned policy *can* win (design-review §13–§14).
+**Reframed 2026-08-29 (owner):** the goal is *not* "prove ③ wins" — it is to
+build and understand the whole pipeline and report what we find honestly.
+Findings F1–F5 show ① (rigid) is a very strong bar: even the ④ hindsight ceiling,
+with full future knowledge, does not beat a locked tank on the owner's recorded
+drives at the current fill/road. So the honest draft result may well be "① wins
+here", with "the regime where ③ would win" as the documented follow-up. That is a
+valid learning outcome. The plan (experiment-plan.md → "The draft") builds the
+whole thing first, then adjusts the premise.
 
-## Final-product architecture (owner decision, 2026-08-29)
+## Final-product architecture (owner decision 2026-08-29, revised 2026-08-29)
 
-Three parts, cleanly separated — this mirrors the future ROS 2 split, so building
-it this way now *is* the sim-to-real preparation:
+**Revision:** the earlier version had the Unity app run a *baked ONNX policy with
+no Python at runtime*. The owner's call is that this collapses "the AI" into "the
+world" and hurts the learning goal. A real robot keeps its brain, its body, and
+its training rig as **separate things that talk over a link**. So the sim does
+too. Building it this way *is* the sim-to-real preparation.
 
 ```
-┌─────────────────────────────┐        ┌──────────────────────────────┐
-│  "REAL WORLD" — Unity app    │        │  LEARNING — Python (separate)  │
-│  (a compiled, self-contained │        │                                │
-│   program, not Editor-play)  │        │  • RL training (PPO, …)        │
-│                              │        │  • experiment / curriculum mgmt │
-│  • vehicle + road + tank +   │◄──────►│  • ideally a small GUI so many  │
-│    slosh + actuator + sensors│  TCP   │    driving runs and env-var     │
-│  • runs the controller OR a  │ bridge │    sweeps are easy to try       │
-│    baked policy (ONNX) for   │ (the   │                                │
-│    inference — no Python at   │ "ROS 2 │  Runtime dependency on Python:  │
-│    run time                  │  role")│  NONE. Training only.           │
-│  • ALL settings controlled   │        │                                │
-│    from inside Unity (a      │        │                                │
-│    control panel), not from  │        │                                │
-│    terminal flags            │        │                                │
-└─────────────────────────────┘        └──────────────────────────────┘
-                    ▲
-                    │  the bridge itself is a first-class, visual thing:
-                    │  you can SEE observations leave, actions come back,
-                    │  reward accumulate — so the pipeline is legible.
+┌──────────────────────────┐   ┌───────────────────────┐   ┌────────────────────┐
+│  THE WORLD + BODY         │   │  THE BRAIN            │   │  THE TRAINING RIG   │
+│  Unity app (compiled)     │   │  policy inference     │   │  Python, offline    │
+│                           │   │  process (Python)     │   │                     │
+│  • vehicle + road + tank  │◄─►│  • loads a trained    │   │  • PPO / residual RL │
+│    + slosh + actuator     │TCP│    checkpoint         │◄─►│  • BC warm-start     │
+│  • sensors OUT, commands  │(=  │  • obs in → action    │TCP│  • experiment mgmt   │
+│    IN                     │ROS│    out, deterministic  │   │  • ideally a small   │
+│  • ① rigid = a mechanical │ 2) │  • this is "onboard   │   │    GUI               │
+│    config, lives here     │   │    compute"           │   │                     │
+│  • ② rule-based = engine-  │   └───────────────────────┘   └────────────────────┘
+│    free C# IController,    │        ▲ the bridge is a first-class visual thing:
+│    portable (in-process    │        │ you SEE obs leave, actions return,
+│    for now)                │        │ reward accumulate — the pipeline is legible
+│  • control panel for all   │
+│    settings                │   ONNX (or a plain weights file) is the INTERCHANGE
+└──────────────────────────┘   FORMAT that hands a trained policy to the brain —
+                               it is not compiled into the Unity binary.
 ```
 
 Design intent:
 
-- **The Unity side is a finished program.** A menu build produces a standalone
-  app (macOS now, Windows later) that runs the simulation, the human-drive mode,
-  the baseline controllers, the evaluation harness, and inference from a trained
-  policy file. No Editor, no terminal.
-- **All configuration lives in a Unity control panel** — scenario, fill level,
-  road severity, which controller, driver profile, seed, run/record/evaluate
-  buttons, live metrics. The `-executeMethod` / `-rlPort …` command-line flags
-  stay only as a scripting back door.
-- **The Python side stays separate and is training-only.** It never runs when the
-  finished Unity app runs. It talks to Unity over the existing TCP bridge (the
-  stand-in for a ROS 2 link). A lightweight GUI (or at least a config-file +
-  launcher + TensorBoard workflow) lets the owner drive many times, record those
-  runs, and sweep environment variables without hand-editing scripts.
-- **The bridge is made visible**, because watching data flow between "the world"
-  and "the brain" is one of the best ways to understand how a Physical AI system
-  actually works.
+- **Unity = the plant.** The compiled app is the world and the robot body:
+  physics, road, tank, slosh, actuator, sensors, the human-drive mode, the
+  evaluation harness, and a control panel. It publishes sensor messages and
+  consumes command messages. ① rigid is a *mechanical* configuration and lives
+  here. It does **not** contain the learned policy.
+- **The policy runs as its own process** (`serve_policy.py` for now), connected
+  over the bridge — the stand-in for the onboard-compute ↔ sensors/actuators link
+  a real robot has. For the comparison, ② (rule-based C# `IController`, zero Unity
+  refs) runs in-process for simplicity but is portable to the same external shape;
+  ③ (learned) is always the external inference process.
+- **The trainer stays separate and offline.** It talks to a headless Unity
+  instance over the bridge. Never runs alongside the finished demo.
+- **ONNX is an interchange format**, not a runtime target inside Unity: the thing
+  you hand from "training rig" to "brain". A hand-rolled weights file is an
+  acceptable draft substitute.
+- **All configuration lives in a Unity control panel** — scenario, fill, road
+  severity, controller, driver, seed, run/record/evaluate, live metrics. The
+  `-executeMethod` / `-rl*` flags and `experiment.txt` stay as the scripting back
+  door.
+- **The bridge is made visible** — watching data flow between the world and the
+  brain is one of the best ways to understand a Physical AI system.
+
+Trade-off accepted: the finished demo is "run the Unity app **and** the policy
+process", not a single self-contained `.exe`. For a learning / portfolio artefact
+that is a feature — it shows the architecture — not a regression.
 
 ## Realism constraints (in, from day one)
 
@@ -105,21 +119,20 @@ model, look-ahead sensors, photoreal rendering, hardware-in-the-loop.
 
 ## Roadmap delta from this review
 
-> **Updated 2026-08-29 (step-back session).** The first RL run happened and its
-> lesson is the F1/F4 cliff (`docs/rl.md`). The reordered plan lives in
-> **[experiment-plan.md](experiment-plan.md)**; the short version:
+> **Updated 2026-08-29 (step-back + draft-first).** The first RL run's lesson is
+> the F1/F4 cliff; the feasibility ceiling (④) does not beat rigid (finding F5).
+> The owner's call: build the whole pipeline as a **draft (vertical slice)**
+> first, then adjust the premise. Live plan: **[experiment-plan.md](experiment-plan.md)**.
 
-1. **Road** — ✅ landed 2026-08-29.
-2. **Human trace record/replay** (phase-1 item 3) — ✅ landed 2026-08-29
-   (`DriverTrace`). The owner's recorded drives are now the real disturbance
-   data **and** the headline evaluation set.
-3. **Rebuild evaluation around recorded drives** — three-way (later four-way)
-   comparison on 3–5 held-out real drives, per drive, both slosh models.
-4. **Feasibility ceiling** — offline hindsight trajectory optimisation on a fixed
-   drive. **Decision gate: no RL until this beats the rigid baseline.**
-5. **Residual RL** (item 12, redone) — policy = baseline + correction,
-   behaviour-cloning warm-start. Replaces "run PPO from scratch".
-6. **Domain randomization + per-episode logging** (item 13).
-7. **Phase 1.5 — the product shell:** in-Unity control panel; standalone build
-   script; ONNX inference path in Unity; lightweight Python trainer GUI. Starts
-   after a first winning RL result exists — not before.
+1. **Road** — ✅ 2026-08-29.
+2. **Human trace record/replay** — ✅ 2026-08-29 (`DriverTrace`).
+3. **Rebuild evaluation around recorded drives** — ✅ 2026-08-29 (`TraceEvaluator`,
+   `ComparisonRunner`).
+4. **Feasibility ceiling** — ✅ 2026-08-29 (`HindsightOptimizer`). **Gate result:
+   does not beat rigid (F5)** → premise adjustment deferred until after the draft.
+5. **The draft (vertical slice)** — experiment profile ✅ · residual-RL wiring ✅ ·
+   BC warm-start ✅ · policy-serving process (this section's architecture) ⬜ ·
+   3-way comparison in the app ⬜ · standalone build ⬜.
+6. **Then:** premise adjustment (F5), a real RL run, domain randomization,
+   per-episode logging, the control panel and trainer GUI — as refinement passes
+   over a working whole.
