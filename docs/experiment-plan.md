@@ -23,8 +23,21 @@ that the task is winnable at all). Those are the next work, before any more RL.
 is in place, and the feasibility ceiling (step 3) has been computed — **the
 decision gate does not pass** (finding F5): with full hindsight and real actuator
 limits, the best gimbal trajectory still spills *more* than a mechanically locked
-tank on the owner's recorded drives. RL is on hold pending a premise adjustment
-(freeboard / severity / a lock-capable action space) — see step 3 below.
+tank on the owner's recorded drives.
+
+**Owner call, 2026-08-29 — draft first, then decide.** Rather than stopping to
+re-tune the premise now, the owner wants a **complete end-to-end draft** built
+first — record → residual RL (BC warm-start) → ONNX → in-Unity 3-way comparison →
+standalone build — *even if the rigid/rule-based option turns out better*. The
+point of the project is to build and understand the whole Physical-AI pipeline,
+not to prove ③ wins; whether it wins is a finding. The F5 premise adjustment
+happens *after* the draft exists, as a refinement pass over a working whole. The
+draft is built on the current hard operating point (recorded drives, road on,
+fill 0.62) — so the honest draft result may well be "① rigid wins" — but every
+number now lives in one editable file (`experiment.txt` /
+[`ExperimentProfile`](../Assets/FluidStabilizer/Core/Sim/ExperimentProfile.cs))
+so the operating point is cheap to change later. See **The draft (vertical
+slice)** below and [vision-check.md](vision-check.md).
 
 ## Where we are (done ✅ / not done ⬜)
 
@@ -111,6 +124,26 @@ tank on the owner's recorded drives. RL is on hold pending a premise adjustment
 5. **Domain randomization + per-episode logging**, then **Phase 1.5** — the
    product shell (in-Unity control panel, standalone build, ONNX inference in
    Unity, a light Python trainer GUI).
+
+## The draft (vertical slice) — owner decision 2026-08-29
+
+Build the whole pipeline end-to-end *once*, roughly, before perfecting any layer.
+Success = "it runs start to finish and I can see all three side by side", **not**
+"③ wins". Each step is one self-contained commit and gets a short demo +
+[vision-check.md](vision-check.md) entry.
+
+| # | step | state | notes |
+|---|---|---|---|
+| A | **Experiment profile** — one `experiment.txt` for fill / road / driver / episode / slosh, read by every runner | ✅ 2026-08-29 | `ExperimentProfile` + `ExperimentProfileStore`; wired into the play scene + RL server. The data model for the eventual control panel. |
+| B | **Residual RL wiring** — `RlEnvironment` composes `baseline action + policy correction` (baseline = locked-Hold or SFA) | ⬜ | the F1/F4-cliff fix; small `RlEnvironment` change + a launcher flag |
+| C | **Behaviour-cloning warm start** — pre-train the policy net on `Logs/hindsight/*.traj.csv`, then a short PPO run | ⬜ | not expecting a win — expecting a trained `.pt` that beats random |
+| D | **ONNX export + Unity inference** — export the MLP; run it in-engine as an `IController` | ⬜ | draft: a hand-rolled C# MLP forward pass reading exported weights (no `com.unity.sentis` dependency yet — that's a later decision) |
+| E | **3-way comparison in the app** — `ComparisonRunner` gets the ③ ONNX lane; a minimal in-Unity panel (pick profile, run, read per-lane litres) | 🟡 `ComparisonRunner` does ①②③-analytic | add the learned lane + a panel |
+| F | **Standalone build** — one menu item → self-contained app | ⬜ | `BuildPipeline` |
+
+Then: step back, fill in `vision-check.md`, and **only then** do the F5 premise
+adjustment (step 3 fail-branch) and steps 4–5 properly, as refinement passes over
+a working whole.
 
 ## The three concerns from the step-back session — resolved
 
