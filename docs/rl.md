@@ -65,7 +65,7 @@ python play.py --port 5555 --actor runs/<run>/actor.pt --episodes 20
 ```
 
 Launcher flags: `-rlPort -rlFill -rlSeconds -rlStack -rlDriver {highway|aggressive|scripted}
--rlSlosh {pendulum|shallow} -rlBriskness -rlAggression`.
+-rlSlosh {pendulum|shallow} -rlRoad {none|mild|rough} -rlBriskness -rlAggression`.
 
 **Curriculum** (manual for now): start `highway`, briskness ~0.4, fill ~0.45;
 once the reward plateaus, restart the server with a harder driver / fuller tank /

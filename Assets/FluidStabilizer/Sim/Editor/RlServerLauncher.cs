@@ -33,11 +33,14 @@ namespace FluidStabilizer.SimEditor
             string slosh = ArgStr(args, "-rlSlosh", "pendulum");
             double briskness = ArgDouble(args, "-rlBriskness", 0.6);
             double aggression = ArgDouble(args, "-rlAggression", 0.7);
+            string road = ArgStr(args, "-rlRoad", "none");
 
             RlEnvironment MakeEnv()
             {
                 var cfg = new SimulationConfig { EpisodeSeconds = seconds };
                 cfg.Slosh.FillRatio = fill;
+                if (road == "mild") { cfg.Road.Enabled = true; cfg.Road.Severity = 0.6; }
+                else if (road == "rough") { cfg.Road.Enabled = true; cfg.Road.Severity = 1.4; cfg.Road.EventsPerKm = 18.0; }
 
                 Func<ulong, FluidStabilizer.Contracts.IDriverInput> drv = driver switch
                 {
@@ -53,7 +56,7 @@ namespace FluidStabilizer.SimEditor
             }
 
             Debug.Log($"[rl] launching TrainingServer :{port} fill={fill} driver={driver} slosh={slosh} " +
-                      $"episode={seconds}s stack={stack}");
+                      $"road={road} episode={seconds}s stack={stack}");
             new TrainingServer(MakeEnv).Serve(port);
         }
 

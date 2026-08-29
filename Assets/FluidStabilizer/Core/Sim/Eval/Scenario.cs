@@ -68,6 +68,35 @@ namespace FluidStabilizer.Core.Sim.Eval
                 },
                 Driver = seed => new RandomManeuverDriver(seed, aggression: 0.7)
             },
+            new Scenario
+            {
+                // Gentle highway driving, but a real road: rolling grade, curve
+                // bank, surface roughness and the occasional pothole/joint. A
+                // rigidly-held tank transmits every bump to the liquid — the
+                // disturbance a learned/anticipatory policy is meant to reject.
+                Name = "RoughRoadHighway",
+                Config = () =>
+                {
+                    var c = new SimulationConfig { EpisodeSeconds = 40.0 };
+                    c.Slosh.FillRatio = 0.60;    // 0.48 m liquid ⇒ 0.32 m freeboard
+                    c.Road.Enabled = true;
+                    return c;
+                },
+                Driver = seed => new HighwayDriver(seed, briskness: 0.45)
+            },
+            new Scenario
+            {
+                Name = "RoughRoadLowFreeboard",
+                Config = () =>
+                {
+                    var c = new SimulationConfig { EpisodeSeconds = 40.0 };
+                    c.Slosh.FillRatio = 0.66;    // 0.53 m liquid ⇒ 0.27 m freeboard
+                    c.Road.Enabled = true;
+                    c.Road.Severity = 1.5;      // coarse / broken surface
+                    return c;
+                },
+                Driver = seed => new HighwayDriver(seed, briskness: 0.6)
+            },
         };
     }
 }

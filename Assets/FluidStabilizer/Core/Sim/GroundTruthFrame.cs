@@ -38,6 +38,11 @@ namespace FluidStabilizer.Core.Sim
         public double SloshKineticEnergy;
         public double MinFreeboard;
 
+        // Road under the wheels this step (for the HUD, logging, debugging)
+        public double RoadGrade;          // rad
+        public double RoadBank;           // rad
+        public double RoadSurfaceHeight;  // m
+
         // Accumulated over the episode
         public double CumulativeOverflowVolume;
     }

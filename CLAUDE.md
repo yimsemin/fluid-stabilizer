@@ -10,6 +10,10 @@ minimize liquid spillage. The AI does **not** drive. Full context:
 ## Read before working
 
 1. [docs/project-brief.md](docs/project-brief.md) — the goal (owner's vision).
+1b. [docs/project-goals.md](docs/project-goals.md) — the owner's **clarified
+   intent** (2026-08-29): the learning purpose, the three-way comparison as the
+   headline result, and the final-product architecture. Wins over older docs on
+   scope.
 2. [docs/design-review.md](docs/design-review.md) — critical review + the
    recommended architecture. **This is the source of truth for design
    decisions.**
@@ -71,9 +75,18 @@ and multi-mode models are phase-2 drop-in replacements. design-review §6.
 
 ## Current state
 
-Design + verified empty Unity project. **No feature code yet.** Environment,
-Git, and the Unity project are done and committed locally. **Waiting for the
-owner's decision on the design review** before implementing anything.
+Design approved; **phase 1 well underway** (see
+[docs/phase1-progress.md](docs/phase1-progress.md) for the live status). Built:
+the engine-free deterministic sim core, vehicle (3-DOF sprung mass +
+friction-circle) + road model, 2-DOF gimbal actuator with thermal limits, two
+slosh models (pendulum ROM + shallow water) under bracket discipline, sensor
+suite, baseline controllers, the evaluation harness, a playable human-drive
+scene, and the RL environment + TCP training bridge (Python trainer written, not
+yet run). Findings F1–F4 in [docs/findings.md](docs/findings.md). Session commits
+go straight to `main` (solo local repo — no feature branches).
+
+**Next:** run a first PPO job; human trace record/replay; domain randomization;
+then Phase 1.5 (the product shell — see project-goals.md).
 
 ## Docs discipline
 
