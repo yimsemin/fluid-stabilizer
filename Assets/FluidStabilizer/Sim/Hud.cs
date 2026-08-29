@@ -58,15 +58,20 @@ namespace FluidStabilizer.Sim
             GUILayout.Label($"slosh energy  {gt.SloshKineticEnergy:F1} J", _label);
             GUILayout.Space(8);
 
-            GUILayout.Label($"stabilizer: {Runner.ActiveStabilizer}" +
-                            (Runner.TimeScale < 1f ? "   [slow-mo]" : ""), _label);
+            string stab = Runner.ActiveStabilizer == StabilizerChoice.LearnedPolicy
+                ? loop.Controller.Name                       // shows "@host:port" or "offline → Hold"
+                : Runner.ActiveStabilizer.ToString();
+            GUILayout.Label($"stabilizer: {stab}" + (Runner.TimeScale < 1f ? "   [slow-mo]" : ""), _label);
             GUILayout.Label($"slosh model: {loop.SloshModel.Name}", _label);
+            GUILayout.Label($"profile: fill {cfg.Slosh.FillRatio:0.00}   " +
+                            $"road {(cfg.Road.Enabled ? $"on ×{cfg.Road.Severity:0.0}" : "off")}   " +
+                            $"tank {cfg.Slosh.TankHeightZ:0.00} m   (experiment.txt)", _label);
             GUILayout.EndArea();
 
-            GUILayout.BeginArea(new Rect(16, Screen.height - 92, 760, 88));
+            GUILayout.BeginArea(new Rect(16, Screen.height - 108, 820, 104));
             GUILayout.Label("W/S or triggers: throttle/brake   A/D or stick: steer", _label);
-            GUILayout.Label("Space: stabilizer on/off   0-3: pick stabilizer   M: slosh model   G: road   R: reset   T: slow-mo   Tab: camera", _label);
-            GUILayout.Label("P: record your drive   L: replay newest   C: compare stabilizers side-by-side", _label);
+            GUILayout.Label("Space: stabilizer on/off   0-4: pick stabilizer (4 = learned, needs serve_policy.py)   M: slosh model   G: road   R: reset   T: slow-mo   Tab: camera", _label);
+            GUILayout.Label("P: record your drive   L: replay newest   C: compare ①②③ side-by-side", _label);
             GUILayout.EndArea();
         }
 

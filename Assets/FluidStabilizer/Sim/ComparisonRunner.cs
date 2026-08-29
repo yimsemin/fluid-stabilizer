@@ -1,7 +1,10 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
+using FluidStabilizer.Contracts;
 using FluidStabilizer.Core.Sim;
 using FluidStabilizer.Core.Sim.Drivers;
+using FluidStabilizer.Rl;
 using UnityEngine;
 
 namespace FluidStabilizer.Sim
@@ -24,15 +27,22 @@ namespace FluidStabilizer.Sim
         public Transform RigTemplate;        // the SceneBuilder TruckRig — cloned per lane
         public Camera Camera;
 
-        [Tooltip("One lane per entry. RL joins once an ONNX inference path exists (phase 1.5).")]
+        [Tooltip("One lane per entry — the headline ①②③. The learned lane needs python/serve_policy.py; " +
+                 "if it is not running that lane shows '(offline)' and falls back to a locked Hold.")]
         public StabilizerChoice[] Lanes =
         {
-            StabilizerChoice.Off,                       // ① rigid tank
+            StabilizerChoice.Off,                        // ① rigid tank
             StabilizerChoice.SpecificForceAlignmentPlusI, // ② rule-based (PID)
-            StabilizerChoice.PrivilegedFeedforward,      // privileged reference
+            StabilizerChoice.LearnedPolicy,              // ③ learned policy (serve_policy.py)
         };
 
         public float LaneSpacing = 3.5f;   // one lane — the trucks sit in adjacent lanes of one shared road
+
+        [Header("Learned-policy lane (python/serve_policy.py)")]
+        public string PolicyHost = "127.0.0.1";
+        public int PolicyPort = 5601;
+        public int PolicyFrameStack = 6;
+        public int PolicyConnectTimeoutMs = 2000;
 
         /// <summary>Freeboard (m) below which a lane is "near the rim".</summary>
         public double NearRimMargin = 0.05;
@@ -42,6 +52,7 @@ namespace FluidStabilizer.Sim
         private sealed class Lane
         {
             public StabilizerChoice Choice;
+            public IController Controller;
             public SimulationLoop Loop;
             public GameObject Rig;
             public SimView View;
@@ -102,14 +113,12 @@ namespace FluidStabilizer.Sim
             float x0 = -(Lanes.Length - 1) * 0.5f * LaneSpacing;
             for (int i = 0; i < Lanes.Length; i++)
             {
+                IController ctrl = BuildLaneController(Lanes[i], trace);
                 var loop = new SimulationLoop(
-                    trace.ToConfig(),
-                    SimulationRunner.MakeController(Lanes[i]),
-                    new RecordedTraceDriver(trace),
-                    trace.MakeSloshModel());
+                    trace.ToConfig(), ctrl, new RecordedTraceDriver(trace), trace.MakeSloshModel());
                 loop.BeginEpisode(trace.Seed);
 
-                var lane = new Lane { Choice = Lanes[i], Loop = loop };
+                var lane = new Lane { Choice = Lanes[i], Controller = ctrl, Loop = loop };
 
                 if (withRigs && RigTemplate != null)
                 {
@@ -149,10 +158,26 @@ namespace FluidStabilizer.Sim
             Debug.Log($"[compare] '{trace.Label}' — {_lanes.Count} lanes: {string.Join(", ", Lanes.Select(SimulationRunner.ShortName))}");
         }
 
+        /// <summary>The learned lane is a bridge client; the rest are the engine-free analytic controllers.</summary>
+        private IController BuildLaneController(StabilizerChoice choice, DriverTrace trace)
+        {
+            if (choice != StabilizerChoice.LearnedPolicy)
+                return SimulationRunner.MakeController(choice);
+
+            string host = Runner != null ? Runner.PolicyHost : PolicyHost;
+            int port = Runner != null ? Runner.PolicyPort : PolicyPort;
+            int stack = Runner != null ? Runner.PolicyFrameStack : PolicyFrameStack;
+            return new RemotePolicyController(host, port, stack,
+                trace.ToConfig().Gimbal.MaxRateRadPerSec, PolicyConnectTimeoutMs, s => Debug.Log(s));
+        }
+
         public void Stop()
         {
             foreach (var l in _lanes)
+            {
+                if (l.Controller is IDisposable d) { try { d.Dispose(); } catch { } }
                 if (l.Rig != null) Destroy(l.Rig);
+            }
             _lanes.Clear();
 
             if (!Active) return;
@@ -290,8 +315,10 @@ namespace FluidStabilizer.Sim
                 DrawRect(r, new Color(0f, 0f, 0f, 0.72f));
                 if (isBest) DrawBorder(r, new Color(0.35f, 0.9f, 0.4f, 0.95f), 2f);
 
+                bool offline = l.Controller is RemotePolicyController rp && !rp.Connected;
+
                 GUILayout.BeginArea(new Rect(r.x + 12, r.y + 8, r.width - 24, r.height - 16));
-                GUILayout.Label(SimulationRunner.ShortName(l.Choice), _title);
+                GUILayout.Label(SimulationRunner.ShortName(l.Choice) + (offline ? "  (offline → Hold)" : ""), _title);
                 GUILayout.Space(2);
                 GUILayout.Label($"{l.SpillLitres:0.00} L", isBest ? Green(_big) : _big);
                 GUILayout.Label("spilled", _metric);

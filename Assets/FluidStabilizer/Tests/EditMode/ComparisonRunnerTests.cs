@@ -77,6 +77,30 @@ namespace FluidStabilizer.Tests
             }
         }
 
+        [Test]
+        public void LearnedPolicyLane_FallsBackToHold_WhenNoPolicyServerIsRunning()
+        {
+            var trace = MakeTrace(12);
+            var go = new GameObject("cmp-policy-test");
+            try
+            {
+                var cmp = go.AddComponent<ComparisonRunner>();
+                cmp.PolicyPort = 59_998;          // nothing listening
+                cmp.PolicyConnectTimeoutMs = 120; // keep the test quick
+                cmp.Lanes = new[] { StabilizerChoice.Off, StabilizerChoice.LearnedPolicy };
+
+                cmp.StartComparison(trace, withRigs: false);
+                var spill = cmp.RunToEndHeadless();
+
+                Assert.AreEqual(spill[StabilizerChoice.Off], spill[StabilizerChoice.LearnedPolicy], 1e-9,
+                    "no policy server → the learned lane must behave exactly like the locked Hold");
+            }
+            finally
+            {
+                Object.DestroyImmediate(go);
+            }
+        }
+
         private static double StandaloneSpillLitres(DriverTrace trace, StabilizerChoice choice)
         {
             var loop = new SimulationLoop(
