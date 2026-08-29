@@ -25,7 +25,7 @@ RL target.
 | `RlEnvironment` | `Rl/` | ✅ deterministic `Reset(seed)→obs`, `Step(action)→(obs, reward, terminated, truncated, privileged)` |
 | `TrainingServer` | `Rl/` | ✅ length-prefixed binary TCP bridge (one client); loopback-tested bit-identical to the in-process env |
 | `RlServerLauncher` | `Sim/Editor/` | ✅ `-executeMethod` entry point (headless Unity host) |
-| Python env + PPO | `python/` | 🟡 written, **not yet run** (needs `torch`); asymmetric-critic CleanRL-style PPO |
+| Python env + PPO | `python/` | ✅ asymmetric-critic CleanRL-style PPO; **first run 2026-08-29** — trains end-to-end against the headless server, checkpoints + TensorBoard OK. Reward not yet tuned; no long job / no F4 comparison yet |
 | Domain randomization | — | ⬜ item 13 |
 | Curriculum automation | — | ⬜ (restart the server with harder flags for now) |
 
@@ -45,24 +45,51 @@ RL target.
 
 ## Running it
 
+**Verified end-to-end 2026-08-29** (macOS arm64, M4 Max): the commands below
+train for real — 30 k steps / 10 episodes in ~22 s wall, checkpoint + TensorBoard
+logs written, `episode_return` ≈ −360 (untuned). No code changes were needed to
+get here; the earlier failures were the two gotchas called out below.
+
+> ⚠️ **Close the Unity Editor before starting the headless server.** Unity is
+> single-instance per project — if the Editor (or a stale `-batchmode` Unity, or
+> an `AssetImportWorker`) already holds the project, the `-executeMethod` launch
+> silently blocks / never binds the port. Check with
+> `pgrep -fl "Unity.app/Contents/MacOS/Unity"` and confirm `Temp/UnityLockfile`
+> is gone. Later this should become a `[MenuItem]` so the server can run from
+> inside an open Editor; not built yet.
+
 ```bash
-# 1. install the trainer (once), on the machine that will train
-cd python && python -m venv .venv && . .venv/bin/activate
+# 1. install the trainer (once), on the machine that will train.
+#    Any CPython 3.9–3.13 works; torch / gymnasium / tensorboard have arm64
+#    wheels. The committed python/.venv is 3.9.6 (CommandLineTools) and is fine.
+cd python && python3 -m venv .venv && . .venv/bin/activate
 pip install -r requirements.txt
 
-# 2. start the sim server (headless Unity, ~15 s to boot; leave it running)
+# 2. start the sim server (headless Unity; leave it running — Serve() blocks the
+#    main thread on an accept loop forever, that is normal, do NOT pass -quit).
+#    Log to a file so you can watch the boot; ~5 s warm, up to a minute cold.
 UNITY="/Applications/Unity/Hub/Editor/6000.5.10f1/Unity.app/Contents/MacOS/Unity"
 "$UNITY" -batchmode -nographics -projectPath . \
   -executeMethod FluidStabilizer.SimEditor.RlServerLauncher.Serve \
-  -rlPort 5555 -rlDriver highway -rlBriskness 0.5 -rlFill 0.5 -rlSlosh pendulum
+  -rlPort 5555 -rlDriver highway -rlBriskness 0.5 -rlFill 0.5 -rlSlosh pendulum \
+  -logFile Logs/rlserver.log &
+# wait for this line before connecting:  [rl] TrainingServer listening on 127.0.0.1:5555
+#   (the UnityEngine.Debug:ExtractStackTrace... block right after
+#    "[rl] launching TrainingServer" is NOT an error — batchmode attaches a
+#    stack trace to every Debug.Log.)
 
-# 3. train
-cd python && python train_ppo.py --port 5555 --total-steps 2_000_000
+# 3. train  (start short to confirm the loop, then go long)
+cd python && python train_ppo.py --port 5555 --total-steps 30000 --run-name smoke
+python train_ppo.py --port 5555 --total-steps 2_000_000
 tensorboard --logdir python/runs
 
 # 4. evaluate a checkpoint (compare mean return / spill against F4)
 python play.py --port 5555 --actor runs/<run>/actor.pt --episodes 20
 ```
+
+The server serves one client at a time and loops back to `accept` when the
+trainer disconnects, so you can re-run `train_ppo.py` against the same server
+process. Restart the server only to change the `-rl*` scenario flags.
 
 Launcher flags: `-rlPort -rlFill -rlSeconds -rlStack -rlDriver {highway|aggressive|scripted}
 -rlSlosh {pendulum|shallow} -rlRoad {none|mild|rough} -rlBriskness -rlAggression`.
