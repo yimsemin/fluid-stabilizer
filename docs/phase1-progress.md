@@ -2,18 +2,35 @@
 
 Tracks the phase-1 scope from `design-review.md` §20. Design approved 2026-08-27.
 
-> **Resume here (next session):** plan review 2026-08-29 → new
-> [project-goals.md](project-goals.md) (three-way comparison as the headline
-> result; final-product architecture = finished Unity app + separate Python
-> training, visible bridge). **Road model landed** (decision D6,
-> [road-model.md](road-model.md)) — grade/bank/roughness/potholes + a suspension
-> heave DOF; disabled by default so the F2–F4 guards are unchanged; two new
-> `RoughRoad*` scenarios; `-rlRoad` flag; `G` toggles it in the play scene.
-> **Next, in order:** (1) get the RL server running and run a first PPO job,
-> compare vs F4 [being debugged in a separate session]; (2) human trace
-> record/replay (item 3) so the policy trains on real driving; (3) domain
-> randomization (item 13); (4) Phase 1.5 — the product shell (in-Unity control
-> panel, standalone build, ONNX inference, Python trainer GUI).
+> **Resume here (next session):** the RL bridge now runs end-to-end (server +
+> Python PPO, `docs/rl.md` has the verified procedure), and the trainer was
+> brought up to the CleanRL reference (obs/return normalisation) — commits
+> `c0424e2`, `e0e8eb6`, `3d11d2f`. But **PPO-from-scratch cannot learn the task**,
+> and it is not a bug: measured, *any* reactive gimbal motion pumps slosh energy
+> and spills (finding F1/F4), so the good policy is a narrow "hold/anticipate"
+> ridge that Gaussian exploration never lands on. See `docs/rl.md` "First-run
+> result".
+>
+> **This is a step-back point — before more training, resolve (with the owner):**
+> (a) there is still **no "driving course" / route** — the drivers are synthetic
+> control-input generators (band-limited random, 19 s script, random maneuvers);
+> design §17 + project-goals ③ both say the real disturbance data = **recorded
+> human drives**, which is **item 3, not built**. (b) Is "mean spill over 6
+> synthetic scenarios" the right benchmark, or should it be a few fixed
+> reproducible courses / replayed real drives? (c) Then pick the RL approach:
+> residual RL (design-review's stated choice), curriculum, or warm-start from
+> human traces.
+>
+> **Likely next, in order:** (1) **human trace record/replay (item 3)** — highest
+> value: gives both the training disturbance and the eval benchmark, and unblocks
+> ③; (2) revisit the RL approach (residual RL) with real traces; (3) domain
+> randomization (item 13); (4) Phase 1.5 — the product shell.
+>
+> Context that still holds: [project-goals.md](project-goals.md) (three-way
+> comparison = headline result). Road model landed (D6,
+> [road-model.md](road-model.md)) — grade/bank/roughness/potholes + heave DOF,
+> disabled by default; `RoughRoad*` scenarios; `-rlRoad` flag; `G` toggles it in
+> the play scene.
 
 | # | Item | Status |
 |---|---|---|
@@ -28,7 +45,7 @@ Tracks the phase-1 scope from `design-review.md` §20. Design approved 2026-08-2
 | 9 | Baseline controllers: specific-force alignment, PID, privileged MPC | 🟡 `Hold` (now a **locked rigid joint**, decision D5), `SpecificForceAlignment`, `SpecificForceAlignment+I`, `PrivilegedFeedforwardTilt` done + evaluated. `LqrSloshController`/`AxisLqr` built but **shelved** (design-model mismatch → resonates). **Finding F4: against a rigid `Hold`, no analytic reactive tilt controller wins on any scenario — beating rigid needs anticipation/learning.** (F2 superseded.) Privileged MPC on the real actuator is future work. |
 | 10 | Eval harness: fixed scenarios, metrics, baseline comparison, GT logging | ✅ `Evaluator` + `ScenarioSet` (6 scenarios) + `AggregateResult` + deterministic text report. |
 | 11 | Playable human-drive scene | ✅ `FluidStabilizer.Sim`: `SimulationRunner` (real-time stepping), `HumanDriverInput` (keyboard + gamepad), `SimView`, `Hud`, `PlayControls` (live stabilizer switch, cameras, slow-mo), `Frames` (SI↔Unity), `SceneBuilder` editor script → `Assets/FluidStabilizer/Scenes/PlayScene.unity`. See `docs/human-drive.md`. Liquid is a proxy (pendulum ROM); real height-field viz waits for shallow water. |
-| 12 | RL path: Gymnasium socket adapter + PPO, asymmetric critic, frame-stack | 🟡 C# side done + tested: `FluidStabilizer.Rl` (`ObservationEncoder` frame-stack, `PrivilegedEncoder` for the asymmetric critic, `RewardFunction` §11, `RlEnvironment` deterministic reset/step, `TrainingServer` length-prefixed binary TCP — loopback-tested bit-identical to the in-process env) + `RlServerLauncher` (`-executeMethod` host). Python side written (`python/`: socket client, `gymnasium.Env`, CleanRL-style asymmetric-critic PPO, `play.py`) but **not yet run** (needs `torch`). See `docs/rl.md`. Curriculum automation + parallel rollouts pending. |
+| 12 | RL path: Gymnasium socket adapter + PPO, asymmetric critic, frame-stack | 🟡 C# side done + tested: `FluidStabilizer.Rl` (`ObservationEncoder` frame-stack, `PrivilegedEncoder` for the asymmetric critic, `RewardFunction` §11, `RlEnvironment` deterministic reset/step, `TrainingServer` length-prefixed binary TCP — loopback-tested bit-identical to the in-process env) + `RlServerLauncher` (`-executeMethod` host). Python side (`python/`: socket client, `gymnasium.Env`, asymmetric-critic PPO, `play.py`) **run end-to-end 2026-08-29**; trainer brought up to the CleanRL reference (obs + return normalisation). **PPO-from-scratch does not learn the task** — it's the F1/F4 anticipation cliff, not a bug (see `docs/rl.md` "First-run result"). Needs residual RL / curriculum / warm-start = a task-design decision. Curriculum automation, checkpoint-resume, parallel rollouts, spill-metric-over-TCP all still pending. |
 | 13 | Domain-randomization config (narrow) + per-episode param logging | 🟡 config structs exist with nominal values; the randomizer + logging pending |
 | 14 | Keep docs in sync | ongoing |
 
