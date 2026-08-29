@@ -74,6 +74,10 @@ namespace FluidStabilizer.Core.Sim
         public ISloshModel SloshModel => _slosh;
         public long PhysicsStep => _clock.StepCount;
         public double SimTime => _clock.SimTimeSeconds;
+
+        /// <summary>Instantaneous smallest freeboard this step (m); negative while overflowing.
+        /// Distinct from <see cref="GroundTruthFrame.MinFreeboard"/>, which is the running worst.</summary>
+        public double CurrentMinFreeboard => _lastSlosh.MinFreeboard;
         public bool EpisodeComplete =>
             _cfg.EpisodeSeconds > 0.0 && _clock.StepCount >= _cfg.TotalPhysicsSteps;
 

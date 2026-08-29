@@ -1,6 +1,5 @@
 using System;
 using System.IO;
-using System.Linq;
 using FluidStabilizer.Core.Sim.Drivers;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -33,20 +32,21 @@ namespace FluidStabilizer.Sim
         private string _lastSavedPath;
         private string _statusNote = "";
 
-        private string TraceDir =>
-            Application.isEditor
-                ? Path.Combine(Directory.GetParent(Application.dataPath).FullName, "Traces")
-                : Path.Combine(Application.persistentDataPath, "traces");
+        private string TraceDir => TraceStore.Dir;
+
+        private ComparisonRunner _comparison;
 
         private void Awake()
         {
             if (Runner == null) Runner = FindAnyObjectByType<SimulationRunner>();
+            _comparison = GetComponent<ComparisonRunner>() ?? FindAnyObjectByType<ComparisonRunner>();
         }
 
         private void Update()
         {
             var kb = Keyboard.current;
             if (kb == null || Runner == null) return;
+            if (_comparison != null && _comparison.Active) return; // comparison mode owns the keys
 
             if (kb.pKey.wasPressedThisFrame)
             {
@@ -84,7 +84,7 @@ namespace FluidStabilizer.Sim
             CurrentMode = Mode.Recording;
             _statusNote = "";
 
-            Directory.CreateDirectory(TraceDir);
+            TraceStore.EnsureDir();
             Debug.Log($"[trace] ● RECORDING '{trace.Label}' — drive now, press P again to stop. → {TraceDir}");
         }
 
@@ -93,8 +93,8 @@ namespace FluidStabilizer.Sim
             if (_recorder == null) return;
 
             DriverTrace trace = _recorder.Trace;
-            Directory.CreateDirectory(TraceDir);
-            _lastSavedPath = Path.Combine(TraceDir, trace.Label + ".trace.csv");
+            TraceStore.EnsureDir();
+            _lastSavedPath = TraceStore.PathFor(trace.Label);
             trace.SaveToFile(_lastSavedPath);
             Debug.Log($"[trace] ■ SAVED {trace.Count} steps ({trace.DurationSeconds:F1} s) → {_lastSavedPath}");
 
@@ -150,13 +150,7 @@ namespace FluidStabilizer.Sim
             Debug.Log("[trace] back to live driving.");
         }
 
-        private string NewestTraceFile()
-        {
-            if (!Directory.Exists(TraceDir)) return null;
-            return Directory.GetFiles(TraceDir, "*.trace.csv")
-                .OrderByDescending(File.GetLastWriteTimeUtc)
-                .FirstOrDefault();
-        }
+        private string NewestTraceFile() => TraceStore.NewestFile();
 
         // ------------------------------------------------------------------- HUD
 
@@ -179,6 +173,7 @@ namespace FluidStabilizer.Sim
 
         private void OnGUI()
         {
+            if (_comparison != null && _comparison.Active) return; // ComparisonRunner draws its own HUD
             EnsureStyles();
 
             double elapsed = Runner?.Loop?.SimTime ?? 0.0;

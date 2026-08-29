@@ -25,6 +25,7 @@ Re-run the menu item any time the scene looks wrong or you changed `SceneBuilder
 | **Tab** | camera: chase → side → top |
 | **P** | **record** your drive to a trace file / press again to stop & save |
 | **L** | **replay** the newest recorded trace / press again to drive again |
+| **C** | **compare** stabilizers side by side on the newest trace / press again to exit |
 
 A banner across the top of the screen always shows the trace state: **idle**,
 **● REC** (with elapsed time + step count, plus a red border), or **▶ REPLAY**
@@ -80,6 +81,23 @@ adds side-by-side replay of two tanks at once plus a running spill count.
 Record several *different* drives (calm commute, brisk highway, a rough-road run
 with **G** on). Some become the training disturbance data; some are held out as
 the evaluation set.
+
+## Comparing stabilizers side by side (C)
+
+Press **C** to replay the newest trace through **three tanks at once**, lined up
+across the screen over the same road:
+
+- **Rigid (no stabilizer)** — the tank bolted down (① in the three-way comparison)
+- **Rule: PID** — the reactive tilt law (②)
+- **Privileged feed-forward** — a reference that cheats (uses the true slosh-free
+  tilt); the learned policy (③) will take a lane here once it exists
+
+Each lane has a live panel: **litres spilled** (big), time spent **near the rim**,
+**peak slosh energy**, and how long the actuator sat **torque-saturated**. The
+lowest-spill lane gets a green border. `R` restarts, `T` is slow-mo, `C` exits.
+
+This is the headline result of the project — the point where you can *see*
+whether a stabilizer actually keeps more water in the tank than doing nothing.
 
 ## Notes / current limitations
 

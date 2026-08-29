@@ -34,16 +34,23 @@ that the task is winnable at all). Those are the next work, before any more RL.
 
 ## The next steps, in order
 
-1. **Human trace record / replay** — *(in progress)* record the owner's driving
-   in the play scene to a small text file (`DriverTrace`), replay it
-   deterministically as a driver. Gives the training disturbance **and** the
-   held-out evaluation condition in one move. Small.
+1. **Human trace record / replay** — ✅ *done 2026-08-29.* `DriverTrace` +
+   `TraceRecorder` (`P`/`L` in the play scene). Gives the training disturbance
+   **and** the held-out evaluation condition in one move.
 2. **Rebuild the evaluation around recorded drives.** The headline three-way
    comparison (①/②/③, later ④ the ceiling) runs on **3–5 held-out real drives**,
    each replayed under **both** slosh models (bracket discipline, F3), reported
    **per drive** in litres spilled — not just a mean over synthetic scenarios.
    The synthetic scenarios stay, demoted to a training / robustness / regression
-   set.
+   set. Sub-parts:
+   - **2a** ✅ *done 2026-08-29* — `ComparisonRunner`: the play scene's `C` key
+     replays one trace through three stabilizers at once, side by side, over the
+     same road, with a per-lane spill / near-rim / slosh-energy panel. This is
+     the visual headline.
+   - **2b** ⬜ — render the road (grade, bank, roughness, potholes) so the
+     disturbance is visible under each truck.
+   - **2c** ⬜ — a headless `TraceEvaluator`: per-drive litre tables across
+     controllers × both slosh models, for the written result.
 3. **Feasibility ceiling (hindsight).** For each fixed recorded drive, search
    offline for the gimbal-motion trajectory that minimises spill (gradient-free
    optimisation over a low-dimensional trajectory, full hindsight, real actuator

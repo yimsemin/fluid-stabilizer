@@ -22,9 +22,9 @@ namespace FluidStabilizer.SimEditor
         public static void Grab()
         {
             EditorSceneManager.OpenScene("Assets/FluidStabilizer/Scenes/PlayScene.unity");
-            var runner = Object.FindObjectOfType<SimulationRunner>();
-            var view = Object.FindObjectOfType<SimView>();
-            var cam = Object.FindObjectOfType<Camera>();
+            var runner = Object.FindAnyObjectByType<SimulationRunner>();
+            var view = Object.FindAnyObjectByType<SimView>();
+            var cam = Object.FindAnyObjectByType<Camera>();
             Directory.CreateDirectory("Logs/shots");
 
             Shoot(runner, view, cam, SloshModelChoice.ShallowWater, "shallow", 0f, false);

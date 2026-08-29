@@ -104,7 +104,7 @@ namespace FluidStabilizer.Sim
             Loop.SetController(MakeController(choice));
         }
 
-        private static IController MakeController(StabilizerChoice c) => c switch
+        public static IController MakeController(StabilizerChoice c) => c switch
         {
             StabilizerChoice.SpecificForceAlignment => new SpecificForceAlignmentController(),
             StabilizerChoice.SpecificForceAlignmentPlusI => new PidController(),
@@ -112,10 +112,20 @@ namespace FluidStabilizer.Sim
             _ => new HoldController(),
         };
 
-        private static ISloshModel MakeSlosh(SloshModelChoice c) => c switch
+        public static ISloshModel MakeSlosh(SloshModelChoice c) => c switch
         {
             SloshModelChoice.ShallowWater => new ShallowWaterSloshModel(),
             _ => new PendulumSloshModel(),
+        };
+
+        /// <summary>Short label for a stabilizer choice, for the comparison HUD.</summary>
+        public static string ShortName(StabilizerChoice c) => c switch
+        {
+            StabilizerChoice.Off => "Rigid (no stabilizer)",
+            StabilizerChoice.SpecificForceAlignment => "Rule: specific-force align",
+            StabilizerChoice.SpecificForceAlignmentPlusI => "Rule: PID",
+            StabilizerChoice.PrivilegedFeedforward => "Privileged feed-forward",
+            _ => c.ToString(),
         };
 
         private void Update() => Advance(Time.deltaTime);

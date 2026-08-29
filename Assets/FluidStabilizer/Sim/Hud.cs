@@ -23,7 +23,7 @@ namespace FluidStabilizer.Sim
 
         private void OnGUI()
         {
-            if (Runner?.Loop == null) return;
+            if (Runner?.Loop == null || !Runner.enabled) return; // hidden during a side-by-side comparison
             EnsureStyles();
 
             var loop = Runner.Loop;
@@ -66,7 +66,7 @@ namespace FluidStabilizer.Sim
             GUILayout.BeginArea(new Rect(16, Screen.height - 92, 760, 88));
             GUILayout.Label("W/S or triggers: throttle/brake   A/D or stick: steer", _label);
             GUILayout.Label("Space: stabilizer on/off   0-3: pick stabilizer   M: slosh model   G: road   R: reset   T: slow-mo   Tab: camera", _label);
-            GUILayout.Label("P: record your drive   L: replay newest recording", _label);
+            GUILayout.Label("P: record your drive   L: replay newest   C: compare stabilizers side-by-side", _label);
             GUILayout.EndArea();
         }
 
