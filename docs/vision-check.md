@@ -15,8 +15,8 @@ the play scene, a build) or a screenshot/short clip — not just a log file.
 | B · residual RL wiring | 2026-08-29 | `RlServerLauncher.Serve` with `-rlBaseline hold` — server boots; the composed name reads "RL residual on Hold …" in the log | ⬜ | |
 | C · BC warm start | 2026-08-29 | `FluidStabilizer ▸ Export BC Dataset`, then `python bc_pretrain.py`, then `train_ppo.py --init-actor runs/bc/actor.pt --total-steps 20000` — trains, no crash, checkpoint written | ⬜ | draft ran: return flat ≈ −2280, stable (not the −3200 from-scratch cliff). Real training is a later compute step. |
 | D · policy as a separate process | 2026-08-29 | `python serve_policy.py --checkpoint runs/bc/actor.pt --port 5601`, then `FluidStabilizer ▸ Evaluate Learned Policy` (or play scene, key `4`) — the world connects to the brain over TCP, spill printed per drive | ⬜ | end-to-end ran. Honest result: ③ (BC policy) 24–30 L vs ① 19–22 L → **rigid wins here** (F5). Architecture revised: no baked ONNX. |
-| E · 3-way comparison in app | | | ⬜ | |
-| F · standalone build | | | ⬜ | |
+| E · 3-way comparison in app | 2026-08-29 | play scene → `C` — ①②③ trucks side by side over one road, per-lane litres panel, best lane green. HUD shows the live `experiment.txt` profile. (③ needs `serve_policy.py` or it reads "offline → Hold".) | ⬜ | |
+| F · standalone build | 2026-08-29 | `FluidStabilizer ▸ Build Standalone App` → `Builds/fluid-stabilizer-StandaloneOSX/fluid-stabilizer.app` (double-click to run) | ⬜ | 104 MB universal binary, builds in ~6 s warm |
 
 ## Open questions for the owner to answer whenever
 

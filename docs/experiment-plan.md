@@ -138,12 +138,16 @@ Success = "it runs start to finish and I can see all three side by side", **not*
 | B | **Residual RL wiring** — `RlEnvironment` composes `baseline action + policy correction` (baseline = locked-Hold or SFA) | ✅ 2026-08-29 | `baselineFactory` + `residualRateScaleRadPerSec` ctor params; composes in joint-rate space; `-rlBaseline {none\|hold\|sfa\|pid} -rlResidualFrac`. Python trainer unchanged. `ResidualRlTests` (4). |
 | C | **Behaviour-cloning warm start** — pre-train the policy net on `Logs/hindsight/*.traj.csv`, then a short PPO run | ✅ 2026-08-29 | `BcExportRunner` → `Logs/bc/dataset.csv` (23.8 k ticks, 6 drives); `python/bc_pretrain.py` → `runs/bc/actor.pt`; `train_ppo.py --init-actor`. Chain runs end-to-end. **Note:** the hindsight optimum is near-zero motion (F5), so BC mostly teaches "stay calm" — a real anti-cliff prior, not a winning strategy. `-rlTrace all` trains on the same 6 drives. |
 | D | **Policy as a separate process** — `python/serve_policy.py` serves inference over the bridge; Unity `RemotePolicyController : IController` is the client | ✅ 2026-08-29 | revised from "baked ONNX in Unity" (project-goals.md). `StabilizerChoice.LearnedPolicy` / key `4`; `PolicyEvalRunner` (menu). End-to-end verified: on the 6 drives the BC policy spills 24–30 L vs Hold's 19–22 — **① rigid wins**, as F5 predicts. `RemotePolicyControllerTests` (3). |
-| E | **3-way comparison in the app** — `ComparisonRunner` gets the ③ learned lane; a minimal in-Unity panel (pick profile, run, read per-lane litres) | 🟡 `ComparisonRunner` does ①②③-analytic; `PolicyEvalRunner` does ①+③ headless | add the learned lane to `ComparisonRunner` + a panel |
-| F | **Standalone build** — one menu item → self-contained app | ⬜ | `BuildPipeline` |
+| E | **3-way comparison in the app** — `ComparisonRunner` runs ①②③ side by side; the play-scene HUD shows the live `experiment.txt` profile + per-lane litres | ✅ 2026-08-29 | default lanes now `Off / PID / LearnedPolicy`; the ③ lane is a `RemotePolicyController` (shows "(offline → Hold)" if `serve_policy.py` isn't up). `C` toggles it. `ComparisonRunnerTests` (2). |
+| F | **Standalone build** — one menu item → self-contained app | ✅ 2026-08-29 | `BuildRunner` (menu + `-executeMethod`): rebuilds the play scene, `BuildPipeline.BuildPlayer` for the active target → `Builds/`. Verified: a 104 MB universal `fluid-stabilizer.app`. |
 
-Then: step back, fill in `vision-check.md`, and **only then** do the F5 premise
-adjustment (step 3 fail-branch) and steps 4–5 properly, as refinement passes over
-a working whole.
+**The draft is complete** — the whole pipeline runs start to finish: record →
+hindsight ceiling → BC dataset → BC pre-train → PPO fine-tune → `serve_policy.py`
+→ Unity ①②③ comparison → standalone app.
+
+Next: step back, fill in `vision-check.md`, and **then** do the F5 premise
+adjustment (step 3 fail-branch) and a real RL run as refinement passes over a
+working whole.
 
 ## The three concerns from the step-back session — resolved
 
