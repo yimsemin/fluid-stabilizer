@@ -80,7 +80,13 @@ adds side-by-side replay of two tanks at once plus a running spill count.
 
 Record several *different* drives (calm commute, brisk highway, a rough-road run
 with **G** on). Some become the training disturbance data; some are held out as
-the evaluation set.
+the evaluation set. For drives meant to *discriminate* the stabilizers, keep the
+**road on (`G`)** and the tank fairly full — below about 55 % fill the pendulum
+model's waves never reach the rim, so nothing spills.
+
+**Batch numbers:** menu ▸ *FluidStabilizer ▸ Evaluate Recorded Drives* replays
+every trace in `Traces/` through the analytic baselines and writes a per-drive
+litre table to `Logs/trace-eval.txt`.
 
 ## Comparing stabilizers side by side (C)
 

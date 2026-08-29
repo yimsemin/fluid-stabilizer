@@ -51,8 +51,16 @@ that the task is winnable at all). Those are the next work, before any more RL.
      each truck showing grade, bank, roughness and potholes, rebuilt from an
      independent `RoadModel` replica (same seed/config as the physics). Visible
      only with the road on (`G`).
-   - **2c** ⬜ — a headless `TraceEvaluator`: per-drive litre tables across
-     controllers × both slosh models, for the written result.
+   - **2c** ✅ *done 2026-08-29* — `TraceEvaluator` + menu item **FluidStabilizer
+     ▸ Evaluate Recorded Drives** (and a `+ shallow water` variant): replays every
+     trace in `Traces/` through the analytic baselines, per drive, writes
+     `Logs/trace-eval.txt`.
+     **Note from the first run:** the pendulum ROM only spills above
+     `FillRatio ≈ 0.56` (its wave-elevation cap is `0.8·depth`); the four
+     exploratory traces (fill 0.55, road off) show 0 L for everyone. The
+     held-out drives for the real comparison must be recorded with **road on
+     (`G`)** and **fill ≥ 0.60** to discriminate — and checked under shallow
+     water too.
 3. **Feasibility ceiling (hindsight).** For each fixed recorded drive, search
    offline for the gimbal-motion trajectory that minimises spill (gradient-free
    optimisation over a low-dimensional trajectory, full hindsight, real actuator
