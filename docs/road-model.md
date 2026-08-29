@@ -1,103 +1,91 @@
-# Road model
+# 도로 모델
 
-Added 2026-08-29 (plan review). Design-review §4/§5 list "road with grade, bank
-and roughness" as a v1 must-model; it had a stub (`RoadInput`) but nothing fed
-it. This closes that gap.
+2026-08-29 추가 (계획 리뷰, 결정 D6). design-review §4/§5 가 "grade, bank,
+거칠기를 가진 도로" 를 v1 필수 모델링으로 꼽음; 스텁(`RoadInput`)만 있고 아무것도
+안 채웠음. 이게 그 갭을 닫음.
 
-## Why it matters
+## 왜 중요한가
 
-A rigidly-held tank (`HoldController`, decision D5) transmits every road
-disturbance straight into the liquid. On a perfectly flat road the rigid tank
-barely spills under realistic highway driving (finding F4), so there is little
-for a learned policy to beat. A real road — undulating grade, curve bank, surface
-roughness, the odd pothole — is the disturbance that a rigid tank *cannot*
-reject and an anticipatory policy can. It puts the three-way comparison
-(project-goals.md) back into an interesting regime.
+강체로 잡은 탱크(`HoldController`, D5)는 모든 도로 disturbance 를 액체로 곧장
+전달한다. 완벽히 평평한 도로에서는 현실적 고속도로 운전 하에 강체 탱크가 거의
+안 넘친다 (finding F4), 그래서 학습 정책이 이길 게 별로 없다. 실제 도로 — 굽이치는
+grade, 커브 bank, 노면 거칠기, 간간이 포트홀 — 는 강체 탱크가 *거부할 수 없고*
+예측 정책은 할 수 있는 disturbance. 3-way 비교(project-goals.md)를 다시 흥미로운
+조건으로 되돌린다.
 
-## What it models — `RoadModel` (engine-free, `FluidStabilizer.Core.Sim`)
+## 무엇을 모델링하나 — `RoadModel` (엔진프리, `FluidStabilizer.Core.Sim`)
 
-A deterministic function of **distance travelled** `s` — a fixed course for a
-given seed (drive it twice, same bends and bumps in the same places). Superposed
-parts:
+**이동 거리** `s` 의 결정론적 함수 — 주어진 seed 에 대한 고정 코스 (두 번 달리면
+같은 굽이와 범프가 같은 자리에). 중첩된 부분:
 
-| Part | Model | Effect on the truck |
+| 부분 | 모델 | 트럭에 미치는 효과 |
 |---|---|---|
-| **Curve** | two sinusoids vs `s`, wavelength ~`CurvatureWavelengthM` (180 m), peak `CurvatureAmplitudeRadPerM` (~0.004 rad/m ≈ 250 m radius) | horizontal **curvature**: the truck's heading follows `curvature · speed` on its own — the driver's steer is a *correction* on top (lane changes, drift, recovering a badly-taken curve). Cornering slings the liquid sideways. |
-| **Hills** | two sinusoids vs `s`, wavelength ~`HillWavelengthM` (140 m), peak `GradeAmplitudeRad` (~3.5 %) | a slowly varying **grade**: a gravity component along the road + a body-pitch trim → the tank tilts relative to gravity |
-| **Bank** | superelevation `BankPerCurvature · curvature` (clamped ±0.08 rad) banking into the curve, plus a small independent cross-slope sinusoid (`BankAmplitudeRad`) | curve superelevation / cross-slope → a body-roll trim that partly offsets the cornering load |
-| **Roughness** | 6 sinusoids, wavelengths geometric 0.6–9 m, red-ish spectrum (amp ∝ 1/k), rescaled so RMS = `RoughnessRmsM` (6 mm) | continuous vertical surface displacement → ride vibration |
-| **Events** | Poisson process along the road, `EventsPerKm` (18), raised-cosine bump/pothole of mean height `EventHeightM` (±5 cm), length `EventLengthM` (0.4 m) | discrete jolts — expansion joints, potholes, stray rocks, curbs |
+| **커브** | `s` 대비 사인 2개, 파장 ~`CurvatureWavelengthM` (180 m), 피크 `CurvatureAmplitudeRadPerM` (~0.004 rad/m ≈ 반경 250 m) | 수평 **곡률**: 트럭 heading 이 스스로 `curvature · speed` 를 따름 — 운전자 조향은 그 위의 *보정* (차선 변경, drift, 잘못 든 커브 회복). 코너링이 액체를 옆으로 던짐 |
+| **언덕** | `s` 대비 사인 2개, 파장 ~`HillWavelengthM` (140 m), 피크 `GradeAmplitudeRad` (~3.5%) | 천천히 변하는 **grade**: 도로를 따른 중력 성분 + 차체 pitch 트림 → 탱크가 중력 대비 기울어짐 |
+| **Bank** | superelevation `BankPerCurvature · curvature` (±0.08 rad 클램프) 가 커브 안쪽으로 뱅킹, + 작은 독립 cross-slope 사인 (`BankAmplitudeRad`) | 커브 superelevation / cross-slope → 코너링 하중을 일부 상쇄하는 차체 roll 트림 |
+| **거칠기** | 사인 6개, 파장 기하 0.6~9 m, red 스펙트럼 (amp ∝ 1/k), RMS = `RoughnessRmsM` (6 mm) 되게 재스케일 | 연속 수직 표면 변위 → 승차 진동 |
+| **이벤트** | 도로를 따른 Poisson 과정, `EventsPerKm` (18), 평균 높이 `EventHeightM` (±5 cm), 길이 `EventLengthM` (0.4 m) 의 raised-cosine 범프/포트홀 | 이산 jolt — 신축 조인트, 포트홀, 돌, 연석 |
 
-`Severity` (default 1) scales roughness + events (not grade/bank/curvature) — the
-single knob for a curriculum or domain randomization. All output is zero when
-`RoadConfig.Enabled` is false, which is the v1 default, so **every existing
-non-road scenario and determinism guard is unchanged.** The curvature phases are
-drawn *last* in `Reset`, so the grade/bank/roughness/event RNG streams are
-byte-identical to before this channel existed (only the RoughRoad* scenarios,
-which opt in, see new behaviour — their baseline numbers need a re-sweep).
+`Severity` (기본 1) 가 거칠기 + 이벤트를 스케일 (grade/bank/곡률 제외) — 커리큘럼
+이나 도메인 랜덤화의 유일한 손잡이. `RoadConfig.Enabled` 이 false 면 모든 출력이
+0, 이게 v1 기본 → **기존의 모든 non-road 시나리오와 결정론 가드가 변함 없음.**
+곡률 위상은 `Reset` 에서 *마지막*으로 뽑혀서, grade/bank/거칠기/이벤트 RNG
+스트림이 이 채널 존재 전과 바이트 동일 (opt-in 하는 RoughRoad* 시나리오만 새
+동작을 봄 — 그 베이스라인 수는 재스윕 필요).
 
-## The truck drives the road — the lane model (2026-08-29)
+## 트럭이 도로를 운전한다 — 레인 모델 (2026-08-29)
 
-The road is a **course you drive**, not a rail. `VehicleModel.Step` (road on
-only):
+도로는 레일이 아니라 **운전하는 코스**. `VehicleModel.Step` (도로 on 일 때만):
 
-- **Driver has full steering authority** — `Steer` maps to a road-wheel angle
-  and yaws the truck like a normal bicycle model.
-- **The curvature is followed automatically** on top of that
-  (`roadYawRate = speed · road.Curvature`), so a hands-off truck tracks a bend
-  rather than driving off the outside of it.
-- **Weak return-to-centre** (`LaneReturnGain`) — a hands-off truck drifts back
-  toward the road centre over ~10 s, but the pull is light enough that the
-  driver can move to another lane and sit there.
-- **Firm road edge** — past `RoadHalfWidthM` a `RoadEdgeGain` yaw correction
-  (applied *outside* the friction circle — it's a guardrail, not a tyre force)
-  plus a hard position clamp at `RoadHalfWidthM + 1.2 m` keep the truck on the
-  road.
+- **운전자가 완전한 조향 authority** — `Steer` 가 노면 바퀴 각으로 매핑되고
+  평범한 bicycle 모델처럼 트럭을 yaw.
+- **곡률은 그 위에 자동으로 추종** (`roadYawRate = speed · road.Curvature`),
+  그래서 손 놓은 트럭이 굽이를 바깥으로 벗어나지 않고 추적.
+- **약한 return-to-centre** (`LaneReturnGain`) — 손 놓은 트럭이 ~10 s 에 걸쳐
+  도로 중심 쪽으로 drift, 그러나 당김이 약해서 운전자가 다른 차선으로 옮겨
+  거기 있을 수 있음.
+- **확실한 도로 가장자리** — `RoadHalfWidthM` 를 넘으면 `RoadEdgeGain` yaw 보정
+  (friction circle *밖*에 적용 — 타이어 힘이 아니라 가드레일) + `RoadHalfWidthM
+  + 1.2 m` 에서 하드 위치 클램프.
 
-`VehicleState` exposes `LateralOffsetFromRoadCentre`, `HeadingErrorFromRoad` and
-`RoadHeadingRad`; `SimulationLoop` integrates the road heading
-(`_roadHeadingRad += curvature · Δdistance`). `RoadRibbon` uses the lateral
-offset to draw the road at the truck's real lane position.
+`VehicleState` 가 `LateralOffsetFromRoadCentre`, `HeadingErrorFromRoad`,
+`RoadHeadingRad` 를 노출; `SimulationLoop` 이 도로 heading 을 적분
+(`_roadHeadingRad += curvature · Δdistance`). `RoadRibbon` 이 lateral offset 을
+써서 트럭의 실제 차선 위치에 도로를 그림.
 
-Cornering also adds a lateral slosh disturbance. With the road off, `Curvature`
-is 0, the lane model is skipped entirely, and behaviour is byte-identical to
-before.
+코너링은 lateral 슬로시 disturbance 도 더함. 도로가 off 면 `Curvature` 가 0,
+레인 모델을 완전히 건너뛰고, 동작이 이전과 바이트 동일.
 
-## Suspension heave
+## 서스펜션 heave
 
-`VehicleModel` gained a third sprung-mass DOF (it had pitch + roll; design-review
-§8 asks for "heave, pitch, roll"). The body follows the road surface through a
-spring-mass-damper — `HeaveNaturalFreqHz` 1.6, `HeaveDampingRatio` 0.30, the
-~1.5 Hz truck ride mode. So a sharp bump reaches the tank as a *filtered* jolt
-with the suspension's own resonance (design-review §4: "the suspension is a
-low-pass with a ~1–2 Hz resonance that shapes the disturbance"), not an
-instantaneous acceleration spike. The body's vertical acceleration goes into the
-tank-frame kinematics exactly like the longitudinal/lateral terms; its vertical
-displacement goes into `VehicleState.OriginWorld.Z` so the truck visibly bounces.
+`VehicleModel` 이 3번째 스프렁매스 DOF 를 얻음 (pitch + roll 만 있었음;
+design-review §8 은 "heave, pitch, roll" 요구). 차체가 spring-mass-damper 로
+노면을 추종 — `HeaveNaturalFreqHz` 1.6, `HeaveDampingRatio` 0.30, ~1.5 Hz
+트럭 승차 모드. 그래서 날카로운 범프가 순간 가속 스파이크가 아니라 서스펜션
+자체 공진을 가진 *필터링된* jolt 로 탱크에 도달 (design-review §4). 차체 수직
+가속이 종/횡 항과 똑같이 탱크 프레임 운동학에 들어감; 수직 변위가
+`VehicleState.OriginWorld.Z` 에 들어가 트럭이 눈에 띄게 튐.
 
-## Determinism
+## 결정론
 
-`RoadModel` draws all its parameters from one forked `IRandomSource` at
-`Reset(seed)`. Discrete events are generated lazily as `s` advances, in a strict
-forward order, so the sequence is independent of how the distance axis is chunked
-(`RoadModelTests.Sampling_IsIndependentOfStepSize`). A full loop episode with the
-road on is bit-reproducible (`InLoop_RoughRoad_AddsSloshEnergy_AndIsDeterministic`).
+`RoadModel` 이 `Reset(seed)` 에서 fork 한 `IRandomSource` 하나로 모든 파라미터를
+뽑음. 이산 이벤트는 `s` 가 진행하며 엄격한 전진 순서로 lazy 하게 생성 → 거리
+축이 어떻게 청크되든 시퀀스가 독립
+(`RoadModelTests.Sampling_IsIndependentOfStepSize`). 도로 on 인 전체 루프
+에피소드는 비트 재현 가능.
 
-## Where it is wired
+## 어디에 배선됐나
 
-- `SimulationConfig.Road` (`RoadConfig`) — all parameters.
-- `SimulationLoop` — samples the road each physics step at the running distance,
-  feeds `VehicleModel.Step`, records grade/bank/surface height into
-  `GroundTruthFrame` (HUD + logging).
-- Scenarios: `RoughRoadHighway`, `RoughRoadLowFreeboard` (the existing 6 are
-  untouched).
-- RL launcher: `-rlRoad {none|mild|rough}`.
-- Play scene: `SimulationRunner.Road` / `RoadSeverity` inspector fields; **`G`**
-  toggles the road live; the HUD shows grade %, bank, surface height.
+- `SimulationConfig.Road` (`RoadConfig`) — 모든 파라미터.
+- `SimulationLoop` — 매 물리 스텝 진행 거리에서 도로 샘플, `VehicleModel.Step`
+  에 먹임, grade/bank/표면 높이를 `GroundTruthFrame` 에 기록 (HUD + 로깅).
+- 시나리오: `RoughRoadHighway`, `RoughRoadLowFreeboard` (기존 6개는 안 건드림).
+- RL 런처: `-rlRoad {none|mild|rough}`.
+- 플레이 씬: `SimulationRunner.Road` / `RoadSeverity` 인스펙터 필드; **`G`** 가
+  도로를 실시간 토글; HUD 가 grade %, bank, 표면 높이 표시.
 
-## Not modelled (deferred)
+## 모델링 안 함 (보류)
 
-Road-induced yaw (crown steer), tyre envelopment of short bumps, spatially
-correlated left/right tracks (single-track profile in v1), banked-curve lateral
-load coupling beyond the body-roll trim. None affect the dominant disturbance
-path (vertical + grade) that reaches the liquid.
+도로 유발 yaw (crown steer), 짧은 범프의 타이어 envelopment, 공간 상관된 좌/우
+트랙 (v1 은 단일 트랙 프로파일), 차체 roll 트림 너머의 뱅크드 커브 lateral 하중
+결합. 어느 것도 액체에 도달하는 지배적 disturbance 경로(수직 + grade)에 영향 없음.

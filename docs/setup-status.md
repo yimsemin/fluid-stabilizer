@@ -1,116 +1,74 @@
-# Setup status
+# 개발 환경 사실
 
-Last updated: 2026-08-27
+버전·경로·도구. (프로젝트 진행상황은 [experiment-plan.md](experiment-plan.md).)
 
-## 1. Development environment — verified
+## 개발 환경 — 검증됨
 
-| Item | Result |
+| 항목 | 값 |
 |---|---|
-| OS | macOS 26.6.2 (build 25G83) |
-| CPU / architecture | Apple M4 Max, **arm64** (Apple Silicon) |
-| Unity Hub | 3.21.0, installed at `/Applications/Unity Hub.app` |
-| Unity Editor | **6000.5.10f1** (Unity 6.2 line), at `/Applications/Unity/Hub/Editor/6000.5.10f1` |
-| Unity Editor modules installed | WebGL Build Support, Documentation |
-| Unity **license** | ✅ activated (Unity Personal, entitlement license present) |
-| Git | 2.55.0 |
-| Git identity | `YSM` (global) |
-| Git LFS | ❌ was missing → **installed** (3.7.1), see §3 |
-| GitHub CLI (`gh`) | 2.98.0, authenticated as **`yimsemin`** (scopes: repo, workflow, read:org, gist) |
-| Homebrew | 6.0.20 |
-| Python | 3.13.14 |
-| Node.js | not installed (not needed) |
-| .NET SDK | not installed (not needed — the Unity Editor bundles its compiler) |
+| OS | macOS 26.x (Apple Silicon) |
+| CPU / 아키텍처 | Apple M4 Max, **arm64** |
+| Unity Hub | `/Applications/Unity Hub.app` |
+| Unity Editor | **6000.5.10f1** (Unity 6.2 라인), `/Applications/Unity/Hub/Editor/6000.5.10f1` |
+| Unity 라이선스 | ✅ 활성 (Unity Personal) |
+| Git | 2.55+, LFS 활성 (3.7+) |
+| Git 신원 | `YSM` (global), `core.autocrlf=input` (local) |
+| GitHub CLI (`gh`) | `yimsemin` 으로 인증 (scopes: repo, workflow, read:org, gist) |
+| Python (시스템) | 3.13 |
+| **Python (프로젝트, `python/.venv`)** | **3.9.6** (CommandLineTools) — torch 2.8.0 / gymnasium 1.1.1 / tensorboard, 전부 arm64, MPS 사용 가능 |
 
-### Verdict
+## Unity 프로젝트
 
-The environment is sufficient to build and run the simulation. No missing tools
-block phase-1 work.
+- Editor CLI (`-createProject`)로 **저장소 루트** 에 생성 (`Assets/`,
+  `Packages/`, `ProjectSettings/` 가 `docs/` 옆).
+- **렌더 파이프라인: Built-in (BiRP).** 의존성 적고, 가볍고, 헤드리스 학습 중엔
+  렌더링이 꺼져 있음. 단순한 트럭/탱크/액체 프록시에 URP 가 주는 게 필요 없음.
+- **`Packages/manifest.json`** — Unity 빌트인 모듈 + `com.unity.test-framework`
+  (결정론적 유닛 테스트) + `com.unity.inputsystem` (게임패드/키보드 입력). 둘
+  다 phase 1 시작 때 추가됨. **`com.unity.sentis` 는 명시적 결정 없이 추가 금지**
+  (project-goals 아키텍처: 정책은 별도 프로세스, ONNX 를 Unity 에 굽지 않음).
+- **표준 빌드 지원:** `FluidStabilizer ▸ Build Standalone App` (`BuildRunner`)
+  이 활성 타깃(이 Mac 에선 StandaloneOSX)으로 빌드 → `Builds/`. 다른 플랫폼용
+  빌드가 필요하면 Unity Hub 에서 해당 Build Support 모듈 추가.
+- **검증:** 헤드리스로 열림, 스크립트 0 에러 컴파일, EditMode 테스트
+  113 통과 / 8 스킵, standalone 빌드 정상 실행.
 
-- **Unity 6000.5.10f1 is a fine version to standardize on.** It is current, it is
-  the same on macOS and Windows, and nothing in the design needs a different
-  version. The project is pinned to it (`ProjectSettings/ProjectVersion.txt` is
-  committed); both machines must use exactly this version via Unity Hub.
-- **No extra Unity modules needed now.** Mac in-Editor play mode does not require
-  a build-support module. Add "Windows Build Support (Mono)" / "Mac Build Support"
-  only if/when you want standalone builds. The WebGL module that is already
-  installed is harmless; leave it.
+## Git 저장소
 
-## 1b. Unity project — created and verified (2026-08-27)
+- `git init` on `main`, `<저장소 루트>`.
+- `.gitignore` — Unity + Python + ROS + `Builds/` ignore.
+- `.gitattributes` — LF 정규화 (Mac/Windows), Unity YAML 자산 binary-safe +
+  `unityyamlmerge`, Git LFS 규칙.
+- GitHub 리모트 `origin` = `github.com/yimsemin/fluid-stabilizer` (존재).
 
-- Created via the Editor CLI (`-createProject`) at the **repo root**
-  (`<저장소 루트>`), so `Assets/`, `Packages/`,
-  `ProjectSettings/` sit alongside `docs/`.
-- **Render pipeline: Built-in (BiRP).** The CLI-created project is a bare 3D
-  project on the Built-in pipeline — this supersedes the earlier note about the
-  URP "3D cross-platform" template. Built-in is the better fit here: fewer
-  dependencies, lighter, and rendering is off during headless training anyway.
-  A simple visual truck/tank/liquid proxy needs nothing URP provides. Revisit
-  only if visualization needs outgrow it.
-- `Packages/manifest.json` is minimal: Unity built-in modules + one default
-  package (`com.unity.multiplayer.center`, harmless, can be removed later).
-  **Not yet added** (recommended when phase 1 starts, not before):
-  `com.unity.test-framework` (deterministic unit tests for the controller/slosh
-  math) and `com.unity.inputsystem` (gamepad/keyboard driver input). Held back
-  per "no feature work before the design review is approved."
-- **Verified:** opened headless twice — 37 packages resolved, scripts compiled
-  with 0 errors, Asset Pipeline refresh clean, batchmode quit successfully.
-  (The `Curl error 7 … config.uca.cloud.unity3d.com` and initial licensing
-  handshake-retry lines in the log are the offline analytics/config endpoint and
-  are harmless.)
-- Committed: `Packages/manifest.json`, `Packages/packages-lock.json`, and
-  `ProjectSettings/*` (24 small text files). `Library/`, `Logs/`, `Temp/`,
-  `UserSettings/` are correctly gitignored.
+## 이번 세션들에 설치한 도구
 
-## 2. Git repository — configured
-
-- `git init` on branch **`main`**, in `<저장소 루트>`.
-- `.gitignore` — Unity + Python + ROS ignores (standard Unity ignore set).
-- `.gitattributes` — LF normalization for cross-platform (Mac/Windows), Unity
-  YAML assets marked binary-safe with `unityyamlmerge`, Git LFS rules for binary
-  asset types.
-- `core.autocrlf=input` set locally.
-- Git LFS hooks installed in the repo.
-- Initial commits: repo scaffold + design docs, then the verified Unity project.
-- **No GitHub remote created yet** — that needs your go-ahead (see §5.2).
-
-## 3. Tools installed this session, and why
-
-| Tool | Version | Why |
-|---|---|---|
-| **git-lfs** | 3.7.1 (Homebrew) | Standard for Unity repos. Binary assets (models, textures, audio, trained `.onnx` policies) must not bloat git history. Retrofitting LFS after large files are committed is painful, so it is set up now even though the repo currently has no binaries. `.gitattributes` already lists the patterns. |
-
-Nothing else was installed.
-
-## 4. Intentionally NOT installed, and why
-
-| Not installed | Why |
+| 도구 | 이유 |
 |---|---|
-| **ROS 2** | Not needed until hardware integration (phase 3). The design keeps a message-DTO + bus interface so ROS 2 can be added later without restructuring. Installing it now adds a large dependency with zero present use. |
-| **Unity ML-Agents** | The design deliberately avoids coupling training to Unity/ML-Agents (design-review §12). The RL trainer will sit behind a language-agnostic env boundary. ML-Agents would only be reconsidered later, behind an adapter. |
-| **Fluid-simulation plugin (Obi Fluid, Zibra, etc.)** | The recommended slosh model is a custom analytic reduced-order model (design-review §6). Particle fluids break determinism and the RL step budget. |
-| **.NET SDK, Node.js** | The Unity Editor bundles its own C# compiler; Claude Code can read/edit the generated `.csproj`/`.sln` without a standalone SDK. No JS tooling is in the design. |
-| **A standalone IDE (Rider / VS Code C#)** | Not required for phase 1. The Editor + Claude Code is enough. Can be added later purely as a convenience. |
-| **Extra Unity build-support modules** | Not needed for in-Editor play or headless training on this Mac. Add per-platform build support only when standalone builds are actually wanted. |
+| **git-lfs** | Unity 저장소 표준. 바이너리 자산(모델, 텍스처, 오디오, 학습된 `.onnx` 정책)이 git 히스토리를 부풀리면 안 됨. 큰 파일 커밋 후 LFS retrofit 은 고통스러워서 지금 설정. `.gitattributes` 에 패턴 나열됨. |
 
-## 5. Needs you
+## 의도적으로 설치 안 한 것과 이유
 
-### 5.1 Unity license — done ✅
+| 설치 안 함 | 이유 |
+|---|---|
+| **ROS 2** | 하드웨어 통합(phase 3) 전까지 불필요. 설계가 message-DTO + bus 인터페이스를 유지해서 나중에 재구조화 없이 추가 가능. |
+| **Unity ML-Agents** | 설계가 의도적으로 학습을 Unity/ML-Agents 에 결합 안 함 (design-review §12). RL 학습기는 언어중립 env 경계 뒤에. |
+| **유체 시뮬 플러그인 (Obi Fluid, Zibra 등)** | 권장 슬로시 모델은 커스텀 분석적 reduced-order 모델 (design-review §6). 입자 유체는 결정론과 RL 스텝 예산을 깸. |
+| **`com.unity.sentis` (ONNX 런타임)** | 아키텍처 결정 (project-goals): 정책은 별도 Python 프로세스로 서빙, Unity 바이너리에 안 구움. 작은 MLP 에 과함. |
+| **.NET SDK, Node.js** | Unity Editor 가 자체 C# 컴파일러 번들. Claude Code 가 생성된 `.csproj`/`.sln` 을 읽고 편집 가능. |
+| **standalone IDE (Rider / VS Code C#)** | phase 1 에 불필요. Editor + Claude Code 로 충분. |
 
-Unity Personal license activated. Project created and verified (see §1b).
+## 헤드리스 실행
 
-### 5.2 GitHub remote (optional, your call)
+```bash
+UNITY="/Applications/Unity/Hub/Editor/6000.5.10f1/Unity.app/Contents/MacOS/Unity"
 
-`gh` is authenticated as `yimsemin`, so the remote can be created without any new
-login. It has **not** been created. When you want it, confirm:
+# EditMode 테스트
+"$UNITY" -batchmode -nographics -projectPath . -runTests -testPlatform EditMode -testResults Logs/x.xml -logFile -
 
-- repo name `fluid-stabilizer`, owner `yimsemin`
-- **private** or public
-- then: `gh repo create` + push `main`.
+# 편집기 러너 (예: feasibility 천장)
+"$UNITY" -batchmode -quit -nographics -projectPath . -executeMethod FluidStabilizer.SimEditor.HindsightEvalRunner.Run -logFile -
+```
 
-## 6. Current state / next step
-
-Environment verified, Git repo configured, Unity project created and verified,
-all committed locally. **Now waiting for your decision on the design review**
-(`design-review.md`) before any feature implementation. When phase 1 is approved,
-the first setup task is adding `com.unity.test-framework` and
-`com.unity.inputsystem` and agreeing `frames-units-conventions.md`.
+> ⚠️ Unity 는 프로젝트당 단일 인스턴스. `-executeMethod` / `-runTests` 전에
+> Editor 를 닫고 `Temp/UnityLockfile` 이 없는지 확인.

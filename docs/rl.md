@@ -1,247 +1,203 @@
-# RL path (phase-1 item 12)
+# RL 경로
 
-The learned-policy integration. Design-review §11–§12: a **language-agnostic
-Gymnasium-style boundary**, not Unity ML-Agents — so the trainer is an ordinary
-Python process with no Unity dependency, and the same policy contract works
-against a ROS 2 bridge later.
+학습 정책 통합. design-review §11~§12: **언어 중립 Gymnasium 스타일 경계**,
+Unity ML-Agents 아님 — 학습기는 Unity 의존성 없는 평범한 Python 프로세스이고,
+같은 정책 계약이 나중에 ROS 2 브릿지에도 통한다.
 
-## Why RL here at all
+## 왜 여기에 RL 인가
 
-Findings F1–F4: against a rigid (locked-joint) `Hold`, **no analytic reactive
-tilt controller wins on any scenario** — reactive feedback that rotates the tank
-adds slosh energy. Yet perfect (non-causal) tank-tilt tracking cuts the wall
-wave to 0.40× (`IdealTiltTracking_…`). The gap is *anticipation* — inferring the
-hidden slosh state from a history of noisy sensors and acting ahead of the wave,
-within a torque budget that a hard maneuver can thermally exhaust. That is the
-RL target.
+findings F1~F4: 강체(잠금 관절) `Hold` 상대로 **어떤 분석적 반응형 틸트
+컨트롤러도 어느 시나리오에서도 못 이긴다** — 탱크를 회전시키는 반응형 피드백이
+슬로시 에너지를 더한다. 그러나 완벽한(비인과적) 탱크-틸트 추종은 벽 파도를
+0.40× 로 줄인다 (`IdealTiltTracking_…`). 격차는 *예측* — 노이즈 센서 이력에서
+숨겨진 슬로시 상태를 추론하고, 하드 기동이 열적으로 소진시킬 수 있는 토크 예산
+안에서 파도보다 앞서 행동하는 것. 그게 RL 타깃.
 
-## Pieces
+## 구성 요소
 
-| Piece | Where | Status |
+| 요소 | 위치 | 상태 |
 |---|---|---|
-| `ObservationEncoder` | `Assets/FluidStabilizer/Rl/` | ✅ actor obs: sensor-derived, ~unit-scaled, N-frame stack (default 6) + allowed derived felt-tilt |
-| `PrivilegedEncoder` | `Rl/` | ✅ float[21] for the asymmetric critic (true slosh state, CoM, actuator + thermal) |
-| `RewardFunction` | `Rl/` | ✅ the §11 continuous reward, weights configurable, per-term breakdown |
-| `RlEnvironment` | `Rl/` | ✅ deterministic `Reset(seed)→obs`, `Step(action)→(obs, reward, terminated, truncated, privileged)` |
-| `TrainingServer` | `Rl/` | ✅ length-prefixed binary TCP bridge (one client); loopback-tested bit-identical to the in-process env |
-| `RlServerLauncher` | `Sim/Editor/` | ✅ `-executeMethod` entry point (headless Unity host) |
-| Python env + PPO | `python/` | 🟡 asymmetric-critic CleanRL-style PPO; runs end-to-end, trainer brought up to the CleanRL reference (obs/return normalisation, 2026-08-29). **PPO-from-scratch still does not learn** — the task needs residual RL / curriculum / warm-start, not tuning. See "First-run result" |
-| Domain randomization | — | ⬜ item 13 |
-| Curriculum automation | — | ⬜ (restart the server with harder flags for now) |
+| `ObservationEncoder` | `Assets/FluidStabilizer/Rl/` | ✅ actor obs: 센서 유래, ~단위 스케일, N-프레임 스택(기본 6) + 허용된 유도 felt-tilt |
+| `PrivilegedEncoder` | `Rl/` | ✅ 비대칭 크리틱용 float[21] (실제 슬로시 상태, CoM, 액추에이터 + 열) |
+| `RewardFunction` | `Rl/` | ✅ §11 연속 reward, 가중치 설정 가능, 항목별 breakdown |
+| `RlEnvironment` | `Rl/` | ✅ 결정론적 `Reset(seed)→obs`, `Step(action)→(obs, reward, terminated, truncated, privileged)`. 잔차 모드 지원 (아래 참고) |
+| `TrainingServer` | `Rl/` | ✅ length-prefixed 바이너리 TCP 브릿지 (클라이언트 1); in-process env 와 비트 동일하게 루프백 테스트됨 |
+| `RemotePolicyController` | `Rl/` | ✅ 학습된 정책의 브릿지 *클라이언트* — `serve_policy.py` 에 연결 (step D) |
+| `BcDatasetExporter` | `Rl/` | ✅ hindsight 궤적 → BC 지도학습 데이터셋 (step C) |
+| `RlServerLauncher` / `BcExportRunner` / `PolicyEvalRunner` | `Sim/Editor/` | ✅ `-executeMethod` / 메뉴 진입점 (헤드리스 Unity 호스트) |
+| Python env + PPO | `python/` | 🟡 비대칭 크리틱 CleanRL 스타일 PPO; end-to-end 실행됨, obs/return 정규화까지 올림. **맨땅 PPO 는 여전히 학습 못 함** — 튜닝이 아니라 잔차 RL / 커리큘럼 / 웜스타트가 필요. "첫 실행 결과" 참고 |
+| `bc_pretrain.py` / `serve_policy.py` | `python/` | ✅ BC 사전학습 + 정책 추론 프로세스 (step C/D) |
+| 도메인 랜덤화 | — | ⬜ |
+| 커리큘럼 자동화 / 체크포인트 재개 | — | ⬜ (지금은 서버를 더 어려운 플래그로 재시작) |
 
-## Action / observation / reward
+## 행동 / 관측 / reward
 
-- **Action:** per-axis joint **angular-rate** command in `[-1, 1]`, scaled to
-  `GimbalConfig.MaxRateRadPerSec`. Rate mode, not angle (design-review §11; F1).
-- **Actor observation:** `ObservationEncoder` — vehicle + tank IMU, joint state,
-  motor state, 4 load cells, optional level/CAN, last action, and the low-passed
-  felt-tilt direction in the tank frame + its rate. Frame-stacked. **Never** any
-  ground truth.
-- **Critic observation:** the actor obs concatenated (Python side) with
-  `PrivilegedEncoder` output.
-- **Reward** (`RewardWeights.Default()`, tune in C#): `−k1·overflow −k2·near-rim²
-  −k3·slosh KE −k4·|Δaction| −k5·actuator effort −k6·joint-limit-proximity²
-  −k7·tank-tilt² (+k8 alive) −K_term on a large-spill terminal`.
+- **행동:** 축당 관절 **각속도** 명령 `[-1, 1]`, `GimbalConfig.MaxRateRadPerSec`
+  로 스케일. 각도가 아니라 rate 모드 (design-review §11; F1).
+- **Actor 관측:** `ObservationEncoder` — 차량+탱크 IMU, 관절 상태, 모터 상태,
+  로드셀 4개, 옵션 레벨/CAN, 마지막 행동, 탱크 프레임에서의 low-pass felt-tilt
+  방향 + rate. 프레임 스택. **절대** ground truth 없음.
+- **Critic 관측:** actor obs 를 (Python 쪽에서) `PrivilegedEncoder` 출력과 연결.
+- **Reward** (`RewardWeights.Default()`, C# 에서 튜닝): `−k1·overflow
+  −k2·near-rim² −k3·슬로시 KE −k4·|Δaction| −k5·액추에이터 노력
+  −k6·관절한계근접² −k7·탱크틸트² (+k8 생존) − 큰 스필 종료 시 K_term`.
 
-## Running it
+## 실행 방법
 
-**Bridge verified end-to-end 2026-08-29** (macOS arm64, M4 Max): the commands
-below run the full loop — ~1400 steps/s, checkpoint + TensorBoard logs written.
-No code changes were needed to get the loop running; the earlier failures were
-the two gotchas called out below. **The PPO does not learn yet** (see "First-run
-result" further down) — that is a trainer problem, not a bridge problem.
+**2026-08-29 브릿지 end-to-end 검증** (macOS arm64, M4 Max): 아래 명령이 전체
+루프를 돌림 — ~1400 steps/s, 체크포인트 + TensorBoard 로그 기록. **PPO 는 아직
+학습 못 함** ("첫 실행 결과" 참고) — 학습기 문제이지 브릿지 문제 아님.
 
-> ⚠️ **Close the Unity Editor before starting the headless server.** Unity is
-> single-instance per project — if the Editor (or a stale `-batchmode` Unity, or
-> an `AssetImportWorker`) already holds the project, the `-executeMethod` launch
-> silently blocks / never binds the port. Check with
-> `pgrep -fl "Unity.app/Contents/MacOS/Unity"` and confirm `Temp/UnityLockfile`
-> is gone. Later this should become a `[MenuItem]` so the server can run from
-> inside an open Editor; not built yet.
+> ⚠️ **헤드리스 서버 시작 전에 Unity Editor 를 닫아라.** Unity 는 프로젝트당
+> 단일 인스턴스 — Editor(또는 죽은 `-batchmode` Unity, `AssetImportWorker`)가
+> 이미 프로젝트를 잡고 있으면 `-executeMethod` 실행이 조용히 블록되고 포트를
+> 안 연다. `pgrep -fl "Unity.app/Contents/MacOS/Unity"` 로 확인하고
+> `Temp/UnityLockfile` 이 사라졌는지 확인.
 
 ```bash
-# 1. install the trainer (once), on the machine that will train.
-#    Any CPython 3.9–3.13 works; torch / gymnasium / tensorboard have arm64
-#    wheels. The committed python/.venv is 3.9.6 (CommandLineTools) and is fine.
-cd python && python3 -m venv .venv && . .venv/bin/activate
-pip install -r requirements.txt
+# 1. 학습기 설치 (한 번). CPython 3.9~3.13 아무거나. 커밋된 python/.venv 는 3.9.6.
+cd python && python3 -m venv .venv && . .venv/bin/activate && pip install -r requirements.txt
 
-# 2. start the sim server (headless Unity; leave it running — Serve() blocks the
-#    main thread on an accept loop forever, that is normal, do NOT pass -quit).
-#    Log to a file so you can watch the boot; ~5 s warm, up to a minute cold.
+# 2. 시뮬 서버 시작 (헤드리스 Unity; 계속 켜둠 — Serve() 가 accept 루프에서
+#    영원히 블록, 정상, -quit 주지 말 것). ~5 s (웜) ~ 1 분 (콜드).
 UNITY="/Applications/Unity/Hub/Editor/6000.5.10f1/Unity.app/Contents/MacOS/Unity"
 "$UNITY" -batchmode -nographics -projectPath . \
   -executeMethod FluidStabilizer.SimEditor.RlServerLauncher.Serve \
-  -rlPort 5555 -rlDriver highway -rlBriskness 0.5 -rlFill 0.5 -rlSlosh pendulum \
+  -rlPort 5555 -rlTrace all -rlStack 6 -rlBaseline hold \
   -logFile Logs/rlserver.log &
-# wait for this line before connecting:  [rl] TrainingServer listening on 127.0.0.1:5555
-#   (the UnityEngine.Debug:ExtractStackTrace... block right after
-#    "[rl] launching TrainingServer" is NOT an error — batchmode attaches a
-#    stack trace to every Debug.Log.)
+# 연결 전에 이 줄을 기다림:  [rl] TrainingServer listening on 127.0.0.1:5555
+#   ("[rl] launching TrainingServer" 직후 UnityEngine.Debug:ExtractStackTrace...
+#    블록은 에러가 아님 — batchmode 는 모든 Debug.Log 에 스택트레이스를 붙임.)
 
-# 3. train  (start short to confirm the loop, then go long)
-cd python && python train_ppo.py --port 5555 --total-steps 30000 --run-name smoke
-python train_ppo.py --port 5555 --total-steps 2_000_000
+# 3. BC 웜스타트 후 학습
+cd python
+python bc_pretrain.py --dataset ../Logs/bc/dataset.csv --out runs/bc/actor.pt   # (먼저 메뉴 ▸ Export BC Dataset)
+python train_ppo.py --port 5555 --init-actor runs/bc/actor.pt --total-steps 300000 --run-name bc-run
 tensorboard --logdir python/runs
 
-# 4. evaluate a checkpoint (compare mean return / spill against F4)
-python play.py --port 5555 --actor runs/<run>/actor.pt --episodes 20
+# 4. 정책 서빙 (별도 프로세스) + 앱에서 확인
+python serve_policy.py --checkpoint runs/bc-run/actor.pt --port 5601
+#   그다음 Unity 에서: 메뉴 ▸ FluidStabilizer ▸ Evaluate Learned Policy
+#   또는 플레이 씬에서 키 4
 ```
 
-The server serves one client at a time and loops back to `accept` when the
-trainer disconnects, so you can re-run `train_ppo.py` against the same server
-process. Restart the server only to change the `-rl*` scenario flags.
+서버는 한 번에 클라이언트 하나를 서빙하고 학습기가 끊으면 `accept` 로 돌아온다 —
+같은 서버 프로세스 상대로 `train_ppo.py` 를 재실행 가능. `-rl*` 시나리오
+플래그를 바꿀 때만 서버 재시작.
 
-Launcher flags: `-rlPort -rlFill -rlSeconds -rlStack -rlDriver {highway|aggressive|scripted}
+**런처 플래그:** `-rlPort -rlFill -rlSeconds -rlStack -rlDriver {highway|aggressive|scripted}
 -rlSlosh {pendulum|shallow} -rlRoad {none|mild|rough} -rlBriskness -rlAggression`.
-Everything except `-rlPort/-rlStack` **defaults to `experiment.txt`** now; the flags override per-run.
+`-rlPort/-rlStack` 빼고 전부 이제 **`experiment.txt` 를 기본값으로** 하고,
+플래그가 실행별로 override.
 
-**Trace-driven training (step C0):** `-rlTrace all` trains on the recorded drives
-that have a `Logs/hindsight/*.traj.csv` (the BC set — 6 drives); `-rlTrace <substr>`
-filters by filename. One drive per episode by seed; config = the first drive's
-fill/road, episode length = the shortest drive.
+**트레이스 기반 학습 (step C0):** `-rlTrace all` 은 `Logs/hindsight/*.traj.csv`
+가 있는 녹화 주행(BC 셋 — 6 주행)으로 학습; `-rlTrace <substr>` 는 파일명으로
+필터. 에피소드당 seed 로 주행 하나; config = 첫 주행의 fill/도로, 에피소드
+길이 = 가장 짧은 주행.
 
-**BC warm start (step C):** `FluidStabilizer ▸ Export BC Dataset` (or
-`-executeMethod …BcExportRunner.Run`) replays each drive through the real obs
-pipeline feeding it the hindsight action → `Logs/bc/dataset.csv`. Then
-`python bc_pretrain.py` fits `actor_mean` + the whitener → `runs/bc/actor.pt`,
-and `python train_ppo.py --init-actor runs/bc/actor.pt` warm-starts PPO. Because
-the F5 hindsight optimum is nearly do-nothing, BC teaches a low-amplitude smooth
-prior (keeps exploration off the cliff), not a competent policy.
+**BC 웜스타트 (step C):** `FluidStabilizer ▸ Export BC Dataset` (또는
+`-executeMethod …BcExportRunner.Run`)가 각 주행을 실제 obs 파이프라인으로 재생하며
+hindsight 행동을 먹여 → `Logs/bc/dataset.csv`. 그다음 `python bc_pretrain.py`
+가 `actor_mean` + whitener 를 맞춰 → `runs/bc/actor.pt`, `python train_ppo.py
+--init-actor runs/bc/actor.pt` 가 PPO 웜스타트. F5 hindsight 최적해가 거의
+무동작이라 BC 가 가르치는 건 저진폭 매끄러운 프라이어(탐색을 절벽에서 떼어놓음)
+이지 유능한 정책이 아니다.
 
-**Policy serving (step D — the deployment split):** the trained policy runs as
-its own process, `python serve_policy.py --checkpoint runs/<run>/actor.pt --port
-5601` (loads `actor_mean` + the whitener, returns the deterministic mean, threaded
-one-per-client). Unity's `RemotePolicyController` (engine-free, `FluidStabilizer.Rl`)
-is the bridge client: it runs `ObservationEncoder` locally, sends the vector, and
-turns the reply into a joint-rate command — degrading to a locked Hold (and
-re-probing every ~2 s) if the server is absent. Wire format in the class doc-comment.
-Use it via `StabilizerChoice.LearnedPolicy` (play-scene key `4`), or
-**FluidStabilizer ▸ Evaluate Learned Policy** → `Logs/policy-eval.txt`. This is
-*not* baked ONNX in the Unity binary — see project-goals.md "Final-product architecture".
+**정책 서빙 (step D — 배포 분리):** 학습된 정책이 자기 프로세스로 실행,
+`python serve_policy.py --checkpoint runs/<run>/actor.pt --port 5601`
+(`actor_mean` + whitener 로드, 결정론적 mean 반환, 클라이언트별 스레드). Unity
+의 `RemotePolicyController` (엔진프리, `FluidStabilizer.Rl`)가 브릿지 클라이언트:
+`ObservationEncoder` 를 로컬로 돌리고 벡터를 보내고, 응답을 관절속도 명령으로
+바꿈 — 서버 없으면 잠근 Hold 로 격하 (~2 s 마다 재탐지). wire 포맷은 클래스
+doc-comment. 이건 Unity 바이너리에 구운 ONNX 가 *아님* — project-goals.md 참고.
 
-**Residual mode (experiment-plan step B, 2026-08-29):** `-rlBaseline {none|hold|sfa|pid}`
-`-rlResidualFrac <0..1>` (default 0.35). With a baseline, each control tick the
-env emits `baselineRate + policy·(residualFrac·MaxRate)` in joint-rate space
-(baseline angle/locked commands are converted to an equivalent rate — P-tracked
-for angle, PD-held-at-zero for locked), both clamped to the max rate. The policy
-only learns a small correction around a sane operating point — the F1/F4-cliff
-fix. Action space and the Python trainer are unchanged; the composition is
-server-side. `RlEnvironment` gained `baselineFactory` / `residualRateScaleRadPerSec`
-ctor params + `ActorName` / `GimbalState` getters. `ResidualRlTests` (4).
+**잔차 모드 (step B):** `-rlBaseline {none|hold|sfa|pid}` `-rlResidualFrac <0..1>`
+(기본 0.35). 베이스라인이 있으면 매 제어틱에 env 가 관절속도 공간에서
+`baselineRate + policy·(residualFrac·MaxRate)` 를 발행 (베이스라인 각도/잠금
+명령은 등가 rate 로 변환 — 각도는 P 추종, 잠금은 0 으로 PD 유지), 둘 다 max
+rate 로 clamp. 정책은 멀쩡한 동작점 주변에서 작은 보정만 학습 — F1/F4 절벽의
+해법. 행동 공간과 Python 학습기는 변경 없음; 합성은 서버 쪽. `RlEnvironment` 에
+`baselineFactory` / `residualRateScaleRadPerSec` ctor 인자 + `ActorName` /
+`GimbalState` getter 추가. `ResidualRlTests` (4).
 
-**Curriculum** (manual for now): start `highway`, briskness ~0.4, fill ~0.45;
-once the reward plateaus, restart the server with a harder driver / fuller tank /
-`shallow` model and continue training from the checkpoint.
+**병렬 롤아웃:** 서버는 단일 클라이언트. N 포트에 N 서버를 띄우고 N 개
+`FluidStabEnv` 를 Gymnasium `AsyncVectorEnv` 로 감쌈 (v1 PPO 스크립트는
+단일 env — 처리량이 중요해지면 확장).
 
-**Parallel rollouts:** the server is single-client. Launch N servers on N ports
-and wrap N `FluidStabEnv` in a Gymnasium `AsyncVectorEnv` (the PPO script is
-single-env in v1 — extend when throughput matters).
+## 첫 실행 결과 (2026-08-29): 배관은 작동; 맨땅 PPO 는 이 과제를 학습 **못 함**
 
-## First-run result (2026-08-29): plumbing works; PPO-from-scratch does **not** learn this task
+세 번 실행 (600 k~1 M 스텝): 학습된 정책이 항상 *zero-action 정책보다 나쁨*,
+return 곡선이 완전 평평. 별개의 두 문제; 첫째는 고침, 둘째는 과제 설계 결정.
 
-Three runs (600 k–1 M steps): the trained policy is always *worse than a
-zero-action policy* and the return curve is dead flat. Two separate problems
-were found; the first is fixed, the second is a task-design decision.
+### (1) 학습기가 CleanRL 참조 아래였음 — **고침**
 
-### (1) Trainer was below the CleanRL reference — **fixed**
+`train_ppo.py` 가 원시 234차원 프레임스택 obs(물리 단위, 스케일 제각각)를
+`tanh` MLP 에 바로 먹였고, 스케일 안 된 reward 타깃과 `--ent-coef 0`. 첫 Linear
+층이 포화하고 아무것도 학습 안 됨. 이번 세션에 추가: actor obs **와** 특권 크리틱
+obs 둘 다에 `RunningMeanStd` whitening (±10 클립); CleanRL 스타일 return 정규화
+(reward ÷ 할인 return 의 running std); `--ent-coef` 기본 `0 → 1e-3`; obs
+정규화기 통계를 체크포인트에 저장하고 `play.py` 가 재적용; 콘솔이 이제
+`return(mean50)` (원시) 를 flush 출력. `v_loss` 가 스파이크 → ~1e-2. 하지만
+정책은 (2) 때문에 여전히 개선 안 됨.
 
-`train_ppo.py` fed the raw 234-dim frame-stacked obs (physical units on wildly
-different scales) straight into a `tanh` MLP, with unscaled reward targets and
-`--ent-coef 0`. The first Linear layer saturates and nothing learns. Added, this
-session:
+### (2) 과제는 예측 문제 — 반응형 탐색이 절벽에서 떨어진다
 
-- `RunningMeanStd` whitening (±10 clip) of **both** the actor obs and the
-  privileged critic obs;
-- CleanRL-style return normalisation (reward ÷ running std of the discounted
-  return);
-- `--ent-coef` default `0 → 1e-3`;
-- the obs-normaliser stats are saved in the checkpoint and re-applied by
-  `play.py` (a policy trained on whitened obs is garbage without them);
-- console now prints `return(mean50)` (raw), flushed.
+`-rlDriver aggressive -rlAggression 0.7 -rlFill 0.72` (진자 ROM, 30 s
+에피소드)에서 측정한 평균 에피소드 return:
 
-`v_loss` went from spiking to ~1e-2 — the value head is now sane. But the policy
-still does not improve, because of (2).
-
-### (2) The task is an anticipation problem — reactive exploration falls off a cliff
-
-Measured on `-rlDriver aggressive -rlAggression 0.7 -rlFill 0.72` (pendulum ROM,
-30 s episodes), mean episode return:
-
-| policy | return | spills out? |
+| 정책 | return | 넘치나? |
 |---|---|---|
-| zero action / hold still | **≈ −1800** | no, survives the episode |
-| **any** reactive P or D controller on the felt-tilt obs, **any gain, either sign** | ≈ −3200 | yes, 3–4 / 4 |
-| PPO after 1 M steps | ≈ −3250 | yes |
+| zero action / 가만히 | **≈ −1800** | 아니오, 에피소드 생존 |
+| felt-tilt obs 에 대한 **어떤** 반응형 P 또는 D 컨트롤러, **어떤 gain, 어느 부호든** | ≈ −3200 | 예, 3~4 / 4 |
+| 1 M 스텝 후 PPO | ≈ −3250 | 예 |
 
-This is **finding F1/F4 exactly**: the instant the gimbal moves in response to
-the wave it pumps slosh energy and the tank overflows. The only good policy is a
-narrow "hold / anticipate" ridge; Gaussian action noise around a random init is
-*always* on the cliff, every rollout terminates early at ≈ −3200, the critic
-learns "everything is −3200", the gradient vanishes and the log-std collapses.
-A from-scratch on-policy learner cannot discover the anticipatory policy here.
+이건 **정확히 finding F1/F4**: 짐벌이 파도에 반응해 움직이는 순간 슬로시
+에너지를 펌핑하고 탱크가 넘친다. 유일한 좋은 정책은 좁은 "hold / 예측" 능선;
+무작위 init 주변의 Gaussian 행동 노이즈는 *항상* 절벽 위, 모든 롤아웃이
+≈ −3200 에서 조기 종료, 크리틱이 "전부 −3200" 을 학습, gradient 가 사라지고
+log-std 가 붕괴. 맨땅 on-policy 학습기는 여기서 예측 정책을 발견 못 한다.
 
-**This needs a task-design change, not more steps or tuning. Candidates:**
+**이건 스텝이나 튜닝이 아니라 과제 설계 변경이 필요.** → [experiment-plan.md](experiment-plan.md)
+의 결정으로 이어짐: 잔차 RL (design-review 의 명시된 접근), 쉬운 것부터
+커리큘럼, 웜스타트/BC, 훨씬 무거운 action-rate 패널티.
 
-- **Residual RL** (design-review's stated approach): the policy outputs a small
-  correction on top of a baseline (locked-hold, or SFA), so exploration happens
-  around a sane operating point instead of random gimbal slams. Needs a change to
-  `RlEnvironment` (compose baseline + policy action) — not wired.
-- **Curriculum from easy**: start with a calm driver + low fill where holding
-  still already scores ~0 and gentle motion helps; ramp difficulty once the
-  actuator behaviour is learned. Needs **checkpoint resume** (also not wired).
-- **Warm start / behaviour cloning** from the locked-hold or from human traces
-  (project-goals ③), then RL fine-tune.
-- Much heavier action-rate penalty / lower `MaxRateRadPerSec` so exploratory
-  jitter can't pump the mode.
+### 결정 (step-back 세션, 2026-08-29) — [experiment-plan.md](experiment-plan.md)
 
-The bridge, the trainer, and the reward are ready for whichever of these the
-owner picks.
+두 가지가 존재하기 전까지 RL 실행 없음: **녹화 인간 주행** (완료 — `DriverTrace`)
+과 **feasibility 천장** (고정 녹화 주행에 대한 오프라인 hindsight 궤적 최적화).
+천장은 하드 게이트: 특권/hindsight 해가 녹화 주행에서 잠근 Hold 베이스라인을
+못 이기면, RL 전에 전제를 조정.
 
-### Decision (step-back session, 2026-08-29) — see [experiment-plan.md](experiment-plan.md)
+**2026-08-29 갱신 — 천장을 만들고 돌렸고(`HindsightOptimizer`), 게이트 미통과.
+finding F5 참고.** 홀드아웃 6 주행에서 hindsight-최적 짐벌-rate 궤적이 잠근
+탱크보다 2~6 L *더* 스필 (진자 ROM; 얕은물에서 훨씬 나쁨). 0 을 명령하는
+액추에이터 서보 자체가 이미 기계적으로 잠근 관절에 ≈ 5~7 L 진다. **잔차 RL 은
+전제 조정(freeboard, 도로 강도, 또는 잔차 베이스라인이 25 L 처지는 서보가 아니라
+19 L 잠근 탱크가 되도록 하는 하이브리드 lock-capable 액션 공간) + step-3
+재실행이 hindsight 가 잠근 Hold 를 이기는 걸 보이기 전까지 보류.** RL 이 재개되면
+여전히 **잔차 RL** — 정책 = 베이스라인 + 작은 보정, `Logs/hindsight/*.traj.csv`
+궤적 behaviour-cloning 으로 웜스타트 — 이는 `RlEnvironment` 합성(완료)과
+`train_ppo.py` 체크포인트 재개(미구현)가 필요.
 
-No more RL runs until two things exist: **recorded human drives** (done — the
-`DriverTrace` path, see phase1-progress item 3) and a **feasibility ceiling**
-(offline hindsight trajectory optimisation on a fixed recorded drive). The
-ceiling is a hard gate: if a privileged/hindsight solution cannot beat the
-locked-Hold baseline on the recorded drives, the premise is adjusted before any
-RL.
+## 메모 / 리스크
 
-**Update 2026-08-29 — the ceiling was built and run (`HindsightOptimizer`), and
-the gate does NOT pass. See finding F5.** On 6 held-out drives, the
-hindsight-optimal gimbal-rate trajectory spills 2–6 L *more* than a locked tank
-(pendulum ROM; far worse under shallow water). The actuator's own servo,
-commanding zero, already loses ≈ 5–7 L to a mechanically locked joint. **Residual
-RL is on hold** until the premise is adjusted (freeboard, road severity, or a
-hybrid lock-capable action space so the residual baseline is the 19 L locked tank
-rather than the 25 L sagging servo) and a step-3 re-run shows hindsight beating
-locked Hold. When RL does resume it is still **residual RL** — policy = baseline +
-small correction, warm-started by behaviour-cloning the
-`Logs/hindsight/*.traj.csv` trajectories — which needs `RlEnvironment` to compose
-(baseline action + policy action) and checkpoint-resume in `train_ppo.py`.
-
-## Notes / risks
-
-- **No spill-metric readout over the wire.** `play.py` only sums the shaped
-  reward. The F4 table is spill in litres on 6 named scenarios
-  (`docs/findings.md`); `RlEnvironment.Summary()` produces that roll-up in C# but
-  the TCP protocol (RESET/STEP/CLOSE) does not expose it, and neither does the
-  per-term `RewardBreakdown`. To compare a policy against F4 you need either a
-  `SUMMARY` opcode or the Phase-1.5 ONNX-in-`Evaluator` path.
-- **No checkpoint resume.** `train_ppo.py` always starts from random weights, so
-  the "continue training from the checkpoint" curriculum below is not yet
-  possible.
-- **Bracket-model discipline (F3):** train on the pendulum ROM (cheap), and
-  *always* re-evaluate the trained policy on `-rlSlosh shallow` before trusting a
-  win. A policy that beats rigid only under the ROM has probably learned a ROM
-  artefact.
-- **Reward hacking watch:** the classic exploit is caging the liquid at a hard
-  end-stop. Watch the `joint-limit-proximity` and `actuator-effort` terms in the
-  per-step breakdown; raise `k6`/`k5` if it happens.
-- **Reward weights bumped 2026-08-29:** `Overflow` 500 → 5e4, `TerminalSpill`
-  5 → 500. With the old values a 50 L spill cost only ≈ −25 and ending the
-  episode by dumping the tank scored *better* than holding on — a fail-fast
-  exploit. `RlEnvironmentTests` / `RewardFunction` tests still pass.
-- **Throughput:** the binary bridge is fine for v1. If it bottlenecks, batch
-  steps or move the host to a standalone .NET process (the env code is
-  engine-free — only the launcher is Unity).
+- **wire 로 스필 지표 없음.** `play.py` 는 shaped reward 만 합산. F4 표는 명명된
+  6 시나리오의 리터 스필. `RlEnvironment.Summary()` 가 C# 에서 그 roll-up 을
+  만들지만 TCP 프로토콜(RESET/STEP/CLOSE)이 노출 안 함. 정책을 F4 와 비교하려면
+  `SUMMARY` opcode 나 `PolicyEvalRunner` 경로(step D, `Logs/policy-eval.txt`)
+  필요.
+- **체크포인트 재개 없음.** `train_ppo.py` 는 항상 무작위 가중치에서 시작
+  (`--init-actor` 는 BC 초기값만). 그래서 커리큘럼 "체크포인트에서 학습 계속"
+  은 아직 불가.
+- **브래킷 모델 규율 (F3):** 진자 ROM 으로 학습(쌈), 승리를 신뢰하기 전에
+  *항상* `-rlSlosh shallow` 로 재평가. ROM 하에서만 강체를 이기는 정책은
+  아마 ROM 아티팩트를 학습한 것.
+- **Reward hacking 감시:** 고전적 exploit 은 액체를 하드 end-stop 에 가두는 것.
+  항목별 breakdown 의 `joint-limit-proximity` 와 `actuator-effort` 감시;
+  발생하면 `k6`/`k5` 올림.
+- **Reward 가중치 조정 2026-08-29:** `Overflow` 500 → 5e4, `TerminalSpill`
+  5 → 500. 예전 값으로는 50 L 스필이 ≈ −25 만 비용이고 탱크를 쏟아 에피소드를
+  끝내는 게 버티는 것보다 *더 나은* 점수 — fail-fast exploit. `RlEnvironmentTests`
+  / `RewardFunction` 테스트 여전히 통과.
+- **처리량:** 바이너리 브릿지는 v1 에 충분. 병목이면 스텝 배치하거나 호스트를
+  standalone .NET 프로세스로 (env 코드는 엔진프리 — 런처만 Unity).

@@ -1,91 +1,89 @@
-# Frames, units, and timing conventions
+# 프레임 · 단위 · 타이밍 규약
 
-Status: **locked (v1).** Agreed 2026-08-27 as part of the design-review approval.
-Change only by an explicit decision recorded here with a date.
+상태: **고정 (v1).** 2026-08-27 설계 리뷰 승인의 일부로 합의. 여기 날짜와 함께
+기록된 명시적 결정으로만 변경.
 
-## Units — SI everywhere
+## 단위 — 어디서나 SI
 
-| Quantity | Unit |
+| 물리량 | 단위 |
 |---|---|
-| Length | metre (m) |
-| Mass | kilogram (kg) |
-| Time | second (s) |
-| Angle | radian (rad) internally; degrees only at UI / inspector boundaries |
-| Force | newton (N) |
-| Torque | newton-metre (N·m) |
-| Linear acceleration | m/s² |
-| Angular rate | rad/s |
+| 길이 | 미터 (m) |
+| 질량 | 킬로그램 (kg) |
+| 시간 | 초 (s) |
+| 각도 | 내부는 라디안 (rad); UI / 인스펙터 경계에서만 도 |
+| 힘 | 뉴턴 (N) |
+| 토크 | 뉴턴미터 (N·m) |
+| 선가속 | m/s² |
+| 각속도 | rad/s |
 
-The simulation core and every message use **right-handed, SI, radians**. Unity's
-transforms (left-handed, Y-up, degrees) are converted **only** at the
-`FluidStabilizer.Sim` boundary — never leaked into `Contracts` or `Controller`.
+시뮬레이션 코어와 모든 메시지는 **오른손, SI, 라디안**. Unity 의 transform
+(왼손, Y-up, 도)은 `FluidStabilizer.Sim` 경계에서 **만** 변환 — `Contracts` 나
+`Controller` 로 절대 새지 않음.
 
-## Coordinate frames — right-handed
+## 좌표계 — 오른손
 
-| Frame | Origin | Axes | Notes |
+| 프레임 | 원점 | 축 | 메모 |
 |---|---|---|---|
-| **World (W)** | Fixed point on the ground at episode start | X = east, Y = north, Z = up (ENU) | Inertial. Gravity `g_W = (0, 0, −9.80665)` m/s². |
-| **Vehicle (V)** | Rear-axle centre, at ground level | X = forward, Y = left, Z = up | Rigidly attached to the sprung mass; moves with body heave/pitch/roll. |
-| **Tank (T)** | Gimbal pivot point (placed at the tank's nominal CoM) | X = forward, Y = left, Z = up when the gimbal is at zero | Rotates relative to V by the two stabilizer joint angles. |
-| **Sensor frames (S\*)** | Each sensor's mounting point | Nominal = parent body frame; each carries a small fixed **mounting misalignment** (rotation + offset) sampled per episode | IMU frame ≈ body frame ∘ mounting error. |
+| **World (W)** | 에피소드 시작 시 지면의 고정점 | X = 동, Y = 북, Z = 위 (ENU) | 관성. 중력 `g_W = (0, 0, −9.80665)` m/s² |
+| **Vehicle (V)** | 후축 중심, 지면 높이 | X = 전방, Y = 좌, Z = 위 | 스프렁매스에 강체 부착; 차체 heave/pitch/roll 과 함께 움직임 |
+| **Tank (T)** | 짐벌 피벗점 (탱크의 명목 CoM 에 배치) | 짐벌이 0 일 때 X = 전방, Y = 좌, Z = 위 | 두 스태빌라이저 관절 각도로 V 대비 회전 |
+| **Sensor 프레임 (S\*)** | 각 센서 마운트점 | 명목 = 부모 body 프레임; 각각 에피소드당 뽑는 작은 고정 **마운팅 오정렬**(회전 + 오프셋)을 가짐 | IMU 프레임 ≈ body 프레임 ∘ 마운팅 오차 |
 
-### Gimbal kinematics
+### 짐벌 운동학
 
-- Two revolute joints in series: **pitch about V's Y axis**, then **roll about
-  the once-pitched X axis**. Rotation order is fixed: `R_VT = Rx(roll) · Ry(pitch)`.
-- Travel limits: `|pitch| ≤ 30°`, `|roll| ≤ 30°` (well clear of kinematic
-  degeneracy; exact values are randomised within a band ≤ 30° — see
-  design-review §13).
-- Positive pitch raises the tank's +X (forward) edge; positive roll raises the
-  tank's +Y (left) edge. (Right-hand rule about the respective axis.)
+- 직렬 revolute 관절 2개: **V 의 Y 축 주변 pitch**, 그다음 **한 번 pitch 된
+  X 축 주변 roll**. 회전 순서 고정: `R_VT = Rx(roll) · Ry(pitch)`.
+- Travel 한계: `|pitch| ≤ 30°`, `|roll| ≤ 30°` (운동학적 특이점에서 충분히
+  떨어짐; 정확한 값은 ≤ 30° 대역 안에서 랜덤화 — design-review §13).
+- 양의 pitch 는 탱크의 +X(전방) 가장자리를 올림; 양의 roll 은 탱크의 +Y(좌)
+  가장자리를 올림.
 
-## Timing / update rates — locked defaults
+## 타이밍 / 갱신율 — 고정 기본값
 
-| Loop | Rate | Period | Notes |
+| 루프 | 율 | 주기 | 메모 |
 |---|---|---|---|
-| Physics + slosh integration | **600 Hz** | 1.667 ms | Fixed `dt`. Sub-stepping allowed inside a step if a model needs it. |
-| Sensor sampling | **200 Hz** | 5 ms | Physics-step decimation ×3. Every sample carries its sim-time stamp. |
-| Controller / policy | **100 Hz** | 10 ms | Physics-step decimation ×6. Zero-order hold on the action between ticks. |
-| Command transport delay | **10–50 ms** | — | Modelled + randomised per episode (design-review §9, §14). |
-| Episode length | **20–40 s** sim time | — | Long enough to contain post-maneuver slosh ring-down. |
-| Rendering (human-drive mode only) | display rate | — | Never in the physics path. |
+| 물리 + 슬로시 적분 | **600 Hz** | 1.667 ms | 고정 `dt`. 모델이 필요하면 스텝 안에서 서브스텝 허용 |
+| 센서 샘플링 | **200 Hz** | 5 ms | 물리스텝 데시메이션 ×3. 모든 샘플이 sim-time 스탬프를 지님 |
+| 컨트롤러 / 정책 | **100 Hz** | 10 ms | 물리스텝 데시메이션 ×6. 틱 사이 행동은 zero-order hold |
+| 명령 전송 지연 | **10~50 ms** | — | 에피소드당 모델링 + 랜덤화 (design-review §9, §14) |
+| 에피소드 길이 | **20~40 s** sim time | — | 기동 후 슬로시 ring-down 을 담을 만큼 김 |
+| 렌더링 (수동 주행 모드만) | 디스플레이 율 | — | 물리 경로에 절대 없음 |
 
-Rates are chosen so the decimations are integers and a control tick always
-coincides with a sensor tick: physics:sensor:control = 6:2:1. 600 Hz was picked
-over 500 Hz precisely so 200 Hz sensors divide evenly.
+율은 데시메이션이 정수이고 컨트롤 틱이 항상 센서 틱과 일치하도록 선택:
+물리:센서:컨트롤 = 6:2:1. **200 Hz 센서가 정수로 나눠지도록 500 대신 600 Hz 선택.**
 
-The managed simulation loop owns timing; it does **not** use Unity's
-`FixedUpdate`/`Time` for anything physical (decision D1 in `docs/decisions.md` —
-the mechanical sim runs in managed code, not PhysX).
+매니지드 시뮬레이션 루프가 타이밍을 소유; 물리적인 것에 Unity 의
+`FixedUpdate`/`Time` 을 **쓰지 않음** (decisions.md D1 — 기계 시뮬은 PhysX 가
+아니라 매니지드 코드).
 
-## Time and determinism
+## 시간과 결정론
 
-- One monotonic simulation clock, `IClock.SimTimeSeconds` (`double`), zero at
-  episode start.
-- Every sensor/command message carries `StampSeconds` (`double`) = the sim time
-  it represents.
-- The controller consumes messages **by timestamp**, never by frame index.
-- Wall-clock time is used only by the (future) real-time / ROS 2 adapter.
-- All stochastic elements draw from a single seeded `IRandomSource` tree
-  (one root seed per episode → named sub-streams). No `UnityEngine.Random`, no
-  `System.Random` without an explicit seed, in the sim path.
-- The slosh ODE is integrated in managed code with a fixed step — **not** by
-  PhysX — so episodes are bit-reproducible given a seed.
+- 단조 시뮬레이션 클록 하나, `IClock.SimTimeSeconds` (`double`), 에피소드
+  시작에 0.
+- 모든 센서/명령 메시지가 `StampSeconds` (`double`) = 그것이 나타내는 sim
+  time 을 지님.
+- 컨트롤러가 메시지를 **타임스탬프로** 소비, 프레임 인덱스로 절대 안 함.
+- Wall-clock 시간은 (미래) 실시간 / ROS 2 어댑터만 씀.
+- 모든 확률 요소가 seeded `IRandomSource` 트리에서 뽑음 (에피소드당 루트 seed
+  하나 → 명명된 서브스트림). sim 경로에 `UnityEngine.Random`, 명시적 seed 없는
+  `System.Random` 없음.
+- 슬로시 ODE 는 매니지드 코드에서 고정 스텝으로 적분 — PhysX 아님 — 그래서
+  에피소드가 seed 로 비트 재현 가능.
 
-## Message DTOs (v1 set)
+## 메시지 DTO (v1 셋)
 
-Plain serializable C# structs in `FluidStabilizer.Contracts`, no `UnityEngine`
-types, right-handed SI, each with a `double StampSeconds` field. Field layout
-mirrors the matching ROS 2 message so a future adapter is a straight copy.
+`FluidStabilizer.Contracts` 의 평범한 직렬화 가능 C# struct, `UnityEngine`
+타입 없음, 오른손 SI, 각각 `double StampSeconds` 필드. 필드 레이아웃이 대응하는
+ROS 2 메시지를 미러링해서 미래 어댑터가 straight copy.
 
-| DTO | Mirrors | Carries |
+| DTO | 미러링 | 담는 것 |
 |---|---|---|
-| `ImuSample` | `sensor_msgs/Imu` | linear acceleration (specific force, m/s²), angular velocity (rad/s), in the sensor frame |
-| `JointStateSample` | `sensor_msgs/JointState` | pitch & roll angle (rad), angular rate (rad/s) |
-| `MotorStateSample` | — | per-axis estimated motor current (A) and estimated output torque (N·m) |
-| `LoadCellSample` | — | 3–4 scalar vertical forces (N) at fixed mount points |
-| `LevelSample` *(optional)* | — | 1–3 point liquid-surface heights (m) at fixed probe locations |
-| `VehicleCanSample` *(optional, behind a flag)* | — | speed (m/s), steer angle (rad), throttle [0,1], brake [0,1] |
-| `StabilizerCommand` | — | per-axis commanded joint **angular rate** (rad/s); plus a sequence number and the stamp it was computed from |
+| `ImuSample` | `sensor_msgs/Imu` | 선가속(specific force, m/s²), 각속도(rad/s), 센서 프레임 |
+| `JointStateSample` | `sensor_msgs/JointState` | pitch & roll 각도(rad), 각속도(rad/s) |
+| `MotorStateSample` | — | 축당 추정 모터 전류(A), 추정 출력 토크(N·m) |
+| `LoadCellSample` | — | 고정 마운트점의 스칼라 수직 힘 3~4개 (N) |
+| `LevelSample` *(옵션)* | — | 고정 프로브 위치의 점 액체표면 높이 1~3개 (m) |
+| `VehicleCanSample` *(옵션, 플래그 뒤)* | — | 속도(m/s), 조향각(rad), throttle [0,1], brake [0,1] |
+| `StabilizerCommand` | — | 축당 명령: mode(`JointRate` / `JointAngle` / `Locked`) + pitch/roll 값(rad/s 또는 rad) + sequence 번호 + 계산된 stamp |
 
-`SensorBundle` groups one synchronized set of samples for a control tick.
+`SensorBundle` 이 한 컨트롤 틱의 동기화된 샘플 셋을 묶음.
