@@ -45,8 +45,22 @@ Feasibility Ceiling (Hindsight)** or `-executeMethod …HindsightEvalRunner.Run`
 Pendulum ROM. Under **shallow water** the ceiling is 30–140 L *worse* than Hold on
 every drive (one −10 L "win" appeared on a single drive at one search budget and
 vanished at every other budget / knot count / rate authority — a ROM-fit artefact,
-exactly what bracket discipline F3 exists to catch). Robust across search budget
-(42 → 213 evaluations), knot count (6/8/10) and rate authority (0.2 / 1.0).
+exactly what bracket discipline F3 exists to catch).
+
+**Why more search won't flip it.** As the budget grows (42 → 364 evaluations,
+6 → 16 knots/axis, rate authority 0.2 → 1.0) the pendulum ceiling creeps down
+from ≈ 25.5 L toward ≈ 23 L on drive 132335 — i.e. active anti-slosh recovers
+only ≈ 2–3 L of the ≈ 6 L the servo loses to the locked joint just by being an
+active servo — and plateaus there, still ≈ 4 L above locked Hold. The wall is the
+`do-nothing` floor (25 L), not the optimiser.
+
+**Limitation to keep in mind:** the trajectory is deliberately low-bandwidth
+(6–16 knots over a 30–48 s drive ≈ 0.1–0.3 Hz). It can shape the tank to the
+maneuver profile (braking / cornering events last 1–5 s) but cannot do
+per-wave-cycle anti-slosh modulation at the ≈ 1.2 Hz roll-slosh frequency. A
+higher-bandwidth feed-forward might do better — but it would also be far outside
+what a causal sensor-only policy could ever reproduce, so it does not change the
+gate decision.
 
 ### What it means
 
