@@ -29,7 +29,9 @@ namespace FluidStabilizer.Sim
     public sealed class SimulationRunner : MonoBehaviour
     {
         [Header("Setup")]
-        public double FillRatio = 0.55;
+        // 0.62: above the pendulum ROM's spill threshold (~0.56, its wave cap is
+        // 0.8·depth), so the play scene actually spills under hard driving.
+        public double FillRatio = 0.62;
         public StabilizerChoice Stabilizer = StabilizerChoice.Off;
         public SloshModelChoice SloshModel = SloshModelChoice.PendulumRom;
         [Tooltip("Rolling grade, curve bank, surface roughness and the odd pothole. Off = perfectly flat road.")]
