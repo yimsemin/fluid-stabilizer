@@ -105,12 +105,21 @@ model, look-ahead sensors, photoreal rendering, hardware-in-the-loop.
 
 ## Roadmap delta from this review
 
-1. **Finish and run RL once** (phase-1 item 12) — answer the feasibility question.
-2. **Human trace record/replay** (phase-1 item 3) — so ③ is trained on *real*
-   driving, not only synthetic drivers.
-3. **Road** — ✅ landed 2026-08-29.
-4. **Domain randomization + per-episode logging** (item 13).
-5. **Phase 1.5 — the product shell:** in-Unity control panel; standalone build
+> **Updated 2026-08-29 (step-back session).** The first RL run happened and its
+> lesson is the F1/F4 cliff (`docs/rl.md`). The reordered plan lives in
+> **[experiment-plan.md](experiment-plan.md)**; the short version:
+
+1. **Road** — ✅ landed 2026-08-29.
+2. **Human trace record/replay** (phase-1 item 3) — ✅ landed 2026-08-29
+   (`DriverTrace`). The owner's recorded drives are now the real disturbance
+   data **and** the headline evaluation set.
+3. **Rebuild evaluation around recorded drives** — three-way (later four-way)
+   comparison on 3–5 held-out real drives, per drive, both slosh models.
+4. **Feasibility ceiling** — offline hindsight trajectory optimisation on a fixed
+   drive. **Decision gate: no RL until this beats the rigid baseline.**
+5. **Residual RL** (item 12, redone) — policy = baseline + correction,
+   behaviour-cloning warm-start. Replaces "run PPO from scratch".
+6. **Domain randomization + per-episode logging** (item 13).
+7. **Phase 1.5 — the product shell:** in-Unity control panel; standalone build
    script; ONNX inference path in Unity; lightweight Python trainer GUI. Starts
-   after a first RL result exists — not before (don't polish the shell around an
-   unproven core).
+   after a first winning RL result exists — not before.
