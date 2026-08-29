@@ -25,15 +25,20 @@ namespace FluidStabilizer.SimEditor
         public static void Serve()
         {
             string[] args = Environment.GetCommandLineArgs();
+
+            // Defaults come from the shared experiment.txt; -rl* flags still override per-run.
+            var profile = FluidStabilizer.Sim.ExperimentProfileStore.Load();
+            string profRoad = profile.RoadEnabled ? (profile.RoadSeverity >= 1.2 ? "rough" : "mild") : "none";
+
             int port = ArgInt(args, "-rlPort", 5555);
-            double fill = ArgDouble(args, "-rlFill", 0.5);
-            double seconds = ArgDouble(args, "-rlSeconds", 30.0);
+            double fill = ArgDouble(args, "-rlFill", profile.FillRatio);
+            double seconds = ArgDouble(args, "-rlSeconds", profile.EpisodeSeconds);
             int stack = ArgInt(args, "-rlStack", 6);
-            string driver = ArgStr(args, "-rlDriver", "highway");
-            string slosh = ArgStr(args, "-rlSlosh", "pendulum");
-            double briskness = ArgDouble(args, "-rlBriskness", 0.6);
-            double aggression = ArgDouble(args, "-rlAggression", 0.7);
-            string road = ArgStr(args, "-rlRoad", "none");
+            string driver = ArgStr(args, "-rlDriver", profile.Driver);
+            string slosh = ArgStr(args, "-rlSlosh", profile.SloshModel);
+            double briskness = ArgDouble(args, "-rlBriskness", profile.DriverIntensity);
+            double aggression = ArgDouble(args, "-rlAggression", profile.DriverIntensity);
+            string road = ArgStr(args, "-rlRoad", profRoad);
 
             RlEnvironment MakeEnv()
             {

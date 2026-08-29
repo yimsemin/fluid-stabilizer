@@ -29,6 +29,9 @@ namespace FluidStabilizer.Sim
     public sealed class SimulationRunner : MonoBehaviour
     {
         [Header("Setup")]
+        [Tooltip("Read fill / road / slosh model / seed from experiment.txt at the repo root. " +
+                 "Uncheck to use the Inspector values below instead.")]
+        public bool UseExperimentProfile = true;
         // 0.62: above the pendulum ROM's spill threshold (~0.56, its wave cap is
         // 0.8·depth), so the play scene actually spills under hard driving.
         public double FillRatio = 0.62;
@@ -55,14 +58,32 @@ namespace FluidStabilizer.Sim
         public SloshModelChoice ActiveSloshModel { get; private set; }
 
         private double _accumulator;
+        private double _tankHeightZ = 0.60;
         private const int MaxStepsPerFrame = 40;
+
+        /// <summary>Copy the shared <c>experiment.txt</c> knobs onto the Inspector fields, so the play scene follows the file.</summary>
+        private void ApplyProfile(ExperimentProfile p)
+        {
+            FillRatio = p.FillRatio;
+            _tankHeightZ = p.TankHeightZ;
+            Road = p.RoadEnabled;
+            RoadSeverity = (float)p.RoadSeverity;
+            Seed = p.Seed;
+            SloshModel = p.SloshModel == "shallow" ? SloshModelChoice.ShallowWater : SloshModelChoice.PendulumRom;
+        }
 
         private void Awake() => BuildLoop();
 
         public void BuildLoop()
         {
+            // Follow experiment.txt in the actual play scene; leave direct
+            // BuildLoop() callers (tooling, tests) on their explicit values.
+            if (UseExperimentProfile && Application.isPlaying)
+                ApplyProfile(ExperimentProfileStore.Load());
+
             var cfg = new SimulationConfig { EpisodeSeconds = 0.0 }; // endless
             cfg.Slosh.FillRatio = FillRatio;
+            cfg.Slosh.TankHeightZ = _tankHeightZ;
             cfg.Road.Enabled = Road;
             cfg.Road.Severity = RoadSeverity;
 

@@ -1,0 +1,22 @@
+# fluid-stabilizer-experiment-profile/v1
+# The draft operating point. Every runner reads this file — the play scene,
+# the RL training server, the evaluation, the 3-way comparison. Change a number
+# here and it propagates everywhere. Recorded-drive replays ignore it (they use
+# the trace's own header).
+
+# --- the tank ---
+fillRatio:       0.62    # 0..1. 0.62 on a 0.6 m tank = 0.23 m freeboard
+tankHeightZ:     0.6     # rim height above the floor, m
+
+# --- the road ---
+road:            on      # on / off
+roadSeverity:    1.0     # 0 smooth .. 1 nominal .. >1 rough
+
+# --- the driver (synthetic runs only; a replayed trace uses its own inputs) ---
+driver:          highway  # highway / aggressive / scripted
+driverIntensity: 0.6     # briskness (highway) or aggression (aggressive), 0..1
+
+# --- episode ---
+episodeSeconds:  40
+sloshModel:      pendulum  # pendulum / shallow
+seed:            1
