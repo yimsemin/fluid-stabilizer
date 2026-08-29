@@ -1,4 +1,5 @@
 using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -48,9 +49,11 @@ namespace FluidStabilizer.Core.Sim.Eval
             foreach (var (sloshName, makeSlosh) in sloshModels)
             foreach (var (ctrlName, makeCtrl) in controllers)
             {
+                IController ctrl = makeCtrl();
                 var loop = new SimulationLoop(
-                    trace.ToConfig(), makeCtrl(), new RecordedTraceDriver(trace), makeSlosh());
+                    trace.ToConfig(), ctrl, new RecordedTraceDriver(trace), makeSlosh());
                 EpisodeResult r = loop.RunEpisode(trace.Seed);
+                if (ctrl is IDisposable d) d.Dispose();
 
                 rows.Add(new TraceEvalRow
                 {

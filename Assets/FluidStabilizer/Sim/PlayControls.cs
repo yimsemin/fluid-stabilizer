@@ -46,6 +46,7 @@ namespace FluidStabilizer.Sim
             if (kb.digit1Key.wasPressedThisFrame) SetActive(StabilizerChoice.SpecificForceAlignment);
             if (kb.digit2Key.wasPressedThisFrame) SetActive(StabilizerChoice.SpecificForceAlignmentPlusI);
             if (kb.digit3Key.wasPressedThisFrame) SetActive(StabilizerChoice.PrivilegedFeedforward);
+            if (kb.digit4Key.wasPressedThisFrame) SetActive(StabilizerChoice.LearnedPolicy); // needs python/serve_policy.py
 
             if (kb.spaceKey.wasPressedThisFrame) // toggle stabilizer on/off
             {

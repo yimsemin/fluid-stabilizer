@@ -3,6 +3,7 @@ using FluidStabilizer.Contracts;
 using FluidStabilizer.Core.Sim;
 using FluidStabilizer.Core.Sim.SloshModels;
 using FluidStabilizer.Controller;
+using FluidStabilizer.Rl;
 using UnityEngine;
 
 namespace FluidStabilizer.Sim
@@ -13,6 +14,7 @@ namespace FluidStabilizer.Sim
         SpecificForceAlignment,
         SpecificForceAlignmentPlusI,
         PrivilegedFeedforward,  // cheats (true slosh-free tilt) — for comparison only
+        LearnedPolicy,          // ③ — the RL policy, served by python/serve_policy.py over TCP
     }
 
     public enum SloshModelChoice
@@ -43,6 +45,12 @@ namespace FluidStabilizer.Sim
         [Range(0.05f, 1f)] public float TimeScale = 1f;
         public ulong Seed = 1;
 
+        [Header("Learned policy (③) — python/serve_policy.py")]
+        public string PolicyHost = "127.0.0.1";
+        public int PolicyPort = 5601;
+        [Tooltip("Frame-stack length the policy was trained with (RlServerLauncher -rlStack).")]
+        public int PolicyFrameStack = 6;
+
         [Header("Runtime (read-only)")]
         [SerializeField] private double _simTime;
         [SerializeField] private double _speedKmh;
@@ -59,7 +67,29 @@ namespace FluidStabilizer.Sim
 
         private double _accumulator;
         private double _tankHeightZ = 0.60;
+        private IController _built;   // tracked so an IDisposable controller (learned policy socket) is released
         private const int MaxStepsPerFrame = 40;
+
+        /// <summary>
+        /// Build the controller for a choice. Analytic ones delegate to the
+        /// static <see cref="MakeController(StabilizerChoice)"/>; the learned
+        /// policy needs this instance's host/port and is disposed on swap.
+        /// </summary>
+        private IController BuildController(StabilizerChoice choice)
+        {
+            if (_built is IDisposable d) { try { d.Dispose(); } catch { } }
+
+            _built = choice == StabilizerChoice.LearnedPolicy
+                ? new RemotePolicyController(PolicyHost, PolicyPort, Mathf.Max(1, PolicyFrameStack),
+                    new SimulationConfig().Gimbal.MaxRateRadPerSec, log: s => Debug.Log(s))
+                : MakeController(choice);
+            return _built;
+        }
+
+        private void OnDestroy()
+        {
+            if (_built is IDisposable d) { try { d.Dispose(); } catch { } }
+        }
 
         /// <summary>Copy the shared <c>experiment.txt</c> knobs onto the Inspector fields, so the play scene follows the file.</summary>
         private void ApplyProfile(ExperimentProfile p)
@@ -88,7 +118,7 @@ namespace FluidStabilizer.Sim
             cfg.Road.Severity = RoadSeverity;
 
             Driver = new HumanDriverInput();
-            Loop = new SimulationLoop(cfg, MakeController(Stabilizer),
+            Loop = new SimulationLoop(cfg, BuildController(Stabilizer),
                 DriverOverride ?? Driver, MakeSlosh(SloshModel));
             Loop.BeginEpisode(Seed);
             ActiveStabilizer = Stabilizer;
@@ -98,7 +128,7 @@ namespace FluidStabilizer.Sim
 
         public void ResetEpisode()
         {
-            Loop.SetController(MakeController(ActiveStabilizer));
+            Loop.SetController(BuildController(ActiveStabilizer));
             Loop.BeginEpisode(Seed);
             _accumulator = 0;
         }
@@ -124,7 +154,7 @@ namespace FluidStabilizer.Sim
         {
             ActiveStabilizer = choice;
             Stabilizer = choice;
-            Loop.SetController(MakeController(choice));
+            Loop.SetController(BuildController(choice));
         }
 
         public static IController MakeController(StabilizerChoice c) => c switch
@@ -148,6 +178,7 @@ namespace FluidStabilizer.Sim
             StabilizerChoice.SpecificForceAlignment => "Rule: specific-force align",
             StabilizerChoice.SpecificForceAlignmentPlusI => "Rule: PID",
             StabilizerChoice.PrivilegedFeedforward => "Privileged feed-forward",
+            StabilizerChoice.LearnedPolicy => "Learned policy (③)",
             _ => c.ToString(),
         };
 
