@@ -51,7 +51,7 @@ namespace FluidStabilizer.Tests
         }
 
         [Test]
-        public void Ribbon_BuildsAMesh_NoNaN_WhenRoadOn_AndHidesWhenOff()
+        public void Ribbon_BuildsAMesh_NoNaN_InBothModes()
         {
             var cfg = new SimulationConfig { EpisodeSeconds = 4.0 };
             cfg.Road.Enabled = true;
@@ -74,7 +74,8 @@ namespace FluidStabilizer.Tests
                 foreach (var p in vs)
                     Assert.IsFalse(float.IsNaN(p.x) || float.IsNaN(p.y) || float.IsNaN(p.z), "NaN vertex");
 
-                // Road off → strip hides.
+                // Road off → still drawn (a plain flat surface, so the truck has
+                // ground under it), no NaN.
                 var cfg2 = new SimulationConfig { EpisodeSeconds = 4.0 }; // road disabled by default
                 var loop2 = new SimulationLoop(cfg2, new HoldController(),
                     new ConstantDriver(new Contracts.DriverControls { Throttle = 0.3 }), new PendulumSloshModel());
@@ -82,7 +83,9 @@ namespace FluidStabilizer.Tests
                 loop2.StepPhysics();
                 rr.LoopOverride = loop2;
                 rr.RenderTick();
-                Assert.IsFalse(rr.DebugStrip.gameObject.activeSelf, "strip should hide with road off");
+                Assert.IsTrue(rr.DebugStrip.gameObject.activeSelf, "strip stays visible (plain) with road off");
+                foreach (var p in rr.DebugMesh.vertices)
+                    Assert.IsFalse(float.IsNaN(p.x) || float.IsNaN(p.y) || float.IsNaN(p.z), "NaN vertex (road off)");
             }
             finally
             {
