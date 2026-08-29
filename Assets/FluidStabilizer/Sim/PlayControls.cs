@@ -12,6 +12,7 @@ namespace FluidStabilizer.Sim
         public SimulationRunner Runner;
         public SimView View;
         public Camera Camera;
+        public ComparisonRunner Comparison;
 
         private enum CamMode { Chase, Side, Top }
         private CamMode _cam = CamMode.Chase;
@@ -27,6 +28,20 @@ namespace FluidStabilizer.Sim
 
         private void HandleKeys(Keyboard kb)
         {
+            if (kb.cKey.wasPressedThisFrame && Comparison != null) { Comparison.Toggle(); return; }
+
+            if (Comparison != null && Comparison.Active)
+            {
+                if (kb.rKey.wasPressedThisFrame) Comparison.StartFromNewestTrace(); // restart
+                if (kb.tKey.wasPressedThisFrame)
+                {
+                    _slowMo = !_slowMo;
+                    Runner.TimeScale = _slowMo ? 0.25f : 1f;
+                }
+                if (kb.tabKey.wasPressedThisFrame) _cam = (CamMode)(((int)_cam + 1) % 3);
+                return; // the other keys act on the paused single-sim runner — ignore them
+            }
+
             if (kb.digit0Key.wasPressedThisFrame) Runner.SetStabilizer(StabilizerChoice.Off);
             if (kb.digit1Key.wasPressedThisFrame) SetActive(StabilizerChoice.SpecificForceAlignment);
             if (kb.digit2Key.wasPressedThisFrame) SetActive(StabilizerChoice.SpecificForceAlignmentPlusI);
@@ -70,6 +85,7 @@ namespace FluidStabilizer.Sim
 
         private void UpdateCamera()
         {
+            if (Comparison != null && Comparison.Active) return; // ComparisonRunner drives the camera
             if (Camera == null || View?.TruckBody == null) return;
             Transform t = View.TruckBody;
 

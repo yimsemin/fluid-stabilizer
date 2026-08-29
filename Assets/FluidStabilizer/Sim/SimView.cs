@@ -25,6 +25,13 @@ namespace FluidStabilizer.Sim
     {
         public SimulationRunner Runner;
 
+        /// <summary>
+        /// Bind directly to a loop instead of a <see cref="SimulationRunner"/> —
+        /// used by <see cref="ComparisonRunner"/>, which owns several loops at
+        /// once. When set it wins over <see cref="Runner"/>.
+        /// </summary>
+        public SimulationLoop LoopOverride;
+
         [Header("Rig (wired by SceneBuilder)")]
         public Transform TruckBody;
         public Transform TankPivot;   // child of TruckBody, at the gimbal pivot
@@ -35,6 +42,13 @@ namespace FluidStabilizer.Sim
         [Tooltip("Cosmetic upward offset of the tank so the surface tilt and any " +
                  "overflow are clearly visible above the truck body. Physics is unaffected.")]
         public float TankVisualLift = 0.35f;
+
+        /// <summary>
+        /// Cosmetic world-space shift of the whole rig. <see cref="ComparisonRunner"/>
+        /// uses it to place lanes side by side — every lane drives the same path,
+        /// so without an offset the trucks would overlap.
+        /// </summary>
+        public Vector3 WorldOffset = Vector3.zero;
 
         // pendulum-ROM proxy surface resolution (a tilted plane needs little)
         private const int ProxyNx = 24;
@@ -56,15 +70,15 @@ namespace FluidStabilizer.Sim
         /// <summary>One visual update. Public so a test can drive it (no Unity player loop).</summary>
         public void RenderTick()
         {
-            if (Runner?.Loop == null || LiquidMesh == null) return;
-            var loop = Runner.Loop;
+            var loop = LoopOverride ?? Runner?.Loop;
+            if (loop == null || LiquidMesh == null) return;
             var cfg = loop.Config;
 
             if (!_rigged) ApplyStaticGeometry(cfg);
 
             var v = loop.VehicleState;
             TruckBody.SetPositionAndRotation(
-                Frames.ToUnity(v.OriginWorld),
+                Frames.ToUnity(v.OriginWorld) + WorldOffset,
                 Frames.ToUnity(v.OrientationWorldFromBody));
 
             var g = loop.GimbalState;
