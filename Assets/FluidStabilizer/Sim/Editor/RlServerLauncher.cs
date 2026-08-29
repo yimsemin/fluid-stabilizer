@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using FluidStabilizer.Contracts;
 using FluidStabilizer.Controller;
@@ -47,19 +48,43 @@ namespace FluidStabilizer.SimEditor
             string baseline = ArgStr(args, "-rlBaseline", "none");
             double residualFrac = ArgDouble(args, "-rlResidualFrac", 0.35);
 
+            // Train on the owner's recorded drives instead of a synthetic driver
+            // (project-goals ③). -rlTrace all | <substring>. Traces must share a
+            // setup (fill/road) — the first match's config is used.
+            string traceSel = ArgStr(args, "-rlTrace", null);
+            List<DriverTrace> traces = LoadTraces(traceSel);
+
             RlEnvironment MakeEnv()
             {
-                var cfg = new SimulationConfig { EpisodeSeconds = seconds };
-                cfg.Slosh.FillRatio = fill;
-                if (road == "mild") { cfg.Road.Enabled = true; cfg.Road.Severity = 0.6; }
-                else if (road == "rough") { cfg.Road.Enabled = true; cfg.Road.Severity = 1.4; cfg.Road.EventsPerKm = 18.0; }
-
-                Func<ulong, IDriverInput> drv = driver switch
+                SimulationConfig cfg;
+                if (traces.Count > 0)
                 {
-                    "aggressive" => s => new RandomManeuverDriver(s, aggression),
-                    "scripted" => _ => new ScriptedManeuverDriver(),
-                    _ => s => new HighwayDriver(s, briskness),
-                };
+                    cfg = traces[0].ToConfig();
+                    cfg.EpisodeSeconds = traces.Min(t => t.DurationSeconds); // no frozen tail on the shorter drives
+                }
+                else
+                {
+                    cfg = new SimulationConfig { EpisodeSeconds = seconds };
+                    cfg.Slosh.FillRatio = fill;
+                    if (road == "mild") { cfg.Road.Enabled = true; cfg.Road.Severity = 0.6; }
+                    else if (road == "rough") { cfg.Road.Enabled = true; cfg.Road.Severity = 1.4; cfg.Road.EventsPerKm = 18.0; }
+                }
+
+                Func<ulong, IDriverInput> drv;
+                if (traces.Count > 0)
+                {
+                    var picked = traces;
+                    drv = s => new RecordedTraceDriver(picked[(int)(s % (ulong)picked.Count)]);
+                }
+                else
+                {
+                    switch (driver)
+                    {
+                        case "aggressive": drv = s => new RandomManeuverDriver(s, aggression); break;
+                        case "scripted": drv = _ => new ScriptedManeuverDriver(); break;
+                        default: drv = s => new HighwayDriver(s, briskness); break;
+                    }
+                }
                 Func<ISloshModel> sl = slosh == "shallow"
                     ? () => new ShallowWaterSloshModel()
                     : (Func<ISloshModel>)(() => new PendulumSloshModel());
@@ -79,9 +104,25 @@ namespace FluidStabilizer.SimEditor
                     baselineFactory: baseFactory, residualRateScaleRadPerSec: residualScale);
             }
 
-            Debug.Log($"[rl] launching TrainingServer :{port} fill={fill} driver={driver} slosh={slosh} " +
+            string driverDesc = traces.Count > 0 ? $"traces({traces.Count})" : driver;
+            Debug.Log($"[rl] launching TrainingServer :{port} fill={fill} driver={driverDesc} slosh={slosh} " +
                       $"road={road} episode={seconds}s stack={stack} baseline={baseline} residualFrac={residualFrac}");
             new TrainingServer(MakeEnv).Serve(port);
+        }
+
+        private static List<DriverTrace> LoadTraces(string selector)
+        {
+            if (string.IsNullOrEmpty(selector)) return new List<DriverTrace>();
+            string dir = FluidStabilizer.Sim.TraceStore.Dir;
+            if (!System.IO.Directory.Exists(dir)) return new List<DriverTrace>();
+
+            IEnumerable<string> files = System.IO.Directory
+                .GetFiles(dir, "*" + FluidStabilizer.Sim.TraceStore.Extension)
+                .OrderBy(p => p);
+            if (selector != "all")
+                files = files.Where(p => System.IO.Path.GetFileName(p).Contains(selector));
+
+            return files.Select(DriverTrace.LoadFromFile).ToList();
         }
 
         private static string ArgStr(string[] a, string key, string def)
