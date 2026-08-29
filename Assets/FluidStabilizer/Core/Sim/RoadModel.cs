@@ -18,6 +18,13 @@ namespace FluidStabilizer.Core.Sim
         public double Bank;
 
         /// <summary>
+        /// Horizontal curvature of the road centreline, rad/m (left turn positive).
+        /// The vehicle heading follows <c>Curvature · speed</c>; the driver's steer
+        /// is a correction on top. Zero on a straight road / when the road is off.
+        /// </summary>
+        public double Curvature;
+
+        /// <summary>
         /// Vertical displacement of the road surface under the wheels, m. The
         /// suspension (a heave spring-mass-damper in <see cref="VehicleModel"/>)
         /// turns this into body vertical motion — so a sharp bump becomes a
@@ -50,6 +57,7 @@ namespace FluidStabilizer.Core.Sim
         private bool _enabled;
         private double _gradeK, _gradePhase1, _gradePhase2;
         private double _bankK, _bankPhase;
+        private double _curveK1, _curveK2, _curvePhase1, _curvePhase2;
         private double[] _roughK = Array.Empty<double>();
         private double[] _roughPhase = Array.Empty<double>();
         private double[] _roughAmp = Array.Empty<double>();
@@ -109,6 +117,21 @@ namespace FluidStabilizer.Core.Sim
             for (int i = 0; i < n; i++) _roughAmp[i] *= gain;
 
             _eventRng = r.Fork("events");
+
+            // Horizontal curve (drawn last so grade/bank/roughness/event streams
+            // above are byte-identical to before this channel existed).
+            _curveK1 = TwoPi / Math.Max(1.0, _cfg.CurvatureWavelengthM);
+            _curveK2 = 2.7 * _curveK1;
+            _curvePhase1 = r.NextDouble(0.0, TwoPi);
+            _curvePhase2 = r.NextDouble(0.0, TwoPi);
+        }
+
+        /// <summary>Centreline curvature at distance <paramref name="s"/> (rad/m, left positive).</summary>
+        private double CurvatureAt(double s)
+        {
+            if (!_enabled) return 0.0;
+            return _cfg.CurvatureAmplitudeRadPerM *
+                   (Math.Sin(_curveK1 * s + _curvePhase1) + 0.4 * Math.Sin(_curveK2 * s + _curvePhase2)) / 1.4;
         }
 
         /// <summary>The road under the wheels at distance <paramref name="s"/> metres.</summary>
@@ -120,7 +143,9 @@ namespace FluidStabilizer.Core.Sim
                            (0.8 * Math.Sin(_gradeK * s + _gradePhase1) +
                             0.3 * Math.Sin(2.3 * _gradeK * s + _gradePhase2)) / 1.1;
 
-            double bank = _cfg.BankAmplitudeRad * Math.Sin(_bankK * s + _bankPhase);
+            double curvature = CurvatureAt(s);
+            double superelevation = MathD.ClampAbs(_cfg.BankPerCurvature * curvature, 0.08);
+            double bank = superelevation + _cfg.BankAmplitudeRad * Math.Sin(_bankK * s + _bankPhase);
 
             double z = 0.0;
             for (int i = 0; i < _roughK.Length; i++)
@@ -139,7 +164,7 @@ namespace FluidStabilizer.Core.Sim
             if (_events.Count > 0 && _events[0].Pos < s - 40.0)
                 _events.RemoveAll(e => e.Pos < s - 40.0);
 
-            return new RoadInput { Grade = grade, Bank = bank, SurfaceHeight = z };
+            return new RoadInput { Grade = grade, Bank = bank, SurfaceHeight = z, Curvature = curvature };
         }
 
         private void GenerateEventsUpTo(double sMax)

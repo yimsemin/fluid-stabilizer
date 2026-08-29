@@ -24,6 +24,7 @@ namespace FluidStabilizer.Tests
                 Assert.AreEqual(0.0, r.Grade, 0.0);
                 Assert.AreEqual(0.0, r.Bank, 0.0);
                 Assert.AreEqual(0.0, r.SurfaceHeight, 0.0);
+                Assert.AreEqual(0.0, r.Curvature, 0.0);
             }
         }
 
@@ -38,7 +39,7 @@ namespace FluidStabilizer.Tests
                 for (double s = 0; s < 3000; s += 0.5)
                 {
                     RoadInput r = m.Sample(s);
-                    c = c * 1.0000001 + r.Grade * 3.0 + r.Bank * 5.0 + r.SurfaceHeight;
+                    c = c * 1.0000001 + r.Grade * 3.0 + r.Bank * 5.0 + r.SurfaceHeight + r.Curvature * 111.0;
                 }
                 return c;
             }
@@ -145,6 +146,38 @@ namespace FluidStabilizer.Tests
             Assert.That(frac, Is.InRange(0.002, 0.3), "events are localised — the road is flat between them");
             Assert.Greater(nonZero, 20, "there are several events along a 3 km stretch");
             Assert.Greater(peak, 0.02, "an event reaches a good fraction of its configured height");
+        }
+
+        [Test]
+        public void Curvature_SwingsBothWays_WithinAmplitude_AndBendsTheTruckPath()
+        {
+            var cfg = new RoadConfig { Enabled = true, CurvatureAmplitudeRadPerM = 0.004 };
+            var m = new RoadModel(cfg);
+            m.Reset(Rng(21));
+            double peak = 0, minK = 0, maxK = 0;
+            for (double s = 0; s < 6000; s += 1.0)
+            {
+                double k = m.Sample(s).Curvature;
+                peak = Math.Max(peak, Math.Abs(k));
+                minK = Math.Min(minK, k);
+                maxK = Math.Max(maxK, k);
+            }
+            Assert.LessOrEqual(peak, cfg.CurvatureAmplitudeRadPerM + 1e-9);
+            Assert.Greater(peak, 0.4 * cfg.CurvatureAmplitudeRadPerM, "the road should actually curve");
+            Assert.Less(minK, -1e-4, "curves left");
+            Assert.Greater(maxK, 1e-4, "curves right");
+
+            // In the loop: with the road on, the truck yaws even with zero steer
+            // input (it follows the curve).
+            var sc = new SimulationConfig { EpisodeSeconds = 12.0 };
+            sc.Road.Enabled = true;
+            var loop = new SimulationLoop(sc, new HoldController(),
+                new ConstantDriver(new DriverControls { Throttle = 0.2 }), new PendulumSloshModel());
+            loop.BeginEpisode(21);
+            double maxYaw = 0;
+            while (loop.StepPhysics())
+                maxYaw = Math.Max(maxYaw, Math.Abs(loop.VehicleState.AngularVelocityBody.Z));
+            Assert.Greater(maxYaw, 0.02, "a truck with no steer input still follows the road's curve");
         }
 
         [Test]
