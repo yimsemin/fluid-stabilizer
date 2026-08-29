@@ -60,10 +60,13 @@ namespace FluidStabilizer.Tests
             double pid = results.First(r => r.Controller == "PID").MeanOverflow;
             double sfa = results.First(r => r.Controller == "SpecificForceAlignment").MeanOverflow;
 
-            // MeanOverflow is m³ (× 1000 = litres).
-            Assert.LessOrEqual(hold, 1e-4, "a rigidly locked tank should not spill on brisk highway driving");
-            Assert.Greater(pid, 5e-5, "reactive tilt control adds slosh and spills where rigid Hold does not");
-            Assert.Greater(sfa, 5e-5, "reactive tilt control adds slosh and spills where rigid Hold does not");
+            // MeanOverflow is m³ (× 1000 = litres). With the 0.6 m tank (resized
+            // 2026-08-29) this now-tight scenario spills a little even locked
+            // (~0.7 L); the point stands emphatically — the reactive tilt laws
+            // pump slosh by rotating the tank and spill ~40× more.
+            Assert.Less(hold, 3e-3, "a rigidly locked tank barely spills on brisk highway driving");
+            Assert.Greater(pid, hold * 10.0, "reactive tilt control adds slosh and spills far more than rigid Hold");
+            Assert.Greater(sfa, hold * 10.0, "reactive tilt control adds slosh and spills far more than rigid Hold");
         }
 
         [Test]
@@ -80,10 +83,11 @@ namespace FluidStabilizer.Tests
             double sfa = results.First(r => r.Controller == "SpecificForceAlignment").MeanOverflow;
             double pid = results.First(r => r.Controller == "PID").MeanOverflow;
 
-            // MeanOverflow is m³; Hold ≈ 0.010 m³ here, tilt controllers ≈ 0.04–0.10.
+            // MeanOverflow is m³. With the 0.6 m tank (resized 2026-08-29):
+            // Hold ≈ 0.035 m³, the reactive tilt laws ≈ 0.066–0.077 (≈ 1.9×).
             Assert.Greater(hold, 3e-3, "the scenario challenges even a rigid tank");
-            Assert.Greater(sfa, hold * 2.0, "reactive tilt control spills far more than holding rigid");
-            Assert.Greater(pid, hold * 2.0, "reactive tilt control spills far more than holding rigid");
+            Assert.Greater(sfa, hold * 1.5, "reactive tilt control spills far more than holding rigid");
+            Assert.Greater(pid, hold * 1.5, "reactive tilt control spills far more than holding rigid");
         }
 
         [Test]

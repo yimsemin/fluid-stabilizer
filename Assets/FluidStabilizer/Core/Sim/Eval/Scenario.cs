@@ -33,13 +33,13 @@ namespace FluidStabilizer.Core.Sim.Eval
             },
             new Scenario
             {
-                // The intended "interesting" regime: freeboard ~0.30 m, brisk
+                // The intended "interesting" regime: tight freeboard, brisk
                 // (but realistic) highway driving.
                 Name = "HighwayBriskLowFreeboard",
                 Config = () =>
                 {
                     var c = new SimulationConfig { EpisodeSeconds = 40.0 };
-                    c.Slosh.FillRatio = 0.66; // 0.53 m liquid ⇒ 0.27 m freeboard
+                    c.Slosh.FillRatio = 0.66; // 0.40 m liquid ⇒ 0.20 m freeboard
                     return c;
                 },
                 Driver = seed => new HighwayDriver(seed, briskness: 0.9)
@@ -62,7 +62,7 @@ namespace FluidStabilizer.Core.Sim.Eval
                 Config = () =>
                 {
                     var c = new SimulationConfig { EpisodeSeconds = 30.0 };
-                    c.Slosh.FillRatio = 0.72;     // 0.576 m liquid ⇒ 0.224 m freeboard
+                    c.Slosh.FillRatio = 0.72;     // 0.43 m liquid ⇒ 0.17 m freeboard
                     c.Slosh.DampingRatio = 0.04;
                     return c;
                 },
@@ -78,7 +78,7 @@ namespace FluidStabilizer.Core.Sim.Eval
                 Config = () =>
                 {
                     var c = new SimulationConfig { EpisodeSeconds = 40.0 };
-                    c.Slosh.FillRatio = 0.60;    // 0.48 m liquid ⇒ 0.32 m freeboard
+                    c.Slosh.FillRatio = 0.60;    // 0.36 m liquid ⇒ 0.24 m freeboard
                     c.Road.Enabled = true;
                     return c;
                 },
@@ -90,7 +90,7 @@ namespace FluidStabilizer.Core.Sim.Eval
                 Config = () =>
                 {
                     var c = new SimulationConfig { EpisodeSeconds = 40.0 };
-                    c.Slosh.FillRatio = 0.66;    // 0.53 m liquid ⇒ 0.27 m freeboard
+                    c.Slosh.FillRatio = 0.66;    // 0.40 m liquid ⇒ 0.20 m freeboard
                     c.Road.Enabled = true;
                     c.Road.Severity = 1.5;      // coarse / broken surface
                     return c;

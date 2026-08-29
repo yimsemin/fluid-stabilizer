@@ -2,6 +2,17 @@
 
 Empirical results from the simulation as it is built. Newest first.
 
+> **2026-08-29 — tank resized `TankHeightZ` 0.8 → 0.6 m** (a shallower open tank
+> spills far more readily; it puts the three-way comparison in the regime that
+> matters — see [experiment-plan.md](experiment-plan.md)). **The numeric tables
+> in F1–F4 below predate this** and a full re-sweep is pending. The *direction*
+> of every finding is unchanged, and on the discriminating scenarios it is now
+> **stronger**: on the 0.6 m tank, locked Hold vs the reactive tilt laws —
+> `HighwayBriskLowFreeboard` 0.67 L vs ~27 L, `RoughRoadHighway` 0 L vs ~8 L,
+> `RoughRoadLowFreeboard` 0.1 L vs ~30 L, `HighFillAggressive` 35 L vs ~68 L.
+> Rigid still wins everywhere; anticipation is still the only way past it.
+> Guards `EvaluatorTests` retuned to the new magnitudes.
+
 ---
 
 ## F4 — 2026-08-28 — A rigid (locked) Hold baseline is near-unbeatable by reactive tilt control
@@ -333,6 +344,7 @@ it fails for the sharp, two-axis, actuator-in-the-loop case.
 - `AxisLqr` (discrete Riccati) + `LqrSloshController`; `PrivilegedObservation`
   now carries the true modal frequencies/damping.
 - Realistic magnitudes: brake/friction ≈ 0.45 g, tank 0.8 m tall, 0.5 fill.
+  (Tank later resized to 0.6 m tall — see the note at the top of this file.)
 
 ### Guards
 

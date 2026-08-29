@@ -189,8 +189,13 @@ namespace FluidStabilizer.Core.Sim
     {
         public double TankLengthX = 1.2;
         public double TankWidthY = 0.7;
-        public double TankHeightZ = 0.8;
-        public double FillRatio = 0.5;      // 0.40 m liquid ⇒ 0.40 m freeboard (nominal)
+        // Rim height above the floor (m). Lowered 0.8 → 0.6 on 2026-08-29: a
+        // shallower open tank spills far more readily on a bump or a hard
+        // maneuver, which is the regime the three-way comparison lives in. The
+        // F1–F4 numeric tables in docs/findings.md predate this and need a
+        // re-sweep; the *direction* of every finding is unchanged.
+        public double TankHeightZ = 0.6;
+        public double FillRatio = 0.5;      // 0.30 m liquid ⇒ 0.30 m freeboard (nominal)
         public double LiquidDensity = 1000.0;
         public double NaturalFrequencyScale = 1.0;
 

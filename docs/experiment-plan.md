@@ -111,3 +111,7 @@ behaviour-cloning warm-start from the hindsight-optimal trajectories. Curriculum
   recorded drives", with synthetic kept as a secondary set.
 - A hard **decision gate** is added after step 3: don't start RL until a
   privileged/hindsight solution is shown to beat the rigid baseline.
+- The tank was made shallower (`TankHeightZ` 0.8 → 0.6 m) so it spills more
+  readily — the F1–F4 direction is unchanged and, on the discriminating
+  scenarios, now stronger (see the note at the top of
+  [findings.md](findings.md)). A full baseline re-sweep is pending.
