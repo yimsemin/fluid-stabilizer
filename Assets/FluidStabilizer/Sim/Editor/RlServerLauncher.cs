@@ -1,5 +1,7 @@
 using System;
 using System.Linq;
+using FluidStabilizer.Contracts;
+using FluidStabilizer.Controller;
 using FluidStabilizer.Core.Sim;
 using FluidStabilizer.Core.Sim.Drivers;
 using FluidStabilizer.Core.Sim.SloshModels;
@@ -40,6 +42,11 @@ namespace FluidStabilizer.SimEditor
             double aggression = ArgDouble(args, "-rlAggression", profile.DriverIntensity);
             string road = ArgStr(args, "-rlRoad", profRoad);
 
+            // Residual mode: the policy learns a correction on top of a baseline
+            // (docs/experiment-plan.md step 4 — the F1/F4-cliff fix).
+            string baseline = ArgStr(args, "-rlBaseline", "none");
+            double residualFrac = ArgDouble(args, "-rlResidualFrac", 0.35);
+
             RlEnvironment MakeEnv()
             {
                 var cfg = new SimulationConfig { EpisodeSeconds = seconds };
@@ -47,21 +54,33 @@ namespace FluidStabilizer.SimEditor
                 if (road == "mild") { cfg.Road.Enabled = true; cfg.Road.Severity = 0.6; }
                 else if (road == "rough") { cfg.Road.Enabled = true; cfg.Road.Severity = 1.4; cfg.Road.EventsPerKm = 18.0; }
 
-                Func<ulong, FluidStabilizer.Contracts.IDriverInput> drv = driver switch
+                Func<ulong, IDriverInput> drv = driver switch
                 {
                     "aggressive" => s => new RandomManeuverDriver(s, aggression),
                     "scripted" => _ => new ScriptedManeuverDriver(),
                     _ => s => new HighwayDriver(s, briskness),
                 };
-                Func<FluidStabilizer.Contracts.ISloshModel> sl = slosh == "shallow"
+                Func<ISloshModel> sl = slosh == "shallow"
                     ? () => new ShallowWaterSloshModel()
-                    : (Func<FluidStabilizer.Contracts.ISloshModel>)(() => new PendulumSloshModel());
+                    : (Func<ISloshModel>)(() => new PendulumSloshModel());
 
-                return new RlEnvironment(cfg, drv, sl, RewardWeights.Default(), stack);
+                Func<IController> baseFactory = baseline switch
+                {
+                    "hold" => () => new HoldController(),
+                    "sfa" => () => new SpecificForceAlignmentController(),
+                    "pid" => () => new PidController(),
+                    _ => (Func<IController>)null,
+                };
+                double residualScale = baseFactory == null
+                    ? double.NaN
+                    : residualFrac * cfg.Gimbal.MaxRateRadPerSec;
+
+                return new RlEnvironment(cfg, drv, sl, RewardWeights.Default(), stack,
+                    baselineFactory: baseFactory, residualRateScaleRadPerSec: residualScale);
             }
 
             Debug.Log($"[rl] launching TrainingServer :{port} fill={fill} driver={driver} slosh={slosh} " +
-                      $"road={road} episode={seconds}s stack={stack}");
+                      $"road={road} episode={seconds}s stack={stack} baseline={baseline} residualFrac={residualFrac}");
             new TrainingServer(MakeEnv).Serve(port);
         }
 

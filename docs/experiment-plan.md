@@ -135,7 +135,7 @@ Success = "it runs start to finish and I can see all three side by side", **not*
 | # | step | state | notes |
 |---|---|---|---|
 | A | **Experiment profile** — one `experiment.txt` for fill / road / driver / episode / slosh, read by every runner | ✅ 2026-08-29 | `ExperimentProfile` + `ExperimentProfileStore`; wired into the play scene + RL server. The data model for the eventual control panel. |
-| B | **Residual RL wiring** — `RlEnvironment` composes `baseline action + policy correction` (baseline = locked-Hold or SFA) | ⬜ | the F1/F4-cliff fix; small `RlEnvironment` change + a launcher flag |
+| B | **Residual RL wiring** — `RlEnvironment` composes `baseline action + policy correction` (baseline = locked-Hold or SFA) | ✅ 2026-08-29 | `baselineFactory` + `residualRateScaleRadPerSec` ctor params; composes in joint-rate space; `-rlBaseline {none\|hold\|sfa\|pid} -rlResidualFrac`. Python trainer unchanged. `ResidualRlTests` (4). |
 | C | **Behaviour-cloning warm start** — pre-train the policy net on `Logs/hindsight/*.traj.csv`, then a short PPO run | ⬜ | not expecting a win — expecting a trained `.pt` that beats random |
 | D | **ONNX export + Unity inference** — export the MLP; run it in-engine as an `IController` | ⬜ | draft: a hand-rolled C# MLP forward pass reading exported weights (no `com.unity.sentis` dependency yet — that's a later decision) |
 | E | **3-way comparison in the app** — `ComparisonRunner` gets the ③ ONNX lane; a minimal in-Unity panel (pick profile, run, read per-lane litres) | 🟡 `ComparisonRunner` does ①②③-analytic | add the learned lane + a panel |
