@@ -1,201 +1,114 @@
-# Experiment plan — "where are we, what's next"
+# 실험 계획 — "지금 어디에 있고, 다음은 무엇인가"
 
-> Written 2026-08-29 in the step-back session after the first RL run. This is the
-> owner-facing map. It refines the roadmap in
-> [project-goals.md](project-goals.md) and the step-back note in
-> [phase1-progress.md](phase1-progress.md); where they disagree, this file wins
-> until it is folded back in.
+이 프로젝트의 **유일한 진행상황 추적기**이자 소유자용 지도. 로드맵의 큰 그림은
+[project-goals.md](project-goals.md), 밝혀진 사실은 [findings.md](findings.md),
+설계 결정은 [decisions.md](decisions.md) 에 있고 여기서는 링크만 건다.
 
-## The one-paragraph status
+## 한 문단 현황 (2026-08-29)
 
-The whole deterministic simulation is built and tested (physics, road, actuator,
-two slosh models, sensors, baselines, evaluator, play scene, RL bridge). We know
-from findings **F1–F4** that on a flat road a rigidly-locked tank is almost
-unbeatable by reactive tilt control — beating it needs *anticipation*, which is
-the entire reason the learned policy ③ exists. The first RL run confirmed the
-flip side: plain PPO-from-scratch cannot find the anticipatory policy, because
-every random exploratory gimbal motion pumps the slosh and spills (the "F1/F4
-cliff"). Two pieces the design always called for were never built: **recorded
-human drives** (the real disturbance data) and a **feasibility ceiling** (proof
-that the task is winnable at all). Those are the next work, before any more RL.
+결정론적 시뮬레이션 전체가 만들어지고 테스트됨(물리, 도로, 액추에이터, 슬로시
+모델 2종, 센서, 베이스라인, 평가기, 플레이 씬, RL 브릿지). findings **F1~F4** 로
+평평한 도로에서 **강체로 잠근 탱크는 반응형 틸트 제어로 거의 이길 수 없다**는 걸
+안다 — 이기려면 *예측(anticipation)* 이 필요하고, 그게 학습 정책 ③ 이 존재하는
+이유. 첫 RL 실행이 반대편을 확인해줬다: 맨땅 PPO 는 예측 정책을 못 찾는다 (무작위
+탐색 짐벌 동작이 슬로시를 펌핑해 스필 — "F1/F4 절벽").
 
-**Update 2026-08-29:** both are now built and run. The recorded-drive evaluation
-is in place, and the feasibility ceiling (step 3) has been computed — **the
-decision gate does not pass** (finding F5): with full hindsight and real actuator
-limits, the best gimbal trajectory still spills *more* than a mechanically locked
-tank on the owner's recorded drives.
+그다음 **녹화 주행**과 **feasibility 천장**을 만들어 돌렸고, **결정 게이트는
+통과하지 못했다** (finding **F5**): 완전한 후행지식 + 실제 액추에이터 제약
+하에서도 최적 짐벌 궤적이 소유자의 실주행에서 기계적으로 잠근 탱크보다 *더* 스필.
 
-**Owner call, 2026-08-29 — draft first, then decide.** Rather than stopping to
-re-tune the premise now, the owner wants a **complete end-to-end draft** built
-first — record → residual RL (BC warm-start) → ONNX → in-Unity 3-way comparison →
-standalone build — *even if the rigid/rule-based option turns out better*. The
-point of the project is to build and understand the whole Physical-AI pipeline,
-not to prove ③ wins; whether it wins is a finding. The F5 premise adjustment
-happens *after* the draft exists, as a refinement pass over a working whole. The
-draft is built on the current hard operating point (recorded drives, road on,
-fill 0.62) — so the honest draft result may well be "① rigid wins" — but every
-number now lives in one editable file (`experiment.txt` /
+**소유자 결정 (2026-08-29) — 초안 먼저, 판단은 나중.** 지금 전제를 다시
+튜닝하려고 멈추는 대신, **처음부터 끝까지 완성된 초안**을 먼저 만든다 —
+녹화 → 잔차 RL(BC 웜스타트) → 정책 서빙 → 앱 내 3-way 비교 → standalone 빌드 —
+*강체/규칙기반이 더 나은 걸로 밝혀지더라도.* 프로젝트의 요점은 파이프라인 전체를
+만들고 이해하는 것이지 ③ 이 이긴다는 걸 증명하는 게 아니다. ③ 이 이기는지는
+*발견*이다. F5 전제 조정은 초안이 존재한 *다음*, 돌아가는 전체를 다듬는 작업으로
+한다. 모든 숫자는 이제 편집 가능한 파일 하나(`experiment.txt` /
 [`ExperimentProfile`](../Assets/FluidStabilizer/Core/Sim/ExperimentProfile.cs))
-so the operating point is cheap to change later. See **The draft (vertical
-slice)** below and [vision-check.md](vision-check.md).
+에 있어서 운영점(operating point)을 나중에 싸게 바꿀 수 있다.
 
-## Where we are (done ✅ / not done ⬜)
+## 지금까지 만든 것
 
-| Layer | State |
-|---|---|
-| Deterministic sim core, vehicle + road + heave, gimbal actuator, 2 slosh models, sensors | ✅ |
-| Baselines ① locked Hold, ② SFA / PID / privileged-feedforward, evaluator, play scene | ✅ |
-| RL bridge (headless Unity ↔ Python PPO), runs end-to-end | ✅ |
-| **Recorded human drives** (record + replay) | ✅ done 2026-08-29 |
-| **Feasibility ceiling** (best achievable spill on a fixed drive) | ✅ built + run 2026-08-29 — **gate does NOT pass** (finding F5) |
-| **Residual RL** (policy = baseline + small correction) | ⬜ blocked on the F5 premise adjustment |
-| Domain randomization + per-episode logging | ⬜ |
-| Phase 1.5 product shell (in-Unity control panel, standalone build, ONNX inference) | ⬜ |
+(phase-1 범위는 [design-review.md](design-review.md) §20 기준. 상세 근거는
+각 finding / decision 링크.)
 
-## The next steps, in order
+| 층 | 상태 | 요약 |
+|---|---|---|
+| 결정론적 시뮬 코어 | ✅ | `ManualClock` · `DeterministicRandom`(PCG32) · `SimulationLoop` (600/200/100 Hz, 번들 지연, Gт 기록), 엔진프리 (D1) |
+| 차량 + 도로 + 히브(heave) | ✅ | `VehicleModel` (3-DOF 스프렁 매스 + friction-circle), `RoadModel` (거리 함수 = grade/bank/거칠기/포트홀, 기본 off, `Severity` 손잡이) — D6, [road-model.md](road-model.md) |
+| 짐벌 액추에이터 | 🟡 | `GimbalActuator`: 전송지연, PD+I 위치 서보, 피크토크 포화, 마찰, rate/travel 한계, `Locked` 모드(강체 관절), I²t 권선열 모델(피크→연속 토크 디레이트) — D5. 백래시·기어박스 상세 보류 |
+| 슬로시 모델 2종 | ✅ | `PendulumSloshModel` (등가역학 ROM, 축당 진자 1개) + `ShallowWaterSloshModel` (2-D Saint-Venant, ~48×28 격자, Rusanov FV) — D4. **브래킷 규율** (F3): ROM 으로 학습, 얕은물로 검증 |
+| 센서 층 | 🟡 | `SensorSuite`: 차량+탱크 IMU, 엔코더(양자화), 모터, 로드셀 4개, 옵션 레벨/CAN; 샘플당 노이즈 + 에피소드당 바이어스, 번들 지연 |
+| 베이스라인 컨트롤러 | 🟡 | ① `Hold`(잠금), ② `SpecificForceAlignment` / `Pid` / `PrivilegedFullState`. `AxisLqr`/`LqrSloshController` 는 만들었으나 **보류**(공진). **F4**: 강체 Hold 를 반응형 틸트로 못 이김 |
+| 평가 하네스 | ✅ | `Evaluator` + `ScenarioSet`(8개) + 텍스트 리포트. `TraceEvaluator` (녹화 주행 × 베이스라인 × 슬로시 2종, 주행별 리터). `HindsightOptimizer` (feasibility 천장, F5) |
+| 플레이 씬 (수동 주행) | ✅ | `FluidStabilizer.Sim`: `SimulationRunner` · `HumanDriverInput`(키보드+게임패드) · `SimView` · `Hud` · `PlayControls` · `Frames`. `SceneBuilder` → `PlayScene.unity`. 트레이스 녹화/재생(`P`/`L`), `ComparisonRunner`(`C`), `RoadRibbon` — [human-drive.md](human-drive.md) |
+| RL 경로 | 🟡 | C# 쪽 완료+테스트: `FluidStabilizer.Rl` (`ObservationEncoder` 프레임스택, `PrivilegedEncoder` 비대칭 크리틱, `RewardFunction`, `RlEnvironment`, `TrainingServer` TCP). Python 쪽(`python/`) end-to-end 실행됨. **맨땅 PPO 는 학습 못 함** (F1/F4 절벽) — [rl.md](rl.md) |
+| 도메인 랜덤화 + 에피소드 로깅 | ⬜ | config 구조체는 있음, 랜덤화기+로깅 미구현 |
+| 녹화 주행 (녹화 + 재생) | ✅ | `DriverTrace` — 실제 disturbance 데이터 + 홀드아웃 평가 조건 |
+| feasibility 천장 | ✅ | `HindsightOptimizer` — **게이트 미통과** (F5) |
 
-1. **Human trace record / replay** — ✅ *done 2026-08-29.* `DriverTrace` +
-   `TraceRecorder` (`P`/`L` in the play scene). Gives the training disturbance
-   **and** the held-out evaluation condition in one move.
-2. **Rebuild the evaluation around recorded drives.** The headline three-way
-   comparison (①/②/③, later ④ the ceiling) runs on **3–5 held-out real drives**,
-   each replayed under **both** slosh models (bracket discipline, F3), reported
-   **per drive** in litres spilled — not just a mean over synthetic scenarios.
-   The synthetic scenarios stay, demoted to a training / robustness / regression
-   set. Sub-parts:
-   - **2a** ✅ *done 2026-08-29* — `ComparisonRunner`: the play scene's `C` key
-     replays one trace through three stabilizers at once, side by side, over the
-     same road, with a per-lane spill / near-rim / slosh-energy panel. This is
-     the visual headline.
-   - **2b** ✅ *done 2026-08-29* — `RoadRibbon`: a textured road strip that
-     follows the road's curve, tilts with grade/bank and dips into potholes,
-     rebuilt from an independent `RoadModel` replica (same seed/config as the
-     physics). Opaque shader (no z-fighting), procedural lane markings. Visible
-     only with the road on (`G`). *Quality pass 2026-08-29 after owner feedback:
-     added road curvature so it's a course you follow (see road-model.md),
-     opaque `RoadRibbon.shader`, tiled asphalt/markings texture, curved
-     centreline, exaggerated bump rendering; fixed the comparison camera to
-     track the (now curving) pack.*
-   - **2c** ✅ *done 2026-08-29* — `TraceEvaluator` + menu item **FluidStabilizer
-     ▸ Evaluate Recorded Drives** (and a `+ shallow water` variant): replays every
-     trace in `Traces/` through the analytic baselines, per drive, writes
-     `Logs/trace-eval.txt`.
-     **Note from the first run:** the pendulum ROM only spills above
-     `FillRatio ≈ 0.56` (its wave-elevation cap is `0.8·depth`); the four
-     exploratory traces (fill 0.55, road off) show 0 L for everyone. The
-     held-out drives for the real comparison must be recorded with **road on
-     (`G`)** and **fill ≥ 0.60** to discriminate — and checked under shallow
-     water too.
-3. **Feasibility ceiling (hindsight).** ✅ *built + run 2026-08-29.*
-   `HindsightOptimizer` (`FluidStabilizer.Core.Sim.Eval`, engine-free): a
-   gradient-free `(1+1)`-ES with random restarts searches a low-dimensional
-   gimbal-rate trajectory (6–10 Catmull-Rom knots/axis, scaled to the real max
-   rate) for the feed-forward motion that minimises spill on one fixed recorded
-   drive — full hindsight, real actuator limits, deterministic. Runner: **Menu ▸
-   FluidStabilizer ▸ Feasibility Ceiling (Hindsight)** or `-executeMethod
-   FluidStabilizer.SimEditor.HindsightEvalRunner.Run` → `Logs/hindsight-eval.txt`
-   plus per-drive `Logs/hindsight/*.traj.csv` (the step-4 behaviour-cloning
-   warm-start data).
+**어셈블리** ([Assets/FluidStabilizer/README.md](../Assets/FluidStabilizer/README.md)):
+`Contracts` / `Core` / `Controller` / `Rl` (모두 엔진프리) · `Sim` / `Sim.Editor` (Unity) · `Tests.EditMode`.
 
-   **← decision gate — RESULT: does NOT pass (finding F5).** On 6 held-out drives
-   (road on, fill 0.62), the hindsight ceiling spills **2–6 L more** than the
-   locked Hold under the pendulum ROM and far more under shallow water. The active
-   servo commanding zero already loses ≈ 5–7 L to a mechanically locked joint
-   (it's torque-limited against the slosh moment), and no feed-forward trajectory
-   recovers that — even knowing the whole drive. **Residual RL is on hold** until
-   the premise is adjusted with the owner:
-   - **freeboard** — a locked tank already spills 19–22 L on these drives; lower
-     fill / taller tank until locked-Hold sits near the spill threshold, leaving a
-     gap for control to close;
-   - **road / driving severity**, or calmer held-out drives;
-   - **a hybrid "lock unless correcting" action** so residual RL's baseline is the
-     19 L locked tank, not the 25 L sagging servo;
-   - preview/look-ahead is *not* a sufficient fix on its own — the hindsight
-     trajectory already has perfect look-ahead.
-4. **Residual RL.** *(Blocked by the step-3 gate — F5. Do this once the premise
-   adjustment lands and a re-run of step 3 shows hindsight beating locked Hold.)*
-   The policy outputs a small correction on top of a baseline
-   (locked-hold or SFA), so exploration happens around a sane operating point
-   instead of random gimbal slams — the specific fix for the F1/F4 cliff, and
-   the approach design-review named from the start. Warm-start by
-   behaviour-cloning the step-3 hindsight trajectories, then let RL make it
-   causal and sensor-only. Needs a small change to `RlEnvironment` (compose
-   baseline + policy action) and checkpoint-resume in the trainer.
-5. **Domain randomization + per-episode logging**, then **Phase 1.5** — the
-   product shell (in-Unity control panel, standalone build, ONNX inference in
-   Unity, a light Python trainer GUI).
+**검증:** EditMode 테스트 **113 통과 / 0 실패 / 8 스킵** (스킵 = `[Explicit]` 진단).
+```
+"/Applications/Unity/Hub/Editor/6000.5.10f1/Unity.app/Contents/MacOS/Unity" -batchmode -nographics -projectPath . -runTests -testPlatform EditMode -testResults Logs/editmode-results.xml -logFile -
+```
 
-## The draft (vertical slice) — owner decision 2026-08-29
+## 초안 (수직 슬라이스) — ✅ 완료 2026-08-29
 
-Build the whole pipeline end-to-end *once*, roughly, before perfecting any layer.
-Success = "it runs start to finish and I can see all three side by side", **not**
-"③ wins". Each step is one self-contained commit and gets a short demo +
-[vision-check.md](vision-check.md) entry.
+파이프라인 전체를 *한 번* 대충 만든다 (어느 한 층을 완벽하게 만들기 전에).
+성공 = "처음부터 끝까지 돌아가고, 셋을 나란히 볼 수 있다", **"③ 이 이긴다"가
+아님.** 각 단계는 자체 완결 커밋 하나 + 짧은 데모 + [vision-check.md](vision-check.md) 항목.
 
-| # | step | state | notes |
+| # | 단계 | 상태 | 메모 |
 |---|---|---|---|
-| A | **Experiment profile** — one `experiment.txt` for fill / road / driver / episode / slosh, read by every runner | ✅ 2026-08-29 | `ExperimentProfile` + `ExperimentProfileStore`; wired into the play scene + RL server. The data model for the eventual control panel. |
-| B | **Residual RL wiring** — `RlEnvironment` composes `baseline action + policy correction` (baseline = locked-Hold or SFA) | ✅ 2026-08-29 | `baselineFactory` + `residualRateScaleRadPerSec` ctor params; composes in joint-rate space; `-rlBaseline {none\|hold\|sfa\|pid} -rlResidualFrac`. Python trainer unchanged. `ResidualRlTests` (4). |
-| C | **Behaviour-cloning warm start** — pre-train the policy net on `Logs/hindsight/*.traj.csv`, then a short PPO run | ✅ 2026-08-29 | `BcExportRunner` → `Logs/bc/dataset.csv` (23.8 k ticks, 6 drives); `python/bc_pretrain.py` → `runs/bc/actor.pt`; `train_ppo.py --init-actor`. Chain runs end-to-end. **Note:** the hindsight optimum is near-zero motion (F5), so BC mostly teaches "stay calm" — a real anti-cliff prior, not a winning strategy. `-rlTrace all` trains on the same 6 drives. |
-| D | **Policy as a separate process** — `python/serve_policy.py` serves inference over the bridge; Unity `RemotePolicyController : IController` is the client | ✅ 2026-08-29 | revised from "baked ONNX in Unity" (project-goals.md). `StabilizerChoice.LearnedPolicy` / key `4`; `PolicyEvalRunner` (menu). End-to-end verified: on the 6 drives the BC policy spills 24–30 L vs Hold's 19–22 — **① rigid wins**, as F5 predicts. `RemotePolicyControllerTests` (3). |
-| E | **3-way comparison in the app** — `ComparisonRunner` runs ①②③ side by side; the play-scene HUD shows the live `experiment.txt` profile + per-lane litres | ✅ 2026-08-29 | default lanes now `Off / PID / LearnedPolicy`; the ③ lane is a `RemotePolicyController` (shows "(offline → Hold)" if `serve_policy.py` isn't up). `C` toggles it. `ComparisonRunnerTests` (2). |
-| F | **Standalone build** — one menu item → self-contained app | ✅ 2026-08-29 | `BuildRunner` (menu + `-executeMethod`): rebuilds the play scene, `BuildPipeline.BuildPlayer` for the active target → `Builds/`. Verified: a 104 MB universal `fluid-stabilizer.app`. |
+| A | **실험 프로파일** — fill/도로/운전자/에피소드/슬로시를 담은 `experiment.txt` 하나를 모든 러너가 읽음 | ✅ | `ExperimentProfile` + `ExperimentProfileStore`. 플레이 씬 + RL 서버에 배선. 나중 컨트롤 패널의 데이터 모델 |
+| B | **잔차 RL 배관** — `RlEnvironment` 가 `베이스라인 행동 + 정책 보정` 합성 (베이스라인 = 잠금 Hold 또는 SFA) | ✅ | `baselineFactory` + `residualRateScaleRadPerSec` ctor 인자; 관절속도 공간에서 합성; `-rlBaseline {none\|hold\|sfa\|pid} -rlResidualFrac`. Python 학습기 변경 없음. `ResidualRlTests` (4) |
+| C | **BC 웜스타트** — hindsight 궤적으로 정책망 사전학습 후 짧은 PPO | ✅ | `BcExportRunner` → `Logs/bc/dataset.csv` (23.8k 틱, 6 주행); `python/bc_pretrain.py` → `runs/bc/actor.pt`; `train_ppo.py --init-actor`. **메모:** F5 hindsight 최적해가 거의 무동작이라 BC 가 배우는 건 "얌전히" — 진짜 anti-cliff 프라이어이지 이기는 전략 아님. `-rlTrace all` 이 같은 6 주행으로 학습 |
+| D | **정책을 별도 프로세스로** — `python/serve_policy.py` 가 브릿지로 추론 서빙; Unity `RemotePolicyController : IController` 가 클라이언트 | ✅ | "ONNX 를 유니티에 굽기"에서 수정 (project-goals.md). `StabilizerChoice.LearnedPolicy` / 키 `4`; `PolicyEvalRunner`(메뉴). end-to-end 검증: 6 주행에서 BC 정책이 24–30 L vs Hold 19–22 — **① 강체가 이김** (F5 예측대로). `RemotePolicyControllerTests` (3) |
+| E | **앱 안의 3-way 비교** — `ComparisonRunner` 가 ①②③ 나란히; 플레이 씬 HUD 가 현재 `experiment.txt` 프로파일 + 레인별 리터 표시 | ✅ | 기본 레인 `Off / PID / LearnedPolicy`; ③ 레인은 `RemotePolicyController` (서버 없으면 "(offline → Hold)"). `C` 토글. `ComparisonRunnerTests` (2) |
+| F | **standalone 빌드** — 메뉴 항목 하나 → 자기완결 앱 | ✅ | `BuildRunner` (메뉴 + `-executeMethod`): 플레이 씬 재생성 후 `BuildPipeline.BuildPlayer` → `Builds/`. 검증: 104 MB 유니버설 `fluid-stabilizer.app` |
 
-**The draft is complete** — the whole pipeline runs start to finish: record →
-hindsight ceiling → BC dataset → BC pre-train → PPO fine-tune → `serve_policy.py`
-→ Unity ①②③ comparison → standalone app.
+**초안 완성** — 파이프라인 전체가 처음부터 끝까지 돈다: 녹화 → hindsight 천장 →
+BC 데이터셋 → BC 사전학습 → PPO 미세조정 → `serve_policy.py` → Unity ①②③ 비교
+→ standalone 앱.
 
-Next: step back, fill in `vision-check.md`, and **then** do the F5 premise
-adjustment (step 3 fail-branch) and a real RL run as refinement passes over a
-working whole.
+## 다음: F5 전제 조정
 
-## The three concerns from the step-back session — resolved
+**잔차 RL(제대로 된 학습)은 게이트 통과 전까지 보류.** finding F5 참고. 소유자와
+전제를 조정한다 — 후보:
 
-### 1. There is no "driving course" / route
+- **Freeboard** — 이 주행들에서 잠근 탱크가 이미 19–22 L 스필 (0.23 m
+  freeboard). fill 낮추기 / 탱크 높이기 → 잠근 Hold 가 스필 문턱 근처에 오도록,
+  제어가 메울 틈이 생기게.
+- **도로 / 운전 강도** — `RoadConfig.Severity`, 또는 더 얌전한 홀드아웃 주행 녹화.
+- **하이브리드 "보정할 때만 풀림" 액션** — 잔차 RL 의 베이스라인이 25 L 처지는
+  서보가 아니라 19 L 잠근 탱크가 되도록.
+- Preview/look-ahead 단독으로는 해결책 아님 — hindsight 궤적은 이미 완벽한
+  look-ahead 를 가졌는데도 실패.
 
-**Decision: no explicit route / waypoint / map system.** The AI does not drive;
-a path-following subsystem would add complexity without adding understanding.
-The unit of "a drive" is a **recorded human trace + a fixed road seed** — fully
-deterministic and reproducible. That is step 1.
+그다음: 도메인 랜덤화 + 에피소드 로깅, 실제 RL 실행, Phase 1.5 컨트롤 패널 —
+모두 돌아가는 전체를 다듬는 반복 작업으로.
 
-**Road curvature is not coupled to steering yet, and that is acceptable for
-now.** The road's `bank` is a function of distance, independent of where the
-driver steers; in the play scene this reads as an extra exogenous cross-slope.
-For a *disturbance-rejection* experiment that is fine. Physically coupling road
-curvature ↔ steering ↔ superelevation is a fidelity upgrade to consider **after**
-the first three-way comparison, and only if the road disturbance turns out not
-to be interesting enough.
+## step-back 세션의 3가지 우려 — 해결됨
 
-### 2. Is "mean spill over 6 synthetic scenarios × 6 seeds" the right benchmark?
+### 1. "주행 코스" / 경로가 없다
+**결정: 명시적 route/waypoint/맵 시스템 없음.** AI 는 운전하지 않는다. 경로추종
+서브시스템은 이해에 보탬 없이 복잡도만 늘린다. "한 번의 주행" 단위 =
+**녹화된 인간 트레이스 + 고정 도로 seed** — 완전 결정론·재현가능.
+도로 곡률 ↔ 조향 ↔ 편경사(superelevation) 물리 결합은 첫 3-way 비교 *이후*,
+도로 disturbance 가 충분히 흥미롭지 않을 때만 고려할 정밀도 업그레이드.
 
-**Decision: no — the headline benchmark is the owner's own recorded drives.**
-3–5 held-out real drives, replayed under both slosh models, reported per drive in
-litres. Primary metric: litres spilled. Secondary: time-near-rim, peak slosh
-kinetic energy, actuator effort / thermal load. The synthetic scenario set is
-kept for domain randomization and as a fast regression signal, not as the
-headline result. This matches design-review §17 ("record human driving sessions
-→ a fixed held-out test set").
+### 2. "합성 시나리오 6개 × seed 6개 평균 스필"이 맞는 벤치마크인가?
+**결정: 아니다 — 헤드라인 벤치마크는 소유자 자신의 녹화 주행.** 홀드아웃 실주행
+3~5개, 슬로시 2종, 주행별 리터. 1차 지표: 스필 리터. 2차: rim 근접 시간, 슬로시
+운동에너지 피크, 액추에이터 노력/열부하. 합성 시나리오는 도메인 랜덤화 +
+빠른 회귀 신호용으로 유지 (헤드라인 아님). design-review §17 과 일치.
 
-### 3. Is the RL bet still the right approach after F4?
-
-**Decision: build the ceiling first, then switch to residual RL.** The first RL
-run already gave us its main lesson (the cliff); re-running plain PPO would teach
-nothing new. Instead: (a) step 3 establishes whether the task is winnable at all
-and by how much; (b) step 4 uses **residual RL** — policy on top of a baseline —
-which is design-review's stated method and the direct fix for the cliff, with a
-behaviour-cloning warm-start from the hindsight-optimal trajectories. Curriculum
-(needs checkpoint-resume) is a supporting tactic, not the primary plan.
-
-## What this changes vs. the older roadmap
-
-- `project-goals.md` step 1 was "finish and run RL once". That happened; its
-  result is the cliff. The honest next step is recorded traces + a ceiling, not
-  another RL run — so steps 1–3 here come before any RL.
-- The evaluation benchmark shifts from "synthetic scenario mean" to "held-out
-  recorded drives", with synthetic kept as a secondary set.
-- A hard **decision gate** is added after step 3: don't start RL until a
-  privileged/hindsight solution is shown to beat the rigid baseline.
-- The tank was made shallower (`TankHeightZ` 0.8 → 0.6 m) so it spills more
-  readily — the F1–F4 direction is unchanged and, on the discriminating
-  scenarios, now stronger (see the note at the top of
-  [findings.md](findings.md)). A full baseline re-sweep is pending.
+### 3. F4 이후에도 RL 이 맞는 접근인가?
+**결정: 천장을 먼저 만들고, 잔차 RL 로 전환.** 첫 RL 실행이 이미 주된 교훈(절벽)을
+줬다. 맨땅 PPO 재실행은 새로 배울 게 없다. 대신: (a) 천장이 과제가 이길 수 있는지
++ 얼마나 이길 수 있는지 확립; (b) 잔차 RL — 베이스라인 위 정책 — 은 design-review
+가 명시한 방법이자 절벽의 직접 해법, hindsight 최적 궤적으로 BC 웜스타트.
+커리큘럼(체크포인트 재개 필요)은 보조 전술이지 주 계획 아님.
