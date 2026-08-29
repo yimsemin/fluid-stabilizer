@@ -25,7 +25,7 @@ RL target.
 | `RlEnvironment` | `Rl/` | ✅ deterministic `Reset(seed)→obs`, `Step(action)→(obs, reward, terminated, truncated, privileged)` |
 | `TrainingServer` | `Rl/` | ✅ length-prefixed binary TCP bridge (one client); loopback-tested bit-identical to the in-process env |
 | `RlServerLauncher` | `Sim/Editor/` | ✅ `-executeMethod` entry point (headless Unity host) |
-| Python env + PPO | `python/` | ✅ asymmetric-critic CleanRL-style PPO; **first run 2026-08-29** — trains end-to-end against the headless server, checkpoints + TensorBoard OK. Reward not yet tuned; no long job / no F4 comparison yet |
+| Python env + PPO | `python/` | 🟡 asymmetric-critic CleanRL-style PPO; **first run 2026-08-29** — runs end-to-end (checkpoints + TensorBoard OK) but **does not learn**: after 600 k steps it is worse than a zero-action policy. Needs obs/reward normalisation etc. — see "First-run result" below |
 | Domain randomization | — | ⬜ item 13 |
 | Curriculum automation | — | ⬜ (restart the server with harder flags for now) |
 
@@ -45,10 +45,11 @@ RL target.
 
 ## Running it
 
-**Verified end-to-end 2026-08-29** (macOS arm64, M4 Max): the commands below
-train for real — 30 k steps / 10 episodes in ~22 s wall, checkpoint + TensorBoard
-logs written, `episode_return` ≈ −360 (untuned). No code changes were needed to
-get here; the earlier failures were the two gotchas called out below.
+**Bridge verified end-to-end 2026-08-29** (macOS arm64, M4 Max): the commands
+below run the full loop — ~1400 steps/s, checkpoint + TensorBoard logs written.
+No code changes were needed to get the loop running; the earlier failures were
+the two gotchas called out below. **The PPO does not learn yet** (see "First-run
+result" further down) — that is a trainer problem, not a bridge problem.
 
 > ⚠️ **Close the Unity Editor before starting the headless server.** Unity is
 > single-instance per project — if the Editor (or a stale `-batchmode` Unity, or
@@ -102,8 +103,50 @@ once the reward plateaus, restart the server with a harder driver / fuller tank 
 and wrap N `FluidStabEnv` in a Gymnasium `AsyncVectorEnv` (the PPO script is
 single-env in v1 — extend when throughput matters).
 
+## First-run result (2026-08-29): plumbing works, the PPO does **not** learn yet
+
+The bridge is verified end-to-end, but a 600 k-step run (`-rlDriver highway
+-rlBriskness 0.6 -rlFill 0.7`, single env) shows **no learning** — the trained
+policy is *worse than doing nothing*:
+
+| policy (6 seeds, same server) | mean episode return | mean episode length |
+|---|---|---|
+| zero action (`a = 0`)          | **−179** | 3000 (never terminal-spills) |
+| random (`N(0, 0.6)`)           | −488 | 1152 |
+| PPO after 600 k steps          | −510 | 1535 |
+
+The PPO policy drifts to a constant off-centre gimbal command
+(`action ≈ [0.75, 0.47]`, 25 % of steps saturated) instead of finding the
+trivial "hold still" win. The return curve is flat across the whole run. That
+pattern points at the **trainer**, not the step budget or exploration:
+
+- **No observation normalisation.** `train_ppo.py` feeds the raw 234-dim
+  frame-stacked obs straight into a `tanh` MLP. CleanRL's continuous-control
+  reference wraps `NormalizeObservation` + clip; without it the value net and
+  policy can't condition on the small-signal channels. **Fix this first.**
+- **No return/reward scaling.** Returns span −180…−1400; the value target is
+  unscaled. Add `NormalizeReward` (or a running return std) — again standard in
+  the reference.
+- **`--ent-coef 0` + a free `actor_logstd` starting at −0.5.** With no entropy
+  bonus the log-std just shrinks and exploration collapses early. Try
+  `--ent-coef 1e-3` and/or a lower log-std floor.
+- Only after those: longer budget (2–10 M), the asymmetric-critic advantage,
+  hyper-params.
+
+None of this is wired yet — it is the next RL work item, separate from the
+"get it running" work that this doc's *Running it* section now covers.
+
 ## Notes / risks
 
+- **No spill-metric readout over the wire.** `play.py` only sums the shaped
+  reward. The F4 table is spill in litres on 6 named scenarios
+  (`docs/findings.md`); `RlEnvironment.Summary()` produces that roll-up in C# but
+  the TCP protocol (RESET/STEP/CLOSE) does not expose it, and neither does the
+  per-term `RewardBreakdown`. To compare a policy against F4 you need either a
+  `SUMMARY` opcode or the Phase-1.5 ONNX-in-`Evaluator` path.
+- **No checkpoint resume.** `train_ppo.py` always starts from random weights, so
+  the "continue training from the checkpoint" curriculum below is not yet
+  possible.
 - **Bracket-model discipline (F3):** train on the pendulum ROM (cheap), and
   *always* re-evaluate the trained policy on `-rlSlosh shallow` before trusting a
   win. A policy that beats rigid only under the ROM has probably learned a ROM
