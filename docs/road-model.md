@@ -16,19 +16,35 @@ reject and an anticipatory policy can. It puts the three-way comparison
 
 ## What it models — `RoadModel` (engine-free, `FluidStabilizer.Core.Sim`)
 
-A deterministic function of **distance travelled** `s`, three superposed parts:
+A deterministic function of **distance travelled** `s` — a fixed course for a
+given seed (drive it twice, same bends and bumps in the same places). Superposed
+parts:
 
 | Part | Model | Effect on the truck |
 |---|---|---|
+| **Curve** | two sinusoids vs `s`, wavelength ~`CurvatureWavelengthM` (180 m), peak `CurvatureAmplitudeRadPerM` (~0.004 rad/m ≈ 250 m radius) | horizontal **curvature**: the truck's heading follows `curvature · speed` on its own — the driver's steer is a *correction* on top (lane changes, drift, recovering a badly-taken curve). Cornering slings the liquid sideways. |
 | **Hills** | two sinusoids vs `s`, wavelength ~`HillWavelengthM` (140 m), peak `GradeAmplitudeRad` (~3.5 %) | a slowly varying **grade**: a gravity component along the road + a body-pitch trim → the tank tilts relative to gravity |
-| **Bank** | one sinusoid vs `s`, wavelength ~`BankWavelengthM` (90 m), amplitude `BankAmplitudeRad` (~1.1°) | curve superelevation / cross-slope → a body-roll trim |
+| **Bank** | superelevation `BankPerCurvature · curvature` (clamped ±0.08 rad) banking into the curve, plus a small independent cross-slope sinusoid (`BankAmplitudeRad`) | curve superelevation / cross-slope → a body-roll trim that partly offsets the cornering load |
 | **Roughness** | 6 sinusoids, wavelengths geometric 0.6–9 m, red-ish spectrum (amp ∝ 1/k), rescaled so RMS = `RoughnessRmsM` (6 mm) | continuous vertical surface displacement → ride vibration |
-| **Events** | Poisson process along the road, `EventsPerKm` (12), raised-cosine bump/pothole of mean height `EventHeightM` (±4 cm), length `EventLengthM` (0.35 m) | discrete jolts — expansion joints, potholes, stray rocks, curbs |
+| **Events** | Poisson process along the road, `EventsPerKm` (18), raised-cosine bump/pothole of mean height `EventHeightM` (±5 cm), length `EventLengthM` (0.4 m) | discrete jolts — expansion joints, potholes, stray rocks, curbs |
 
-`Severity` (default 1) scales roughness + events (not grade/bank) — the single
-knob for a curriculum or domain randomization. All output is zero when
+`Severity` (default 1) scales roughness + events (not grade/bank/curvature) — the
+single knob for a curriculum or domain randomization. All output is zero when
 `RoadConfig.Enabled` is false, which is the v1 default, so **every existing
-scenario and determinism guard is unchanged.**
+non-road scenario and determinism guard is unchanged.** The curvature phases are
+drawn *last* in `Reset`, so the grade/bank/roughness/event RNG streams are
+byte-identical to before this channel existed (only the RoughRoad* scenarios,
+which opt in, see new behaviour — their baseline numbers need a re-sweep).
+
+## The truck follows the road (2026-08-29)
+
+Originally the road was a pure vertical/tilt disturbance and the truck drove
+wherever the driver steered — there was nothing to *follow*. Now
+`VehicleModel.Step` adds `roadYawRate = speed · road.Curvature` to the steer-
+derived yaw rate, so on a curve the truck turns on its own and the driver is
+keeping it in the lane. This makes "record a drive on course N, replay it" a
+coherent idea, and adds cornering (a lateral slosh disturbance) to the mix. With
+the road off, `Curvature` is 0 and nothing changes.
 
 ## Suspension heave
 

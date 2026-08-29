@@ -71,9 +71,14 @@ namespace FluidStabilizer.Core.Sim
             // gravity component along a graded road opposes climbing
             aLongDesired -= MathD.StandardGravity * Math.Sin(road.Grade);
 
-            // --- lateral from steering (bicycle) ---
+            // --- lateral from steering (bicycle) + following the road's curve ---
+            // The road curvature turns the truck on its own (the driver is
+            // "staying in the lane"); the steer input is a correction on top
+            // (lane changes, drift, recovering a badly-taken curve).
             double steerAngle = controls.Steer * (25.0 * MathD.Deg2Rad); // ±25° road-wheel angle at full lock
-            double yawRate = _speed * Math.Tan(steerAngle) / Math.Max(0.1, _cfg.Wheelbase);
+            double driverYawRate = _speed * Math.Tan(steerAngle) / Math.Max(0.1, _cfg.Wheelbase);
+            double roadYawRate = _speed * road.Curvature;
+            double yawRate = roadYawRate + driverYawRate;
             double aLat = _speed * yawRate;
 
             // --- friction circle ---

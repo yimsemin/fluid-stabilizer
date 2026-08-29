@@ -160,8 +160,16 @@ namespace FluidStabilizer.Core.Sim
         public double GradeAmplitudeRad = 0.035;
         public double HillWavelengthM = 140.0;
 
+        // ---- horizontal curve: the road bends, and the truck follows it ----
+        /// <summary>Peak centreline curvature, rad/m (~0.004 ≈ a 250 m-radius highway curve).</summary>
+        public double CurvatureAmplitudeRadPerM = 0.004;
+        public double CurvatureWavelengthM = 180.0;
+
         // ---- curve superelevation / cross-slope ----
-        public double BankAmplitudeRad = 0.020;
+        /// <summary>Banking into the curve: superelevation (rad) per unit curvature (rad/m). Clamped to ±0.08.</summary>
+        public double BankPerCurvature = 24.0;
+        /// <summary>Independent cross-slope on top of superelevation.</summary>
+        public double BankAmplitudeRad = 0.012;
         public double BankWavelengthM = 90.0;
 
         // ---- continuous surface roughness (asphalt texture + washboard) ----
@@ -171,10 +179,10 @@ namespace FluidStabilizer.Core.Sim
         public double RoughnessLongWavelengthM = 9.0;
 
         // ---- discrete events: expansion joints, potholes, stray rocks, curbs ----
-        public double EventsPerKm = 12.0;
+        public double EventsPerKm = 18.0;
         /// <summary>Mean |height| of a discrete event, m. Sign is random per event (bump vs pothole).</summary>
-        public double EventHeightM = 0.04;
-        public double EventLengthM = 0.35;
+        public double EventHeightM = 0.05;
+        public double EventLengthM = 0.4;
 
         /// <summary>
         /// Master multiplier on roughness + event size (not grade/bank) — the
