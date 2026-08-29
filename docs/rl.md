@@ -109,6 +109,17 @@ and `python train_ppo.py --init-actor runs/bc/actor.pt` warm-starts PPO. Because
 the F5 hindsight optimum is nearly do-nothing, BC teaches a low-amplitude smooth
 prior (keeps exploration off the cliff), not a competent policy.
 
+**Policy serving (step D — the deployment split):** the trained policy runs as
+its own process, `python serve_policy.py --checkpoint runs/<run>/actor.pt --port
+5601` (loads `actor_mean` + the whitener, returns the deterministic mean, threaded
+one-per-client). Unity's `RemotePolicyController` (engine-free, `FluidStabilizer.Rl`)
+is the bridge client: it runs `ObservationEncoder` locally, sends the vector, and
+turns the reply into a joint-rate command — degrading to a locked Hold (and
+re-probing every ~2 s) if the server is absent. Wire format in the class doc-comment.
+Use it via `StabilizerChoice.LearnedPolicy` (play-scene key `4`), or
+**FluidStabilizer ▸ Evaluate Learned Policy** → `Logs/policy-eval.txt`. This is
+*not* baked ONNX in the Unity binary — see project-goals.md "Final-product architecture".
+
 **Residual mode (experiment-plan step B, 2026-08-29):** `-rlBaseline {none|hold|sfa|pid}`
 `-rlResidualFrac <0..1>` (default 0.35). With a baseline, each control tick the
 env emits `baselineRate + policy·(residualFrac·MaxRate)` in joint-rate space

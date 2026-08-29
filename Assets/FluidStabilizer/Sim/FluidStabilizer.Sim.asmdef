@@ -5,6 +5,7 @@
     "FluidStabilizer.Contracts",
     "FluidStabilizer.Core",
     "FluidStabilizer.Controller",
+    "FluidStabilizer.Rl",
     "Unity.InputSystem"
   ],
   "includePlatforms": [],
