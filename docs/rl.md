@@ -96,6 +96,19 @@ Launcher flags: `-rlPort -rlFill -rlSeconds -rlStack -rlDriver {highway|aggressi
 -rlSlosh {pendulum|shallow} -rlRoad {none|mild|rough} -rlBriskness -rlAggression`.
 Everything except `-rlPort/-rlStack` **defaults to `experiment.txt`** now; the flags override per-run.
 
+**Trace-driven training (step C0):** `-rlTrace all` trains on the recorded drives
+that have a `Logs/hindsight/*.traj.csv` (the BC set — 6 drives); `-rlTrace <substr>`
+filters by filename. One drive per episode by seed; config = the first drive's
+fill/road, episode length = the shortest drive.
+
+**BC warm start (step C):** `FluidStabilizer ▸ Export BC Dataset` (or
+`-executeMethod …BcExportRunner.Run`) replays each drive through the real obs
+pipeline feeding it the hindsight action → `Logs/bc/dataset.csv`. Then
+`python bc_pretrain.py` fits `actor_mean` + the whitener → `runs/bc/actor.pt`,
+and `python train_ppo.py --init-actor runs/bc/actor.pt` warm-starts PPO. Because
+the F5 hindsight optimum is nearly do-nothing, BC teaches a low-amplitude smooth
+prior (keeps exploration off the cliff), not a competent policy.
+
 **Residual mode (experiment-plan step B, 2026-08-29):** `-rlBaseline {none|hold|sfa|pid}`
 `-rlResidualFrac <0..1>` (default 0.35). With a baseline, each control tick the
 env emits `baselineRate + policy·(residualFrac·MaxRate)` in joint-rate space

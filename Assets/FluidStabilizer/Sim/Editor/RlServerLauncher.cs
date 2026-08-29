@@ -110,6 +110,9 @@ namespace FluidStabilizer.SimEditor
             new TrainingServer(MakeEnv).Serve(port);
         }
 
+        // -rlTrace all      → every trace that has a Logs/hindsight/<label>.traj.csv
+        //                     (i.e. exactly the behaviour-cloning set — keeps C1 and C3 consistent)
+        // -rlTrace <substr> → traces whose filename contains <substr>
         private static List<DriverTrace> LoadTraces(string selector)
         {
             if (string.IsNullOrEmpty(selector)) return new List<DriverTrace>();
@@ -122,7 +125,22 @@ namespace FluidStabilizer.SimEditor
             if (selector != "all")
                 files = files.Where(p => System.IO.Path.GetFileName(p).Contains(selector));
 
-            return files.Select(DriverTrace.LoadFromFile).ToList();
+            var traces = files.Select(DriverTrace.LoadFromFile).ToList();
+
+            if (selector == "all")
+                traces = traces.Where(t =>
+                    System.IO.File.Exists(System.IO.Path.Combine("Logs/hindsight", t.Label + ".traj.csv"))).ToList();
+
+            if (traces.Count > 1)
+            {
+                DriverTrace a = traces[0];
+                var odd = traces.Where(t =>
+                    System.Math.Abs(t.FillRatio - a.FillRatio) > 1e-6 || t.RoadEnabled != a.RoadEnabled).ToList();
+                if (odd.Count > 0)
+                    Debug.LogWarning($"[rl] -rlTrace: {odd.Count} trace(s) have a different fill/road than "
+                                     + $"'{a.Label}' — the whole batch runs under {a.Label}'s config.");
+            }
+            return traces;
         }
 
         private static string ArgStr(string[] a, string key, string def)
