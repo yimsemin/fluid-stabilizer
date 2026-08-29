@@ -29,7 +29,14 @@ namespace FluidStabilizer.Rl
 
         public static RewardWeights Default() => new RewardWeights
         {
-            Overflow = 500.0,
+            // Overflow is in m³/step: the weir passes O(1e-5 … 1e-4) m³ per 10 ms
+            // step while cresting, so k1 must be large for the spill term to
+            // dominate the per-step "holding near the rim" costs below. At
+            // k1 = 5e4 a full 50 L (0.05 m³) failure costs ≈ −2500, vs a few
+            // hundred for a whole episode of near-rim/slosh-energy cost — so the
+            // agent cannot score better by dumping the tank and ending early
+            // (measured 2026-08-29: with the old k1 = 500 / K_term = 5 it could).
+            Overflow = 5.0e4,
             NearRim = 0.05,
             SloshEnergy = 1.0e-3,
             ActionRate = 0.02,
@@ -37,7 +44,7 @@ namespace FluidStabilizer.Rl
             JointLimitProximity = 0.05,
             TankTilt = 5.0e-3,
             AliveBonus = 0.0,
-            TerminalSpill = 5.0,
+            TerminalSpill = 500.0,
             NearRimMargin = 0.10,
             TerminalSpillVolume = 0.05,
             JointLimitProximityStart = 0.8,

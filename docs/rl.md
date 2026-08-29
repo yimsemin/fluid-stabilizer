@@ -25,7 +25,7 @@ RL target.
 | `RlEnvironment` | `Rl/` | ✅ deterministic `Reset(seed)→obs`, `Step(action)→(obs, reward, terminated, truncated, privileged)` |
 | `TrainingServer` | `Rl/` | ✅ length-prefixed binary TCP bridge (one client); loopback-tested bit-identical to the in-process env |
 | `RlServerLauncher` | `Sim/Editor/` | ✅ `-executeMethod` entry point (headless Unity host) |
-| Python env + PPO | `python/` | 🟡 asymmetric-critic CleanRL-style PPO; **first run 2026-08-29** — runs end-to-end (checkpoints + TensorBoard OK) but **does not learn**: after 600 k steps it is worse than a zero-action policy. Needs obs/reward normalisation etc. — see "First-run result" below |
+| Python env + PPO | `python/` | 🟡 asymmetric-critic CleanRL-style PPO; runs end-to-end, trainer brought up to the CleanRL reference (obs/return normalisation, 2026-08-29). **PPO-from-scratch still does not learn** — the task needs residual RL / curriculum / warm-start, not tuning. See "First-run result" |
 | Domain randomization | — | ⬜ item 13 |
 | Curriculum automation | — | ⬜ (restart the server with harder flags for now) |
 
@@ -103,38 +103,65 @@ once the reward plateaus, restart the server with a harder driver / fuller tank 
 and wrap N `FluidStabEnv` in a Gymnasium `AsyncVectorEnv` (the PPO script is
 single-env in v1 — extend when throughput matters).
 
-## First-run result (2026-08-29): plumbing works, the PPO does **not** learn yet
+## First-run result (2026-08-29): plumbing works; PPO-from-scratch does **not** learn this task
 
-The bridge is verified end-to-end, but a 600 k-step run (`-rlDriver highway
--rlBriskness 0.6 -rlFill 0.7`, single env) shows **no learning** — the trained
-policy is *worse than doing nothing*:
+Three runs (600 k–1 M steps): the trained policy is always *worse than a
+zero-action policy* and the return curve is dead flat. Two separate problems
+were found; the first is fixed, the second is a task-design decision.
 
-| policy (6 seeds, same server) | mean episode return | mean episode length |
+### (1) Trainer was below the CleanRL reference — **fixed**
+
+`train_ppo.py` fed the raw 234-dim frame-stacked obs (physical units on wildly
+different scales) straight into a `tanh` MLP, with unscaled reward targets and
+`--ent-coef 0`. The first Linear layer saturates and nothing learns. Added, this
+session:
+
+- `RunningMeanStd` whitening (±10 clip) of **both** the actor obs and the
+  privileged critic obs;
+- CleanRL-style return normalisation (reward ÷ running std of the discounted
+  return);
+- `--ent-coef` default `0 → 1e-3`;
+- the obs-normaliser stats are saved in the checkpoint and re-applied by
+  `play.py` (a policy trained on whitened obs is garbage without them);
+- console now prints `return(mean50)` (raw), flushed.
+
+`v_loss` went from spiking to ~1e-2 — the value head is now sane. But the policy
+still does not improve, because of (2).
+
+### (2) The task is an anticipation problem — reactive exploration falls off a cliff
+
+Measured on `-rlDriver aggressive -rlAggression 0.7 -rlFill 0.72` (pendulum ROM,
+30 s episodes), mean episode return:
+
+| policy | return | spills out? |
 |---|---|---|
-| zero action (`a = 0`)          | **−179** | 3000 (never terminal-spills) |
-| random (`N(0, 0.6)`)           | −488 | 1152 |
-| PPO after 600 k steps          | −510 | 1535 |
+| zero action / hold still | **≈ −1800** | no, survives the episode |
+| **any** reactive P or D controller on the felt-tilt obs, **any gain, either sign** | ≈ −3200 | yes, 3–4 / 4 |
+| PPO after 1 M steps | ≈ −3250 | yes |
 
-The PPO policy drifts to a constant off-centre gimbal command
-(`action ≈ [0.75, 0.47]`, 25 % of steps saturated) instead of finding the
-trivial "hold still" win. The return curve is flat across the whole run. That
-pattern points at the **trainer**, not the step budget or exploration:
+This is **finding F1/F4 exactly**: the instant the gimbal moves in response to
+the wave it pumps slosh energy and the tank overflows. The only good policy is a
+narrow "hold / anticipate" ridge; Gaussian action noise around a random init is
+*always* on the cliff, every rollout terminates early at ≈ −3200, the critic
+learns "everything is −3200", the gradient vanishes and the log-std collapses.
+A from-scratch on-policy learner cannot discover the anticipatory policy here.
 
-- **No observation normalisation.** `train_ppo.py` feeds the raw 234-dim
-  frame-stacked obs straight into a `tanh` MLP. CleanRL's continuous-control
-  reference wraps `NormalizeObservation` + clip; without it the value net and
-  policy can't condition on the small-signal channels. **Fix this first.**
-- **No return/reward scaling.** Returns span −180…−1400; the value target is
-  unscaled. Add `NormalizeReward` (or a running return std) — again standard in
-  the reference.
-- **`--ent-coef 0` + a free `actor_logstd` starting at −0.5.** With no entropy
-  bonus the log-std just shrinks and exploration collapses early. Try
-  `--ent-coef 1e-3` and/or a lower log-std floor.
-- Only after those: longer budget (2–10 M), the asymmetric-critic advantage,
-  hyper-params.
+**This needs a task-design change, not more steps or tuning. Candidates:**
 
-None of this is wired yet — it is the next RL work item, separate from the
-"get it running" work that this doc's *Running it* section now covers.
+- **Residual RL** (design-review's stated approach): the policy outputs a small
+  correction on top of a baseline (locked-hold, or SFA), so exploration happens
+  around a sane operating point instead of random gimbal slams. Needs a change to
+  `RlEnvironment` (compose baseline + policy action) — not wired.
+- **Curriculum from easy**: start with a calm driver + low fill where holding
+  still already scores ~0 and gentle motion helps; ramp difficulty once the
+  actuator behaviour is learned. Needs **checkpoint resume** (also not wired).
+- **Warm start / behaviour cloning** from the locked-hold or from human traces
+  (project-goals ③), then RL fine-tune.
+- Much heavier action-rate penalty / lower `MaxRateRadPerSec` so exploratory
+  jitter can't pump the mode.
+
+The bridge, the trainer, and the reward are ready for whichever of these the
+owner picks.
 
 ## Notes / risks
 
@@ -154,6 +181,10 @@ None of this is wired yet — it is the next RL work item, separate from the
 - **Reward hacking watch:** the classic exploit is caging the liquid at a hard
   end-stop. Watch the `joint-limit-proximity` and `actuator-effort` terms in the
   per-step breakdown; raise `k6`/`k5` if it happens.
+- **Reward weights bumped 2026-08-29:** `Overflow` 500 → 5e4, `TerminalSpill`
+  5 → 500. With the old values a 50 L spill cost only ≈ −25 and ending the
+  episode by dumping the tank scored *better* than holding on — a fail-fast
+  exploit. `RlEnvironmentTests` / `RewardFunction` tests still pass.
 - **Throughput:** the binary bridge is fine for v1. If it bottlenecks, batch
   steps or move the host to a standalone .NET process (the env code is
   engine-free — only the launcher is Unity).

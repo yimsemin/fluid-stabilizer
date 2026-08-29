@@ -23,6 +23,7 @@ from __future__ import annotations
 import argparse
 import os
 import time
+from collections import deque
 
 import numpy as np
 import torch
@@ -37,6 +38,31 @@ def layer_init(layer, std=np.sqrt(2), bias=0.0):
     nn.init.orthogonal_(layer.weight, std)
     nn.init.constant_(layer.bias, bias)
     return layer
+
+
+class RunningMeanStd:
+    """Welford running mean/variance, same recipe CleanRL uses for its
+    NormalizeObservation / NormalizeReward wrappers. The C# side hands us raw
+    physical quantities on wildly different scales (rad, rad/s, N, m, J, ...);
+    without this the first Linear layer saturates its tanh and nothing learns
+    (measured 2026-08-29: two 600-800 k-step runs stayed flat and never even
+    found the trivial hold-still policy)."""
+
+    def __init__(self, shape=()):
+        self.mean = np.zeros(shape, "float64")
+        self.var = np.ones(shape, "float64")
+        self.count = 1e-4
+
+    def update(self, x):
+        x = np.asarray(x, "float64")
+        self.count += 1
+        delta = x - self.mean
+        self.mean += delta / self.count
+        self.var += (delta * (x - self.mean) - self.var) / self.count
+
+    def whiten(self, x, clip=10.0):
+        z = (np.asarray(x, "float64") - self.mean) / np.sqrt(self.var + 1e-8)
+        return np.clip(z, -clip, clip).astype(np.float32)
 
 
 class ActorCritic(nn.Module):
@@ -80,7 +106,7 @@ def main():
     p.add_argument("--gamma", type=float, default=0.99)
     p.add_argument("--gae-lambda", type=float, default=0.95)
     p.add_argument("--clip", type=float, default=0.2)
-    p.add_argument("--ent-coef", type=float, default=0.0)
+    p.add_argument("--ent-coef", type=float, default=1e-3)  # keep the free log-std from collapsing
     p.add_argument("--vf-coef", type=float, default=0.5)
     p.add_argument("--lr", type=float, default=3e-4)
     p.add_argument("--max-grad-norm", type=float, default=0.5)
@@ -105,6 +131,12 @@ def main():
     agent = ActorCritic(obs_dim, priv_dim, act_dim).to(device)
     opt = torch.optim.Adam(agent.parameters(), lr=args.lr, eps=1e-5)
 
+    # input/return normalisation (updated only while collecting rollouts)
+    obs_rms = RunningMeanStd(obs_dim)
+    priv_rms = RunningMeanStd(priv_dim)
+    ret_rms = RunningMeanStd()          # running std of the discounted return
+    running_ret = 0.0
+
     N = args.rollout
     obs_buf = torch.zeros(N, obs_dim, device=device)
     priv_buf = torch.zeros(N, priv_dim, device=device)
@@ -114,10 +146,19 @@ def main():
     done_buf = torch.zeros(N, device=device)
     val_buf = torch.zeros(N, device=device)
 
-    obs, info = env.reset(seed=args.seed)
-    obs = torch.tensor(obs, dtype=torch.float32, device=device)
-    priv = torch.tensor(info["privileged"], dtype=torch.float32, device=device)
-    ep_ret, ep_len = 0.0, 0
+    def ingest(obs_raw, info, update=True):
+        """raw env output -> whitened (obs, priv) tensors, updating the stats."""
+        if update:
+            obs_rms.update(obs_raw)
+            priv_rms.update(info["privileged"])
+        o = torch.tensor(obs_rms.whiten(obs_raw), dtype=torch.float32, device=device)
+        p = torch.tensor(priv_rms.whiten(info["privileged"]), dtype=torch.float32, device=device)
+        return o, p
+
+    obs_raw, info = env.reset(seed=args.seed)
+    obs, priv = ingest(obs_raw, info)
+    ep_ret, ep_len = 0.0, 0          # ep_ret is the RAW (un-normalised) episode return
+    ep_ret_hist = deque(maxlen=50)
     global_step = 0
 
     while global_step < args.total_steps:
@@ -134,19 +175,25 @@ def main():
 
             nobs, reward, terminated, truncated, info = env.step(action[0].cpu().numpy())
             done = terminated or truncated
-            rew_buf[t] = reward
+
+            # CleanRL-style return normalisation: scale reward by the running std
+            # of the discounted return so the value target is ~unit variance.
+            running_ret = running_ret * args.gamma * (1.0 - float(done)) + reward
+            ret_rms.update(running_ret)
+            rew_buf[t] = float(np.clip(reward / (np.sqrt(ret_rms.var) + 1e-8), -10.0, 10.0))
             done_buf[t] = float(done)
-            ep_ret += reward
+            ep_ret += reward          # RAW reward for logging
             ep_len += 1
 
             if done:
                 writer.add_scalar("charts/episode_return", ep_ret, global_step)
                 writer.add_scalar("charts/episode_length", ep_len, global_step)
+                ep_ret_hist.append(ep_ret)
                 ep_ret, ep_len = 0.0, 0
+                running_ret = 0.0
                 nobs, info = env.reset()
 
-            obs = torch.tensor(nobs, dtype=torch.float32, device=device)
-            priv = torch.tensor(info["privileged"], dtype=torch.float32, device=device)
+            obs, priv = ingest(nobs, info)
 
         # GAE
         with torch.no_grad():
@@ -185,15 +232,19 @@ def main():
                 nn.utils.clip_grad_norm_(agent.parameters(), args.max_grad_norm)
                 opt.step()
 
+        recent = np.mean(ep_ret_hist) if ep_ret_hist else float("nan")
         writer.add_scalar("losses/policy", pg_loss.item(), global_step)
         writer.add_scalar("losses/value", v_loss.item(), global_step)
         writer.add_scalar("losses/entropy", entropy.mean().item(), global_step)
-        print(f"step {global_step:>9}  pg={pg_loss.item():+.3f}  v={v_loss.item():.3f}")
+        writer.add_scalar("charts/episode_return_mean50", recent, global_step)
+        print(f"step {global_step:>9}  return(mean50)={recent:+9.1f}  "
+              f"pg={pg_loss.item():+.3f}  v={v_loss.item():.3f}", flush=True)
 
         torch.save(
             {"actor_mean": agent.actor_mean.state_dict(),
              "actor_logstd": agent.actor_logstd.detach().cpu(),
-             "obs_dim": obs_dim, "act_dim": act_dim},
+             "obs_dim": obs_dim, "act_dim": act_dim,
+             "obs_rms_mean": obs_rms.mean, "obs_rms_var": obs_rms.var},
             f"runs/{run_name}/actor.pt",
         )
 
