@@ -15,6 +15,81 @@ Empirical results from the simulation as it is built. Newest first.
 
 ---
 
+## F5 — 2026-08-29 — Feasibility ceiling: full-hindsight gimbal control still loses to a locked tank on the recorded drives
+
+**The experiment-plan.md step-3 decision gate — and it does not pass.**
+
+`HindsightOptimizer` (engine-free, `FluidStabilizer.Core.Sim.Eval`): for one fixed
+recorded drive, a gradient-free `(1+1)`-ES with random restarts searches a
+low-dimensional gimbal-**rate** trajectory (per axis, 6–10 Catmull-Rom knots over
+the whole drive, scaled to the real `MaxRateRadPerSec`) for the feed-forward
+motion that minimises spill. Full hindsight (the optimiser sees the entire
+drive), real actuator limits (rate, ±30° travel, 900/420 N·m thermal), replayed
+bit-deterministically. Restart 0 starts from the zero (do-nothing) trajectory, so
+the result can never "beat" by losing. Run via **Menu ▸ FluidStabilizer ▸
+Feasibility Ceiling (Hindsight)** or `-executeMethod …HindsightEvalRunner.Run`
+→ `Logs/hindsight-eval.txt` + per-drive optimal trajectories in
+`Logs/hindsight/*.traj.csv`.
+
+### Result — 6 held-out drives (road on, fill 0.62, 30–48 s), spill [L]
+
+| drive | Hold (locked) | do-nothing (servo @0) | ceiling (hindsight) | ceiling − Hold |
+|---|---|---|---|---|
+| 132335 | 19.3 | 25.6 | 24.1 | **−4.8** |
+| 132407 | 19.4 | 25.3 | 24.9 | **−5.4** |
+| 132508 | 22.4 | 29.6 | 27.2 | **−4.8** |
+| 140245 | 20.6 | 25.0 | 22.8 | **−2.2** |
+| 140321 | 20.8 | 26.6 | 26.1 | **−5.2** |
+| 140440 | 21.1 | 28.0 | 27.2 | **−6.1** |
+
+Pendulum ROM. Under **shallow water** the ceiling is 30–140 L *worse* than Hold on
+every drive (one −10 L "win" appeared on a single drive at one search budget and
+vanished at every other budget / knot count / rate authority — a ROM-fit artefact,
+exactly what bracket discipline F3 exists to catch). Robust across search budget
+(42 → 213 evaluations), knot count (6/8/10) and rate authority (0.2 / 1.0).
+
+### What it means
+
+1. **The servo commanding zero already loses ≈ 5–7 L to a mechanically locked
+   joint** (F3-addendum / D5, now quantified on real drives): the 4 kW-class
+   gimbal is torque-limited against the true slosh moment, so "hold 0" is dragged
+   off target and *pumps* the mode. `do-nothing` is the optimiser's own starting
+   point.
+2. **No feed-forward trajectory the optimiser found recovers that gap**, let alone
+   beats Hold — even with the entire future known. This is **F1/F4 sharpened**:
+   not just reactive control, but *hindsight-optimal* control loses to bolting the
+   tank down, on the owner's real recorded drives, under both slosh models.
+3. The `IdealTiltTracking_…` diagnostic (F4) that showed head-room is a *kinematic*
+   tank-rotation result with no actuator; put the real servo + 900 N·m limit +
+   ±30° travel in the loop and the head-room is gone at this freeboard.
+
+### Decision-gate verdict: **do not start residual RL yet** (experiment-plan step 3, fail branch)
+
+A causal sensor-only policy cannot beat what full hindsight cannot beat. The
+premise has to change first — candidates, for the owner:
+
+- **Freeboard.** Fill 0.62 on the 0.6 m tank = 0.23 m freeboard; a *locked* tank
+  already spills 19–22 L on these drives. The driving is simply too violent for
+  this freeboard regardless of stabilisation. Lower fill / taller tank until a
+  locked tank is near the spill threshold, so there is a gap for control to close.
+- **Road / driving severity.** `RoadConfig.Severity`, or record calmer held-out
+  drives.
+- **The actuator, or the action space.** The "hold" state for the *active*
+  controller is a sagging servo, not a rigid joint. A hybrid action that can
+  **mechanically lock** unless actively correcting (so the baseline for residual
+  RL is 19 L, not 25 L) would remove the structural handicap — worth designing
+  before step 4.
+- Preview/look-ahead is *not* the fix on its own: the hindsight trajectory
+  already has perfect look-ahead and still fails.
+
+### Guards
+
+`HindsightOptimizerTests` (5): search determinism, actuator limits bound an absurd
+commanded trajectory, ceiling never worse than do-nothing, trajectory-CSV export,
+"inconclusive" verdict when a locked tank never spills.
+
+---
+
 ## F4 — 2026-08-28 — A rigid (locked) Hold baseline is near-unbeatable by reactive tilt control
 
 **Supersedes F2.** After the F3 addendum (the "Hold" servo saturates and sags

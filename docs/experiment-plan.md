@@ -19,6 +19,13 @@ cliff"). Two pieces the design always called for were never built: **recorded
 human drives** (the real disturbance data) and a **feasibility ceiling** (proof
 that the task is winnable at all). Those are the next work, before any more RL.
 
+**Update 2026-08-29:** both are now built and run. The recorded-drive evaluation
+is in place, and the feasibility ceiling (step 3) has been computed — **the
+decision gate does not pass** (finding F5): with full hindsight and real actuator
+limits, the best gimbal trajectory still spills *more* than a mechanically locked
+tank on the owner's recorded drives. RL is on hold pending a premise adjustment
+(freeboard / severity / a lock-capable action space) — see step 3 below.
+
 ## Where we are (done ✅ / not done ⬜)
 
 | Layer | State |
@@ -26,9 +33,9 @@ that the task is winnable at all). Those are the next work, before any more RL.
 | Deterministic sim core, vehicle + road + heave, gimbal actuator, 2 slosh models, sensors | ✅ |
 | Baselines ① locked Hold, ② SFA / PID / privileged-feedforward, evaluator, play scene | ✅ |
 | RL bridge (headless Unity ↔ Python PPO), runs end-to-end | ✅ |
-| **Recorded human drives** (record + replay) | 🟡 landing now (step 1) |
-| **Feasibility ceiling** (best achievable spill on a fixed drive) | ⬜ |
-| **Residual RL** (policy = baseline + small correction) | ⬜ |
+| **Recorded human drives** (record + replay) | ✅ done 2026-08-29 |
+| **Feasibility ceiling** (best achievable spill on a fixed drive) | ✅ built + run 2026-08-29 — **gate does NOT pass** (finding F5) |
+| **Residual RL** (policy = baseline + small correction) | ⬜ blocked on the F5 premise adjustment |
 | Domain randomization + per-episode logging | ⬜ |
 | Phase 1.5 product shell (in-Unity control panel, standalone build, ONNX inference) | ⬜ |
 
@@ -66,17 +73,35 @@ that the task is winnable at all). Those are the next work, before any more RL.
      held-out drives for the real comparison must be recorded with **road on
      (`G`)** and **fill ≥ 0.60** to discriminate — and checked under shallow
      water too.
-3. **Feasibility ceiling (hindsight).** For each fixed recorded drive, search
-   offline for the gimbal-motion trajectory that minimises spill (gradient-free
-   optimisation over a low-dimensional trajectory, full hindsight, real actuator
-   limits). This is much simpler than a real-time MPC and answers the same
-   question. **← decision gate:**
-   - ceiling clearly beats locked Hold on the recorded drives → the task is in
-     the winnable bracket; proceed to step 4 with a real target number.
-   - ceiling *cannot* beat Hold → stop and adjust the premise with the owner
-     (tank freeboard, road severity, add preview/look-ahead, or reframe as
-     "robustness under mild conditions") before spending effort on RL.
-4. **Residual RL.** The policy outputs a small correction on top of a baseline
+3. **Feasibility ceiling (hindsight).** ✅ *built + run 2026-08-29.*
+   `HindsightOptimizer` (`FluidStabilizer.Core.Sim.Eval`, engine-free): a
+   gradient-free `(1+1)`-ES with random restarts searches a low-dimensional
+   gimbal-rate trajectory (6–10 Catmull-Rom knots/axis, scaled to the real max
+   rate) for the feed-forward motion that minimises spill on one fixed recorded
+   drive — full hindsight, real actuator limits, deterministic. Runner: **Menu ▸
+   FluidStabilizer ▸ Feasibility Ceiling (Hindsight)** or `-executeMethod
+   FluidStabilizer.SimEditor.HindsightEvalRunner.Run` → `Logs/hindsight-eval.txt`
+   plus per-drive `Logs/hindsight/*.traj.csv` (the step-4 behaviour-cloning
+   warm-start data).
+
+   **← decision gate — RESULT: does NOT pass (finding F5).** On 6 held-out drives
+   (road on, fill 0.62), the hindsight ceiling spills **2–6 L more** than the
+   locked Hold under the pendulum ROM and far more under shallow water. The active
+   servo commanding zero already loses ≈ 5–7 L to a mechanically locked joint
+   (it's torque-limited against the slosh moment), and no feed-forward trajectory
+   recovers that — even knowing the whole drive. **Residual RL is on hold** until
+   the premise is adjusted with the owner:
+   - **freeboard** — a locked tank already spills 19–22 L on these drives; lower
+     fill / taller tank until locked-Hold sits near the spill threshold, leaving a
+     gap for control to close;
+   - **road / driving severity**, or calmer held-out drives;
+   - **a hybrid "lock unless correcting" action** so residual RL's baseline is the
+     19 L locked tank, not the 25 L sagging servo;
+   - preview/look-ahead is *not* a sufficient fix on its own — the hindsight
+     trajectory already has perfect look-ahead.
+4. **Residual RL.** *(Blocked by the step-3 gate — F5. Do this once the premise
+   adjustment lands and a re-run of step 3 shows hindsight beating locked Hold.)*
+   The policy outputs a small correction on top of a baseline
    (locked-hold or SFA), so exploration happens around a sane operating point
    instead of random gimbal slams — the specific fix for the F1/F4 cliff, and
    the approach design-review named from the start. Warm-start by
