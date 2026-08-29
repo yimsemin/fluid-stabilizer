@@ -17,7 +17,7 @@ Shader "FluidStabilizer/RoadRibbon"
         {
             Tags { "LightMode"="ForwardBase" }
             ZWrite On
-            Cull Back
+            Cull Off
 
             CGPROGRAM
             #pragma vertex vert
@@ -46,10 +46,10 @@ Shader "FluidStabilizer/RoadRibbon"
                 return o;
             }
 
-            fixed4 frag (v2f i) : SV_Target
+            fixed4 frag (v2f i, float facing : VFACE) : SV_Target
             {
                 fixed4 tex = tex2D(_MainTex, i.uv);
-                float3 n = normalize(i.wnormal);
+                float3 n = normalize(i.wnormal) * (facing >= 0.0 ? 1.0 : -1.0);
                 float ndl = saturate(dot(n, normalize(_WorldSpaceLightPos0.xyz)));
                 float3 lit = unity_AmbientSky.rgb + 0.30 + _LightColor0.rgb * ndl * 0.75;
                 return fixed4(tex.rgb * i.color.rgb * lit, 1.0);

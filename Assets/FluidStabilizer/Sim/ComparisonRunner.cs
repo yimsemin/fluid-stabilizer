@@ -32,7 +32,7 @@ namespace FluidStabilizer.Sim
             StabilizerChoice.PrivilegedFeedforward,      // privileged reference
         };
 
-        public float LaneSpacing = 6.0f;
+        public float LaneSpacing = 3.5f;   // one lane — the trucks sit in adjacent lanes of one shared road
 
         /// <summary>Freeboard (m) below which a lane is "near the rim".</summary>
         public double NearRimMargin = 0.05;
@@ -94,6 +94,7 @@ namespace FluidStabilizer.Sim
                     Runner.enabled = false;
                     SetComponentEnabled<SimView>(Runner.gameObject, false);
                     SetComponentEnabled<RoadRibbon>(Runner.gameObject, false);
+                    Runner.GetComponent<RoadRibbon>()?.SetStripVisible(false); // OnDisable isn't reliable outside play mode
                 }
                 if (RigTemplate != null) RigTemplate.gameObject.SetActive(false);
             }
@@ -125,14 +126,20 @@ namespace FluidStabilizer.Sim
                     view.WorldOffset = new Vector3(x0 + i * LaneSpacing, 0f, 0f);
                     view.ExternallyDriven = true;
 
-                    var ribbon = rig.AddComponent<RoadRibbon>();
-                    ribbon.LoopOverride = loop;
-                    ribbon.WorldOffset = view.WorldOffset;
-                    ribbon.ExternallyDriven = true;
-
                     lane.Rig = rig;
                     lane.View = view;
-                    lane.Ribbon = ribbon;
+
+                    // One shared road under all the lanes (they drive the same
+                    // trace → the same road) — lane 0 draws it, wide enough to
+                    // span the others sitting in adjacent lanes.
+                    if (i == 0)
+                    {
+                        var ribbon = rig.AddComponent<RoadRibbon>();
+                        ribbon.LoopOverride = loop;
+                        ribbon.WorldOffset = view.WorldOffset;
+                        ribbon.ExternallyDriven = true;
+                        lane.Ribbon = ribbon;
+                    }
                 }
 
                 _lanes.Add(lane);

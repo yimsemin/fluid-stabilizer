@@ -56,6 +56,10 @@ namespace FluidStabilizer.SimEditor
             Write(cam, "road-single-chase");
             ChaseCam(cam, t, 0f, up: 9f, back: 3f); // near-top, see the curve + markings
             Write(cam, "road-single-top");
+            // side-on — checks the truck actually sits on the road surface
+            cam.transform.position = t.position + t.right * 14f + t.forward * 2f + Vector3.up * 4f;
+            cam.transform.rotation = Quaternion.LookRotation(t.position + Vector3.up * 1.2f - cam.transform.position);
+            Write(cam, "road-single-side");
 
             // --- comparison on a road-on trace ---
             var trace = RecordRoadTrace(seed: 7, seconds: 22.0);
