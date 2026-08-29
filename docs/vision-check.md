@@ -12,7 +12,7 @@ the play scene, a build) or a screenshot/short clip — not just a log file.
 | step | date | demo (what to run) | owner verdict | owner note |
 |---|---|---|---|---|
 | A · experiment profile | 2026-08-29 | edit `experiment.txt`, press Play — the scene should follow the file | ⬜ ok / ⬜ off | |
-| B · residual RL wiring | | | ⬜ | |
+| B · residual RL wiring | 2026-08-29 | `RlServerLauncher.Serve` with `-rlBaseline hold` — server boots; the composed name reads "RL residual on Hold …" in the log | ⬜ | |
 | C · BC warm start | | | ⬜ | |
 | D · ONNX in Unity | | | ⬜ | |
 | E · 3-way comparison in app | | | ⬜ | |

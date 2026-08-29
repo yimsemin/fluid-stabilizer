@@ -94,6 +94,17 @@ process. Restart the server only to change the `-rl*` scenario flags.
 
 Launcher flags: `-rlPort -rlFill -rlSeconds -rlStack -rlDriver {highway|aggressive|scripted}
 -rlSlosh {pendulum|shallow} -rlRoad {none|mild|rough} -rlBriskness -rlAggression`.
+Everything except `-rlPort/-rlStack` **defaults to `experiment.txt`** now; the flags override per-run.
+
+**Residual mode (experiment-plan step B, 2026-08-29):** `-rlBaseline {none|hold|sfa|pid}`
+`-rlResidualFrac <0..1>` (default 0.35). With a baseline, each control tick the
+env emits `baselineRate + policy·(residualFrac·MaxRate)` in joint-rate space
+(baseline angle/locked commands are converted to an equivalent rate — P-tracked
+for angle, PD-held-at-zero for locked), both clamped to the max rate. The policy
+only learns a small correction around a sane operating point — the F1/F4-cliff
+fix. Action space and the Python trainer are unchanged; the composition is
+server-side. `RlEnvironment` gained `baselineFactory` / `residualRateScaleRadPerSec`
+ctor params + `ActorName` / `GimbalState` getters. `ResidualRlTests` (4).
 
 **Curriculum** (manual for now): start `highway`, briskness ~0.4, fill ~0.45;
 once the reward plateaus, restart the server with a harder driver / fuller tank /
