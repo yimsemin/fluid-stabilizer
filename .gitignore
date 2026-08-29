@@ -16,6 +16,10 @@
 # Recordings can get excessive in size
 [Rr]ecordings/
 
+# Recorded human-drive traces (DriverTrace). Local data; back up separately.
+# A curated held-out set for the three-way comparison can be force-added later.
+/[Tt]races/
+
 # Uncomment this line if you wish to ignore the asset store tools plugin
 # /[Aa]ssets/AssetStoreTools*
 

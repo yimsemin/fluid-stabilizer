@@ -81,14 +81,44 @@ the engine-free deterministic sim core, vehicle (3-DOF sprung mass +
 friction-circle) + road model, 2-DOF gimbal actuator with thermal limits, two
 slosh models (pendulum ROM + shallow water) under bracket discipline, sensor
 suite, baseline controllers, the evaluation harness, a playable human-drive
-scene, and the RL environment + TCP training bridge (Python trainer written, not
-yet run). Findings F1–F4 in [docs/findings.md](docs/findings.md). Session commits
-go straight to `main` (solo local repo — no feature branches).
+scene, the RL environment + TCP training bridge, and human-drive trace
+record/replay (`DriverTrace`; `P` records / `L` replays in the play scene).
+Findings F1–F4 in [docs/findings.md](docs/findings.md). The first PPO run
+happened — it does not learn (the F1/F4 anticipation cliff, not a bug;
+`docs/rl.md`). Session commits go straight to `main` (solo local repo — no
+feature branches).
 
-**Next:** run a first PPO job; human trace record/replay; domain randomization;
-then Phase 1.5 (the product shell — see project-goals.md).
+**Next (the agreed plan — [docs/experiment-plan.md](docs/experiment-plan.md)):**
+rebuild the evaluation around the owner's recorded drives (per-drive litres, both
+slosh models); build a feasibility ceiling (offline hindsight trajectory
+optimisation) as a decision gate; then residual RL with a behaviour-cloning
+warm-start; then domain randomization and Phase 1.5. **Do not re-run
+PPO-from-scratch** — the plan is residual RL after the ceiling.
 
 ## Docs discipline
 
 When a design decision changes, update the relevant `docs/*.md` in the same
 change. The docs are how the owner tracks the project.
+
+## Git & commits (applies to every session in this repo)
+
+- **Solo local repo with a GitHub remote (`origin`).** Work on `main`, commit
+  directly, **no feature branches**.
+- **Standing authorization:** Claude commits to `main` **and pushes to
+  `origin/main`** as each logical step completes — without asking each time.
+  Commit step-by-step (one self-contained change per commit: a feature + its
+  tests + its doc updates), not one giant end-of-session commit — the owner
+  tracks progress through the history. Run the EditMode suite before committing
+  code; note the pass/skip count in the message.
+- **Still ask first** for anything that rewrites or discards history (force-push,
+  rebase of pushed commits, `reset --hard` across commits, branch/tag deletion).
+- **Commit message:** a concise summary line, then a short body explaining *why*
+  when it isn't obvious. End every commit with:
+  `Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>`
+- **Do NOT commit generated or local files:** `Library/ Temp/ Logs/
+  UserSettings/`, `Assets/FluidStabilizer/Scenes/PlayScene.unity` (regenerated
+  by SceneBuilder), `Traces/` (recorded drives — local data; a curated held-out
+  set is force-added deliberately when it stabilises), `python/.venv/
+  python/runs/`, `*.pt *.onnx`. **Do** commit `.meta` files for tracked assets.
+- `.gitignore` already covers these; if a new tool writes generated output,
+  add it to `.gitignore` in the same change.

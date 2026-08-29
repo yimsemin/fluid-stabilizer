@@ -19,9 +19,16 @@ Re-run the menu item any time the scene looks wrong or you changed `SceneBuilder
 | **Space** | stabilizer **on / off** (feel the difference) |
 | **0 / 1 / 2 / 3** | pick stabilizer: 0 = off, 1 = specific-force align, 2 = + integral, 3 = privileged feed-forward (cheats — comparison only) |
 | **M** | slosh model: pendulum ROM ⇄ shallow water (restarts the run) |
+| **G** | road: flat ⇄ real road (rolling grade, curve bank, roughness, potholes) |
 | **R** | reset the run |
 | **T** | slow-mo (0.25×) |
 | **Tab** | camera: chase → side → top |
+| **P** | **record** your drive to a trace file / press again to stop & save |
+| **L** | **replay** the newest recorded trace / press again to drive again |
+
+A banner across the top of the screen always shows the trace state: **idle**,
+**● REC** (with elapsed time + step count, plus a red border), or **▶ REPLAY**
+(with a progress bar). Every save logs the full file path to the Console.
 
 ## What you're looking at
 
@@ -56,13 +63,32 @@ Re-run the menu item any time the scene looks wrong or you changed `SceneBuilder
 - A quick swerve at speed: the naive stabilizers (1, 2) can *pump* the slosh on
   sharp inputs (finding F1); smooth driving is where they clearly help (F2).
 
+## Recording your drives (for the three-way comparison)
+
+Press **P**, drive, press **P** again. The drive is saved as a small text file
+to **`<project>/Traces/drive-<timestamp>.trace.csv`** (in the Editor) — a header
+with the setup (seed, fill, road, slosh model) and one `throttle,brake,steer`
+row per physics step. The whole simulation is deterministic given the seed, so
+this file is a complete, reproducible definition of that drive.
+
+Press **L** to replay the newest one. During replay you are *not* driving — the
+recorded inputs play back — so you can press **0–3** to switch the stabilizer
+and watch the *same* drive handled by rigid / rule-based / (later) the learned
+policy, over the *same* road. That is the headline comparison; the next step
+adds side-by-side replay of two tanks at once plus a running spill count.
+
+Record several *different* drives (calm commute, brisk highway, a rough-road run
+with **G** on). Some become the training disturbance data; some are held out as
+the evaluation set.
+
 ## Notes / current limitations
 
 - Two slosh models are available (**M**): the cheap pendulum ROM (proxy
   surface) and the 2-D shallow-water solver (real height-field mesh). Neither is
   a particle/SPH fluid — no foam or splashes (out of scope: determinism + RL
   step budget).
-- Vehicle is a reduced sprung-mass model on flat ground (no road bumps/hills
-  yet). Feel is "laden truck": heavy, long braking, lazy steering.
+- Vehicle is a reduced 3-DOF sprung-mass model (pitch / roll / heave). Feel is
+  "laden truck": heavy, long braking, lazy steering. Press **G** for a real road
+  (grade, bank, roughness, potholes); flat road is the default.
 - Stabilizer option 3 uses information a real sensor could not give — it is only
   there as a comparison ceiling.

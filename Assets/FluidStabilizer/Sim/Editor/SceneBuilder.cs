@@ -108,6 +108,7 @@ namespace FluidStabilizer.SimEditor
             var view = simGo.AddComponent<SimView>();
             var hud = simGo.AddComponent<Hud>();
             var controls = simGo.AddComponent<PlayControls>();
+            var traceRec = simGo.AddComponent<TraceRecorder>();
 
             view.Runner = runner;
             view.TruckBody = rig.transform;
@@ -120,6 +121,8 @@ namespace FluidStabilizer.SimEditor
             controls.Runner = runner;
             controls.View = view;
             controls.Camera = cam;
+
+            traceRec.Runner = runner;
 
             // --- save ---
             Directory.CreateDirectory(Path.GetDirectoryName(ScenePath));

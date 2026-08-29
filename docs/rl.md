@@ -163,6 +163,18 @@ A from-scratch on-policy learner cannot discover the anticipatory policy here.
 The bridge, the trainer, and the reward are ready for whichever of these the
 owner picks.
 
+### Decision (step-back session, 2026-08-29) — see [experiment-plan.md](experiment-plan.md)
+
+No more RL runs until two things exist: **recorded human drives** (done — the
+`DriverTrace` path, see phase1-progress item 3) and a **feasibility ceiling**
+(offline hindsight trajectory optimisation on a fixed recorded drive). The
+ceiling is a hard gate: if a privileged/hindsight solution cannot beat the
+locked-Hold baseline on the recorded drives, the premise is adjusted before any
+RL. When RL resumes it is **residual RL** — policy = baseline + small correction,
+warm-started by behaviour-cloning the hindsight-optimal trajectories — which
+needs `RlEnvironment` to compose (baseline action + policy action) and
+checkpoint-resume in `train_ppo.py`.
+
 ## Notes / risks
 
 - **No spill-metric readout over the wire.** `play.py` only sums the shaped
