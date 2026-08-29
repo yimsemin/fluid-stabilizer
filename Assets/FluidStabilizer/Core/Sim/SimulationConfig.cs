@@ -26,6 +26,7 @@ namespace FluidStabilizer.Core.Sim
         public GimbalConfig Gimbal = new GimbalConfig();
         public SloshConfig Slosh = new SloshConfig();
         public SensorConfig Sensors = new SensorConfig();
+        public RoadConfig Road = new RoadConfig();
 
         public double PhysicsStepSeconds => 1.0 / PhysicsRateHz;
         public long TotalPhysicsSteps => (long)Math.Round(EpisodeSeconds * PhysicsRateHz);
@@ -72,6 +73,13 @@ namespace FluidStabilizer.Core.Sim
         public double PitchDampingRatio = 0.35;
         public double RollNaturalFreqHz = 1.6;
         public double RollDampingRatio = 0.35;
+
+        // Suspension heave (vertical) response to the road surface — a base-excited
+        // spring-mass-damper (design-review §4: the suspension is a low-pass with
+        // a ~1–2 Hz resonance that shapes the disturbance the tank feels). Only
+        // active when a RoadModel feeds a non-zero surface height.
+        public double HeaveNaturalFreqHz = 1.6;
+        public double HeaveDampingRatio = 0.30;
 
         /// <summary>Static pitch gain: body pitch (rad) per 1 m/s² of longitudinal accel.</summary>
         public double PitchPerLongAccel = 0.010;
@@ -134,6 +142,46 @@ namespace FluidStabilizer.Core.Sim
 
         /// <summary>Rotational inertia the actuator sees for the bare tank cradle (kg·m²), per axis.</summary>
         public double AxisInertia = 55.0;
+    }
+
+    [Serializable]
+    public sealed class RoadConfig
+    {
+        /// <summary>
+        /// Master switch. False = perfectly flat, straight, level road (the v1
+        /// default — keeps every existing scenario and determinism guard
+        /// unchanged). True = <see cref="RoadModel"/> feeds grade, bank and
+        /// surface roughness each step.
+        /// </summary>
+        public bool Enabled = false;
+
+        // ---- hills: a slow, sustained grade ----
+        /// <summary>Peak road grade, rad (~0.035 ≈ 3.5 %, a normal rolling highway; ~0.06 is steep).</summary>
+        public double GradeAmplitudeRad = 0.035;
+        public double HillWavelengthM = 140.0;
+
+        // ---- curve superelevation / cross-slope ----
+        public double BankAmplitudeRad = 0.020;
+        public double BankWavelengthM = 90.0;
+
+        // ---- continuous surface roughness (asphalt texture + washboard) ----
+        /// <summary>RMS vertical roughness of the road surface, m (~6 mm = decent asphalt; ~15 mm = coarse/broken).</summary>
+        public double RoughnessRmsM = 0.006;
+        public double RoughnessShortWavelengthM = 0.6;
+        public double RoughnessLongWavelengthM = 9.0;
+
+        // ---- discrete events: expansion joints, potholes, stray rocks, curbs ----
+        public double EventsPerKm = 12.0;
+        /// <summary>Mean |height| of a discrete event, m. Sign is random per event (bump vs pothole).</summary>
+        public double EventHeightM = 0.04;
+        public double EventLengthM = 0.35;
+
+        /// <summary>
+        /// Master multiplier on roughness + event size (not grade/bank) — the
+        /// single knob for a curriculum or domain randomization: 0 = smooth,
+        /// 1 = nominal, &gt;1 = rough.
+        /// </summary>
+        public double Severity = 1.0;
     }
 
     [Serializable]

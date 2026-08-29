@@ -42,6 +42,10 @@ namespace FluidStabilizer.Sim
             GUILayout.BeginArea(new Rect(16, 12, 360, 260));
             GUILayout.Label($"{loop.VehicleState.Speed * 3.6:F0} km/h", _big);
             GUILayout.Label($"accel  {aLong:+0.00;-0.00} g   lateral {aLat:+0.00;-0.00} g", _label);
+            if (cfg.Road.Enabled)
+                GUILayout.Label($"road  grade {Math.Tan(gt.RoadGrade) * 100:+0.0;-0.0}%   " +
+                                $"bank {gt.RoadBank * 57.29578:+0.0;-0.0}°   " +
+                                $"surf {gt.RoadSurfaceHeight * 100:+0.0;-0.0} cm", _label);
             GUILayout.Space(6);
 
             var fbStyle = freeboard < 0.05 ? _warn : _big;
@@ -61,7 +65,7 @@ namespace FluidStabilizer.Sim
 
             GUILayout.BeginArea(new Rect(16, Screen.height - 92, 760, 88));
             GUILayout.Label("W/S or triggers: throttle/brake   A/D or stick: steer", _label);
-            GUILayout.Label("Space: stabilizer on/off   0-3: pick stabilizer   M: slosh model   R: reset   T: slow-mo   Tab: camera", _label);
+            GUILayout.Label("Space: stabilizer on/off   0-3: pick stabilizer   M: slosh model   G: road   R: reset   T: slow-mo   Tab: camera", _label);
             GUILayout.EndArea();
         }
 

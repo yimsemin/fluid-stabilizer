@@ -5,6 +5,39 @@ reasoning. Newest first. These refine `design-review.md`; they do not replace it
 
 ---
 
+## D6 — 2026-08-29 — Road model + suspension heave DOF
+
+Plan review (see [project-goals.md](project-goals.md)). The road had a stub
+(`RoadInput`) but nothing fed it — the sim ran on a perfectly flat road, which
+design-review §4/§5 flags as a v1 must-model gap and which makes the rigid-Hold
+baseline artificially hard to beat (finding F4).
+
+**Decisions:**
+
+1. **Road as a deterministic function of distance travelled**, not of time or of
+   a pre-baked heightmap: hills (grade), curve bank, a red-spectrum roughness
+   sum-of-sinusoids, and discrete raised-cosine events (potholes / joints /
+   rocks) as a Poisson process along `s`. Engine-free `RoadModel` behind
+   `SimulationConfig.Road`; **disabled by default** so every existing scenario
+   and determinism guard is byte-identical. One `Severity` knob scales
+   roughness+events for a future curriculum. Full detail: [road-model.md](road-model.md).
+2. **A single-track road profile** (no separate left/right wheel tracks) and
+   **grade/bank as body trims** (no road-induced yaw) in v1 — the dominant
+   disturbance path to the liquid is vertical + grade, and this keeps the model
+   cheap and the state small.
+3. **Add the heave DOF to `VehicleModel`** (it had only pitch+roll; design-review
+   §8 asks for all three). The body tracks the road surface through a
+   spring-mass-damper at the ~1.5 Hz truck ride frequency, so a bump reaches the
+   tank as a suspension-filtered jolt, not a raw acceleration spike
+   (design-review §4). `RoadInput.VerticalAccel` was replaced by
+   `RoadInput.SurfaceHeight` — the suspension now produces the acceleration.
+
+Consequence: the rough-road scenarios are the intended home for the
+learned-policy vs rigid-tank comparison; a rigid tank cannot filter road input,
+an anticipatory policy can.
+
+---
+
 ## D5 — 2026-08-28 — `Hold` is a locked joint; actuator resized, thermal limit enforced
 
 Two linked decisions after the F3 addendum (the `Hold` position servo saturates

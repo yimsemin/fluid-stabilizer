@@ -45,6 +45,8 @@ namespace FluidStabilizer.Sim
 
             if (kb.rKey.wasPressedThisFrame) Runner.ResetEpisode();
 
+            if (kb.gKey.wasPressedThisFrame) Runner.SetRoad(!Runner.Road); // flat road ⇄ real road
+
             if (kb.mKey.wasPressedThisFrame) // cycle the slosh model (pendulum ROM / shallow water)
                 Runner.SetSloshModel(Runner.ActiveSloshModel == SloshModelChoice.PendulumRom
                     ? SloshModelChoice.ShallowWater

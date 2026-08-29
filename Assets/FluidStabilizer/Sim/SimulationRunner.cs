@@ -32,6 +32,9 @@ namespace FluidStabilizer.Sim
         public double FillRatio = 0.55;
         public StabilizerChoice Stabilizer = StabilizerChoice.Off;
         public SloshModelChoice SloshModel = SloshModelChoice.PendulumRom;
+        [Tooltip("Rolling grade, curve bank, surface roughness and the odd pothole. Off = perfectly flat road.")]
+        public bool Road = false;
+        [Range(0f, 2f)] public float RoadSeverity = 1f;
         [Range(0.05f, 1f)] public float TimeScale = 1f;
         public ulong Seed = 1;
 
@@ -58,6 +61,8 @@ namespace FluidStabilizer.Sim
         {
             var cfg = new SimulationConfig { EpisodeSeconds = 0.0 }; // endless
             cfg.Slosh.FillRatio = FillRatio;
+            cfg.Road.Enabled = Road;
+            cfg.Road.Severity = RoadSeverity;
 
             Driver = new HumanDriverInput();
             Loop = new SimulationLoop(cfg, MakeController(Stabilizer),
@@ -82,6 +87,13 @@ namespace FluidStabilizer.Sim
         public void SetSloshModel(SloshModelChoice choice)
         {
             SloshModel = choice;
+            BuildLoop();
+        }
+
+        /// <summary>Toggle the road profile live. Rebuilds the loop and restarts the episode.</summary>
+        public void SetRoad(bool enabled)
+        {
+            Road = enabled;
             BuildLoop();
         }
 

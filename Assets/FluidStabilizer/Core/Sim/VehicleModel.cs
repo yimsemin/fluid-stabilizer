@@ -23,16 +23,17 @@ namespace FluidStabilizer.Core.Sim
 
     /// <summary>
     /// Reduced vehicle model (design-review §8): a point mass with a
-    /// friction-circle "bicycle" longitudinal/lateral response, plus a
-    /// second-order body pitch/roll from load transfer. No <c>WheelCollider</c>,
-    /// no PhysX. Flat straight road in v1; road grade/bank and vertical
-    /// excitation are added later through <see cref="RoadInput"/>.
+    /// friction-circle "bicycle" longitudinal/lateral response, plus a 3-DOF
+    /// sprung mass (body pitch/roll from load transfer, heave from the road
+    /// surface). No <c>WheelCollider</c>, no PhysX. Road grade/bank/roughness
+    /// come in through <see cref="RoadInput"/> (all-zero = flat straight road).
     /// </summary>
     public sealed class VehicleModel
     {
         private readonly VehicleConfig _cfg;
         private readonly SecondOrderResponse _pitch;
         private readonly SecondOrderResponse _roll;
+        private readonly SecondOrderResponse _heave;
 
         private double _speed;
         private double _yaw;
@@ -46,6 +47,7 @@ namespace FluidStabilizer.Core.Sim
             _cfg = cfg;
             _pitch = new SecondOrderResponse(cfg.PitchNaturalFreqHz, cfg.PitchDampingRatio);
             _roll = new SecondOrderResponse(cfg.RollNaturalFreqHz, cfg.RollDampingRatio);
+            _heave = new SecondOrderResponse(cfg.HeaveNaturalFreqHz, cfg.HeaveDampingRatio);
             Reset();
         }
 
@@ -56,17 +58,10 @@ namespace FluidStabilizer.Core.Sim
             _posWorld = Double3.Zero;
             _pitch.Reset();
             _roll.Reset();
+            _heave.Reset();
             _lastLongAccel = 0.0;
             _lastLatAccel = 0.0;
             _lastYawRate = 0.0;
-        }
-
-        /// <summary>Optional road excitation for this step (all zero = flat straight road).</summary>
-        public struct RoadInput
-        {
-            public double Grade;          // rad, road pitch (uphill positive)
-            public double Bank;           // rad, road roll
-            public double VerticalAccel;  // m/s², bump acceleration at the body origin
         }
 
         public VehicleState Step(DriverControls controls, RoadInput road, double dt)
@@ -119,6 +114,12 @@ namespace FluidStabilizer.Core.Sim
             _pitch.Step(pitchTarget, dt);
             _roll.Step(rollTarget, dt);
 
+            // --- suspension heave: the body follows the road surface through a
+            //     spring-mass-damper (the ~1.5 Hz ride mode). heaveAccel is the
+            //     absolute vertical acceleration the tank base feels. ---
+            double heaveAccel = _heave.AccelerationToward(road.SurfaceHeight);
+            _heave.Step(road.SurfaceHeight, dt);
+
             double yawAccel = dt > 0.0 ? (yawRate - _lastYawRate) / dt : 0.0;
             _lastYawRate = yawRate;
             _lastLongAccel = aLong;
@@ -128,15 +129,15 @@ namespace FluidStabilizer.Core.Sim
             var rWV = Double3x3.FromYawPitchRoll(_yaw, _pitch.Value, _roll.Value);
 
             // Acceleration of the origin in body frame: forward = aLong, left = aLat,
-            // up = road bump. (Small-angle: heading-aligned axes ≈ body axes.)
-            var aBody = new Double3(aLong, aLat, road.VerticalAccel);
+            // up = suspension heave. (Small-angle: heading-aligned axes ≈ body axes.)
+            var aBody = new Double3(aLong, aLat, heaveAccel);
 
             var omegaBody = new Double3(_roll.Velocity, _pitch.Velocity, yawRate);
             var alphaBody = new Double3(rollAccel, pitchAccel, yawAccel);
 
             return new VehicleState
             {
-                OriginWorld = _posWorld,
+                OriginWorld = _posWorld + new Double3(0.0, 0.0, _heave.Value),
                 OrientationWorldFromBody = rWV,
                 LinearVelocityWorld = velWorld,
                 LinearAccelerationBody = aBody,
