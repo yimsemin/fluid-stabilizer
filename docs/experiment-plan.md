@@ -47,10 +47,15 @@ that the task is winnable at all). Those are the next work, before any more RL.
      replays one trace through three stabilizers at once, side by side, over the
      same road, with a per-lane spill / near-rim / slosh-energy panel. This is
      the visual headline.
-   - **2b** ✅ *done 2026-08-29* — `RoadRibbon`: a scrolling road strip under
-     each truck showing grade, bank, roughness and potholes, rebuilt from an
-     independent `RoadModel` replica (same seed/config as the physics). Visible
-     only with the road on (`G`).
+   - **2b** ✅ *done 2026-08-29* — `RoadRibbon`: a textured road strip that
+     follows the road's curve, tilts with grade/bank and dips into potholes,
+     rebuilt from an independent `RoadModel` replica (same seed/config as the
+     physics). Opaque shader (no z-fighting), procedural lane markings. Visible
+     only with the road on (`G`). *Quality pass 2026-08-29 after owner feedback:
+     added road curvature so it's a course you follow (see road-model.md),
+     opaque `RoadRibbon.shader`, tiled asphalt/markings texture, curved
+     centreline, exaggerated bump rendering; fixed the comparison camera to
+     track the (now curving) pack.*
    - **2c** ✅ *done 2026-08-29* — `TraceEvaluator` + menu item **FluidStabilizer
      ▸ Evaluate Recorded Drives** (and a `+ shallow water` variant): replays every
      trace in `Traces/` through the analytic baselines, per drive, writes

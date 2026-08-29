@@ -32,7 +32,7 @@ namespace FluidStabilizer.Sim
             StabilizerChoice.PrivilegedFeedforward,      // privileged reference
         };
 
-        public float LaneSpacing = 4.2f;
+        public float LaneSpacing = 6.0f;
 
         /// <summary>Freeboard (m) below which a lane is "near the rim".</summary>
         public double NearRimMargin = 0.05;
@@ -44,6 +44,8 @@ namespace FluidStabilizer.Sim
             public StabilizerChoice Choice;
             public SimulationLoop Loop;
             public GameObject Rig;
+            public SimView View;
+            public RoadRibbon Ribbon;
             public double NearRimSeconds;
             public double PeakSloshKE;
             public double TorqueSatSeconds;
@@ -121,12 +123,16 @@ namespace FluidStabilizer.Sim
                     view.LiquidMesh = view.TankBody.Find("LiquidMesh").GetComponent<MeshFilter>();
                     view.LoopOverride = loop;
                     view.WorldOffset = new Vector3(x0 + i * LaneSpacing, 0f, 0f);
+                    view.ExternallyDriven = true;
 
                     var ribbon = rig.AddComponent<RoadRibbon>();
                     ribbon.LoopOverride = loop;
                     ribbon.WorldOffset = view.WorldOffset;
+                    ribbon.ExternallyDriven = true;
 
                     lane.Rig = rig;
+                    lane.View = view;
+                    lane.Ribbon = ribbon;
                 }
 
                 _lanes.Add(lane);
@@ -160,19 +166,29 @@ namespace FluidStabilizer.Sim
         private void Update()
         {
             if (!Active || _lanes.Count == 0 || _finished) return;
-
-            double dt = _lanes[0].Loop.Config.PhysicsStepSeconds;
             float scale = Runner != null ? Mathf.Max(0.05f, Runner.TimeScale) : 1f;
-            _accumulator += Time.deltaTime * scale;
+            StepLanes(Time.deltaTime * scale);
+        }
+
+        private void LateUpdate()
+        {
+            if (!Active || _lanes.Count == 0) return;
+            RenderLanes();
+            UpdateCamera();
+        }
+
+        private void StepLanes(double wallDt)
+        {
+            double dt = _lanes[0].Loop.Config.PhysicsStepSeconds;
+            _accumulator += wallDt;
 
             int steps = 0;
-            while (_accumulator >= dt && steps < 40)
+            while (_accumulator >= dt && steps < 60)
             {
                 bool anyAlive = false;
                 foreach (var l in _lanes)
                 {
                     if (l.Loop.StepPhysics()) anyAlive = true;
-
                     if (l.Loop.CurrentMinFreeboard < NearRimMargin) l.NearRimSeconds += dt;
                     var gt = l.Loop.LatestGroundTruth;
                     if (gt.SloshKineticEnergy > l.PeakSloshKE) l.PeakSloshKE = gt.SloshKineticEnergy;
@@ -182,21 +198,49 @@ namespace FluidStabilizer.Sim
                 steps++;
                 if (!anyAlive) { _finished = true; _accumulator = 0; break; }
             }
+        }
 
-            UpdateCamera();
+        private void RenderLanes()
+        {
+            foreach (var l in _lanes)
+            {
+                if (l.View != null) l.View.RenderTick();
+                if (l.Ribbon != null) l.Ribbon.RenderTick();
+            }
+        }
+
+        /// <summary>Editor capture aid: advance and render as if <paramref name="seconds"/> of wall time passed.</summary>
+        public void PumpForCapture(double seconds, double frameDt = 1.0 / 60.0)
+        {
+            if (!Active) return;
+            int frames = Mathf.CeilToInt((float)(seconds / frameDt));
+            for (int f = 0; f < frames && !_finished; f++)
+            {
+                StepLanes(frameDt);
+                RenderLanes();
+                UpdateCamera();
+            }
         }
 
         private void UpdateCamera()
         {
             if (Camera == null || _lanes.Count == 0 || _lanes[0].Rig == null) return;
-            Transform lead = _lanes[0].Rig.transform;
-            float span = (Lanes.Length - 1) * LaneSpacing;
 
-            Vector3 focus = new Vector3(0f, 1.6f, lead.position.z + 1f);
-            Vector3 target = focus + new Vector3(0f, 4.5f + span * 0.22f, -9f - span * 0.5f);
+            // Mean of the lane trucks (they curve with the road, so the pack drifts).
+            Vector3 mean = Vector3.zero;
+            int n = 0;
+            foreach (var l in _lanes)
+                if (l.Rig != null) { mean += l.Rig.transform.position; n++; }
+            if (n == 0) return;
+            mean /= n;
+
+            float span = (Lanes.Length - 1) * LaneSpacing;
+            Vector3 focus = new Vector3(mean.x, 1.6f, mean.z + 5f);
+            Vector3 target = new Vector3(mean.x, 6f + span * 0.16f, mean.z - 12f - span * 0.35f);
             Quaternion rot = Quaternion.LookRotation(focus - target);
 
-            float k = 1f - Mathf.Exp(-6f * Time.deltaTime);
+            float d = Time.deltaTime > 1e-4f ? Time.deltaTime : 0.05f; // headless capture has dt≈0
+            float k = 1f - Mathf.Exp(-5f * d);
             Camera.transform.position = Vector3.Lerp(Camera.transform.position, target, k);
             Camera.transform.rotation = Quaternion.Slerp(Camera.transform.rotation, rot, k);
         }
