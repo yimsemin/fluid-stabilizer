@@ -181,6 +181,35 @@ namespace FluidStabilizer.Tests
         }
 
         [Test]
+        public void LaneModel_DriverHasLateralAuthority_ButCannotLeaveTheRoad()
+        {
+            SimulationLoop Loop(IDriverInput d)
+            {
+                var c = new SimulationConfig { EpisodeSeconds = 14.0 };
+                c.Road.Enabled = true;
+                var l = new SimulationLoop(c, new HoldController(), d, new PendulumSloshModel());
+                l.BeginEpisode(31);
+                return l;
+            }
+
+            // Hands off: the truck follows the road, staying near the centre.
+            var ho = Loop(new ConstantDriver(new DriverControls { Throttle = 0.15 }));
+            double maxOffHandsOff = 0;
+            while (ho.StepPhysics()) maxOffHandsOff = Math.Max(maxOffHandsOff, Math.Abs(ho.VehicleState.LateralOffsetFromRoadCentre));
+            Assert.Less(maxOffHandsOff, 3.0, "a hands-off truck should track the road, not wander across it");
+
+            // Holding a steer input moves the truck across lanes...
+            var steer = Loop(new ConstantDriver(new DriverControls { Throttle = 0.15, Steer = 0.25 }));
+            double maxOffSteer = 0;
+            while (steer.StepPhysics()) maxOffSteer = Math.Max(maxOffSteer, Math.Abs(steer.VehicleState.LateralOffsetFromRoadCentre));
+            Assert.Greater(maxOffSteer, 3.0, "the driver can move the truck laterally across the road");
+
+            // ...but the firm edge stops it leaving (road half-width = 7 m here).
+            double half = new RoadConfig().RoadHalfWidthM;
+            Assert.Less(maxOffSteer, half + 1.5, "the road edge is a firm wall — the truck stays on the road");
+        }
+
+        [Test]
         public void InLoop_RoughRoad_AddsSloshEnergy_AndIsDeterministic()
         {
             EpisodeResult Run(bool road, out double checksum)
