@@ -130,9 +130,9 @@ model, look-ahead sensors, photoreal rendering, hardware-in-the-loop.
    `ComparisonRunner`).
 4. **Feasibility ceiling** — ✅ 2026-08-29 (`HindsightOptimizer`). **Gate result:
    does not beat rigid (F5)** → premise adjustment deferred until after the draft.
-5. **The draft (vertical slice)** — experiment profile ✅ · residual-RL wiring ✅ ·
-   BC warm-start ✅ · policy-serving process (this section's architecture) ⬜ ·
-   3-way comparison in the app ⬜ · standalone build ⬜.
+5. **The draft (vertical slice)** — ✅ complete 2026-08-29: experiment profile ·
+   residual-RL wiring · BC warm-start · policy-serving process · ①②③ comparison
+   in the app · standalone build. Honest headline so far: ① rigid wins (F5).
 6. **Then:** premise adjustment (F5), a real RL run, domain randomization,
    per-episode logging, the control panel and trainer GUI — as refinement passes
    over a working whole.
