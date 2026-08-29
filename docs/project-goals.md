@@ -1,138 +1,158 @@
-# Project goals — what this project is for
+# 프로젝트 개요와 목표
 
-> Companion to [project-brief.md](project-brief.md). The brief is the original
-> vision; this file is the **owner's clarified intent** after the plan review of
-> 2026-08-29, and it is the reference for scope decisions from here on. Where this
-> file and older docs disagree, this file wins.
+> 이 프로젝트의 **의도와 범위에 대한 유일한 출처.** 다른 문서와 어긋나면 이
+> 파일이 이긴다. (예전에 `project-brief.md` 와 나뉘어 있었으나 2026-08-29
+> 한글화 때 여기로 병합함.)
 
-## The real purpose
+## 진짜 목적
 
-The point of this project is **to learn and understand the whole Physical AI
-pipeline by building one end to end.** Buying a real robot is not practical right
-now, so a simulation stands in for the robot. The finished artefact matters less
-than having personally built, and understood, every layer: physics → sensors →
-actuator → controller → learned policy → evaluation → (later) real hardware.
+이 프로젝트의 요점은 **Physical AI 파이프라인 전체를 처음부터 끝까지 직접
+만들면서 배우고 이해하는 것**이다. 지금 실제 로봇을 사는 건 현실적이지 않아서
+시뮬레이션이 로봇을 대신한다. 완성된 산출물보다, 모든 층을 직접 만들고 이해했다는
+사실이 더 중요하다: 물리 → 센서 → 액추에이터 → 컨트롤러 → 학습 정책 → 평가 →
+(나중에) 실제 하드웨어.
 
-Everything below serves that purpose. If a choice makes the system more
-impressive but less understandable, it is the wrong choice (see
-[CLAUDE.md](../CLAUDE.md) — "The owner").
+아래 모든 것이 이 목적에 복무한다. 어떤 선택이 시스템을 더 인상적으로 만들지만
+덜 이해 가능하게 만든다면, 그건 잘못된 선택이다 ([CLAUDE.md](../CLAUDE.md) —
+"소유자" 참고).
 
-## The concrete task
+## 구체적 과제
 
-An AI controls a 2-axis (pitch/roll) stabilizer under an **open liquid tank on a
-human-driven truck**, to keep the liquid from spilling. The AI does not drive;
-the driver is an external disturbance. The hard part is the **temporal dynamics
-of sloshing** under **partial observation** with a **non-ideal actuator** — the
-AI must infer the hidden liquid state and act ahead of the wave.
+AI 가 **인간이 운전하는 트럭에 실린 뚜껑 없는(개방형) 액체 탱크** 아래의 2축
+(pitch/roll) 스태빌라이저를 제어해서 액체가 넘치지 않게 한다. AI 는 운전하지
+않는다. 운전자는 외부 disturbance 다. 어려운 부분은 **비이상적 액추에이터**로,
+**부분 관측** 하에서, **슬로시의 시간 동역학**을 다루는 것 — AI 는 숨겨진 액체
+상태를 추론하고 파도보다 앞서 행동해야 한다.
 
-## The headline result we are after
+원래 소유자가 든 물리 현실성 변수들(고정 목록 아님 — 무엇이 실제로 중요한지는
+설계 리뷰가 판단): 탱크 질량 · 액체량 · 액체 이동에 따른 순간 CoM 이동 · 하중과
+관성에 따른 액추에이터 응답 변화 · 최대 토크/각속도/travel 각 · 기어비 · 백래시 ·
+마찰/기계효율 · 제어 지연.
 
-A clean **three-way comparison**, same scenarios, same metrics:
+## 센서 원칙
 
-| # | Setup | Status |
+AI 는 **실제 센서로 얻을 수 있는 값만** 관측한다. 후보: 차량 IMU **와** 탱크 IMU
+(분리 유지 — 예: 언덕에서 자세와 차량 운동을 각각 실제 센싱으로 얻어야 함) ·
+로드셀 · 스태빌라이저 엔코더 · 모터 전류/토크 추정 · (옵션) 제한적 액체 레벨 센서.
+
+Unity 의 ground truth 는 **디버깅과 평가에만** 쓴다. AI 관측에는 실제 센서가 줄
+수 없는 정보가 **절대 들어가면 안 됨**: 모든 액체 입자 위치, 정확한 순간 액체
+CoM, 트럭의 미래 운동, 운전자의 미래 입력, 다가오는 도로, 물리엔진 내부 상태.
+
+## 우리가 원하는 헤드라인 결과
+
+같은 시나리오, 같은 지표로 하는 깔끔한 **3-way (나중에 4-way) 비교**:
+
+| # | 설정 | 상태 |
 |---|---|---|
-| ① | Tank bolted rigidly to the truck (no stabilizer) | ✅ `HoldController` = a mechanically locked joint (decision D5) |
-| ② | Tank tilted by a fixed rule (specific-force alignment / PID) | ✅ `SpecificForceAlignmentController`, `PidController` |
-| ③ | **Physical AI trained (partly) on the owner's own driving** | 🟡 residual-RL + BC-warm-start pipeline built and runs end-to-end (draft steps B–C); not yet a trained-and-winning policy |
-| ④ | Offline hindsight ceiling — best achievable spill with full future knowledge | ✅ `HindsightOptimizer` (decision gate, finding F5) |
+| ① | 탱크를 트럭에 강체로 고정 (스태빌라이저 없음) | ✅ `HoldController` = 기계적으로 잠근 관절 (D5) |
+| ② | 고정 규칙으로 탱크 틸트 (specific-force alignment / PID) | ✅ `SpecificForceAlignmentController`, `PidController` |
+| ③ | **소유자 자신의 운전으로 (부분) 학습한 Physical AI** | 🟡 잔차 RL + BC 웜스타트 파이프라인 완성, end-to-end 돌아감 (초안 B~C). 아직 학습되고-이기는 정책은 아님 |
+| ④ | 오프라인 후행지식 천장 — 완전한 미래 지식으로 달성 가능한 최선 스필 | ✅ `HindsightOptimizer` (결정 게이트, finding F5) |
 
-The goal is a defensible conclusion about **how ③ compares to ①, ②, and the ④
-ceiling** in the regime that matters (realistic driving on a real road).
+목표는 중요한 조건(실제 도로에서의 현실적 운전)에서 **③ 이 ①, ②, ④ 천장과 어떻게
+비교되는지**에 대한 방어 가능한 결론.
 
-**Reframed 2026-08-29 (owner):** the goal is *not* "prove ③ wins" — it is to
-build and understand the whole pipeline and report what we find honestly.
-Findings F1–F5 show ① (rigid) is a very strong bar: even the ④ hindsight ceiling,
-with full future knowledge, does not beat a locked tank on the owner's recorded
-drives at the current fill/road. So the honest draft result may well be "① wins
-here", with "the regime where ③ would win" as the documented follow-up. That is a
-valid learning outcome. The plan (experiment-plan.md → "The draft") builds the
-whole thing first, then adjusts the premise.
+**2026-08-29 재정의 (소유자):** 목표는 *"③ 이 이긴다를 증명"이 아니다* — 전체
+파이프라인을 만들고 이해하고, 발견한 것을 정직하게 보고하는 것이다. findings
+F1~F5 는 ①(강체)이 매우 강한 기준선임을 보여준다: 완전한 미래 지식을 가진 ④
+hindsight 천장조차 현재 fill/도로에서 잠근 탱크를 못 이긴다. 그래서 정직한 초안
+결과가 "여기선 ① 이 이긴다" 로 나올 수 있고, "③ 이 이길 조건은 여기다" 를 문서화된
+후속으로 붙인다. 그것도 유효한 학습 결과다. 계획(experiment-plan.md → "초안")은
+전체를 먼저 만들고, 그다음 전제를 조정한다.
 
-## Final-product architecture (owner decision 2026-08-29, revised 2026-08-29)
+## 최종 제품 아키텍처 (소유자 결정 2026-08-29, 같은 날 수정)
 
-**Revision:** the earlier version had the Unity app run a *baked ONNX policy with
-no Python at runtime*. The owner's call is that this collapses "the AI" into "the
-world" and hurts the learning goal. A real robot keeps its brain, its body, and
-its training rig as **separate things that talk over a link**. So the sim does
-too. Building it this way *is* the sim-to-real preparation.
+**수정 이력:** 예전 버전은 Unity 앱이 *구운 ONNX 정책을 런타임 Python 없이* 돌리게
+했다. 소유자 판단: 그건 "AI" 를 "세계" 안으로 뭉개서 학습 목표를 해친다. 실제
+로봇은 뇌·몸·학습 장비를 **링크로 대화하는 별개의 것들**로 둔다. 그러니 시뮬도
+그렇게 한다. 이렇게 만드는 것 자체가 sim-to-real 준비다.
 
 ```
 ┌──────────────────────────┐   ┌───────────────────────┐   ┌────────────────────┐
-│  THE WORLD + BODY         │   │  THE BRAIN            │   │  THE TRAINING RIG   │
-│  Unity app (compiled)     │   │  policy inference     │   │  Python, offline    │
-│                           │   │  process (Python)     │   │                     │
-│  • vehicle + road + tank  │◄─►│  • loads a trained    │   │  • PPO / residual RL │
-│    + slosh + actuator     │TCP│    checkpoint         │◄─►│  • BC warm-start     │
-│  • sensors OUT, commands  │(=  │  • obs in → action    │TCP│  • experiment mgmt   │
-│    IN                     │ROS│    out, deterministic  │   │  • ideally a small   │
-│  • ① rigid = a mechanical │ 2) │  • this is "onboard   │   │    GUI               │
-│    config, lives here     │   │    compute"           │   │                     │
-│  • ② rule-based = engine-  │   └───────────────────────┘   └────────────────────┘
-│    free C# IController,    │        ▲ the bridge is a first-class visual thing:
-│    portable (in-process    │        │ you SEE obs leave, actions return,
-│    for now)                │        │ reward accumulate — the pipeline is legible
-│  • control panel for all   │
-│    settings                │   ONNX (or a plain weights file) is the INTERCHANGE
-└──────────────────────────┘   FORMAT that hands a trained policy to the brain —
-                               it is not compiled into the Unity binary.
+│  세계 + 몸체              │   │  뇌                   │   │  학습 장비          │
+│  Unity 앱 (컴파일됨)      │   │  정책 추론 프로세스    │   │  Python, 오프라인   │
+│                          │   │  (Python)             │   │                    │
+│  • 차량 + 도로 + 탱크     │◄─►│  • 학습된 체크포인트   │   │  • PPO / 잔차 RL    │
+│    + 슬로시 + 액추에이터  │TCP│    로드                │◄─►│  • BC 웜스타트      │
+│  • 센서 OUT, 명령 IN      │(= │  • obs 입력 → 행동     │TCP│  • 실험 관리        │
+│  • ① 강체 = 기계적 설정,  │ROS│    출력, 결정론적       │   │  • 가능하면 작은    │
+│    여기 있음              │ 2)│  • 이게 "온보드 컴퓨트"│   │    GUI              │
+│  • ② 규칙기반 = 엔진프리  │   └───────────────────────┘   └────────────────────┘
+│    C# IController,        │       ▲ 브릿지는 일급(first-class) 시각 요소:
+│    이식가능 (지금은       │       │ obs 가 나가고, 행동이 돌아오고, reward 가
+│    in-process)           │       │ 쌓이는 걸 볼 수 있음 — 파이프라인이 읽힘
+│  • 모든 설정용 컨트롤 패널│
+└──────────────────────────┘   ONNX(또는 평범한 가중치 파일)는 학습된 정책을
+                               뇌에 넘기는 교환 포맷 — Unity 바이너리에 굽지 않음.
 ```
 
-Design intent:
+설계 의도:
 
-- **Unity = the plant.** The compiled app is the world and the robot body:
-  physics, road, tank, slosh, actuator, sensors, the human-drive mode, the
-  evaluation harness, and a control panel. It publishes sensor messages and
-  consumes command messages. ① rigid is a *mechanical* configuration and lives
-  here. It does **not** contain the learned policy.
-- **The policy runs as its own process** (`serve_policy.py` for now), connected
-  over the bridge — the stand-in for the onboard-compute ↔ sensors/actuators link
-  a real robot has. For the comparison, ② (rule-based C# `IController`, zero Unity
-  refs) runs in-process for simplicity but is portable to the same external shape;
-  ③ (learned) is always the external inference process.
-- **The trainer stays separate and offline.** It talks to a headless Unity
-  instance over the bridge. Never runs alongside the finished demo.
-- **ONNX is an interchange format**, not a runtime target inside Unity: the thing
-  you hand from "training rig" to "brain". A hand-rolled weights file is an
-  acceptable draft substitute.
-- **All configuration lives in a Unity control panel** — scenario, fill, road
-  severity, controller, driver, seed, run/record/evaluate, live metrics. The
-  `-executeMethod` / `-rl*` flags and `experiment.txt` stay as the scripting back
-  door.
-- **The bridge is made visible** — watching data flow between the world and the
-  brain is one of the best ways to understand a Physical AI system.
+- **Unity = 플랜트(plant).** 컴파일된 앱이 세계이자 로봇 몸체: 물리, 도로, 탱크,
+  슬로시, 액추에이터, 센서, 수동 주행 모드, 평가 하네스, 컨트롤 패널. 센서
+  메시지를 발행하고 명령 메시지를 소비한다. ① 강체는 *기계적* 설정이고 여기 산다.
+  학습 정책은 **들어있지 않다.**
+- **정책은 자기 프로세스로 실행** (지금은 `serve_policy.py`), 브릿지로 연결 —
+  실제 로봇의 온보드컴퓨트 ↔ 센서/액추에이터 링크의 대역. 비교에서 ②(엔진프리
+  C# `IController`)는 단순함 때문에 in-process 로 돌지만 같은 외부 형태로 이식
+  가능; ③(학습)은 항상 외부 추론 프로세스.
+- **학습기는 별개이고 오프라인.** 헤드리스 Unity 인스턴스와 브릿지로 대화.
+  완성된 데모와 절대 함께 돌지 않는다.
+- **ONNX 는 교환 포맷**, Unity 안의 런타임 타깃이 아님: "학습 장비" 에서 "뇌"
+  로 넘기는 것. 손수 만든 가중치 파일도 초안에선 허용.
+- **모든 설정은 Unity 컨트롤 패널에** — 시나리오, fill, 도로 강도, 컨트롤러,
+  운전자, seed, run/record/evaluate, 실시간 지표. `-executeMethod` / `-rl*`
+  플래그와 `experiment.txt` 는 스크립팅 뒷문으로 유지.
+- **브릿지를 보이게** — 세계와 뇌 사이 데이터 흐름을 지켜보는 게 Physical AI
+  시스템을 이해하는 가장 좋은 방법 중 하나.
 
-Trade-off accepted: the finished demo is "run the Unity app **and** the policy
-process", not a single self-contained `.exe`. For a learning / portfolio artefact
-that is a feature — it shows the architecture — not a regression.
+받아들인 트레이드오프: 완성 데모는 "Unity 앱 **과** 정책 프로세스를 실행",
+자기완결 `.exe` 하나가 아님. 학습/포트폴리오 산출물로는 이게 아키텍처를 보여주는
+특징이지 퇴보가 아니다.
 
-## Realism constraints (in, from day one)
+## 현실성 제약 (1일차부터 포함)
 
-Already in: fixed-step determinism, latency, sensor noise/bias, actuator
-torque/rate/travel/backlash/thermal limits, two slosh models with bracket
-discipline, friction-circle vehicle. **Added 2026-08-29:** the road — rolling
-grade, curve bank, surface roughness, discrete bumps/potholes, plus a suspension
-heave DOF (see [road-model.md](road-model.md)). A rigid tank transmits every bump
-to the liquid, which is precisely the disturbance ③ has to beat.
+이미 포함: 고정스텝 결정론, 지연, 센서 노이즈/바이어스, 액추에이터
+토크/rate/travel/백래시/열 한계, 브래킷 규율을 가진 슬로시 모델 2종,
+friction-circle 차량. **2026-08-29 추가:** 도로 — 완만한 grade, 커브 bank, 노면
+거칠기, 이산 범프/포트홀, + 서스펜션 heave DOF ([road-model.md](road-model.md)).
+강체 탱크는 모든 범프를 액체에 전달 — 정확히 ③ 이 이겨야 하는 disturbance.
 
-Still deferred (unchanged): ROS 2, ML-Agents, particle/SPH fluid, full tyre
-model, look-ahead sensors, photoreal rendering, hardware-in-the-loop.
+여전히 보류 (변함 없음): ROS 2, ML-Agents, 입자/SPH 유체, 완전한 타이어 모델,
+look-ahead 센서, 포토리얼 렌더링, hardware-in-the-loop.
 
-## Roadmap delta from this review
+## 설계 원칙
 
-> **Updated 2026-08-29 (step-back + draft-first).** The first RL run's lesson is
-> the F1/F4 cliff; the feasibility ceiling (④) does not beat rigid (finding F5).
-> The owner's call: build the whole pipeline as a **draft (vertical slice)**
-> first, then adjust the premise. Live plan: **[experiment-plan.md](experiment-plan.md)**.
+- 시각적 사실성보다 물리적 **인과 일관성**.
+- 더 정밀하다는 이유만으로 비싼 방법을 고르지 않는다.
+- RL 이 충분한 시뮬레이션 스텝을 모을 수 있어야 한다.
+- AI 관측과 시뮬레이션 ground truth 를 명확히 분리한다.
+- Sensor → Controller → Actuator 경계를 지킨다. 인터페이스는 실제 하드웨어로
+  교체 가능하게. 컨트롤러를 Unity 구현에 강하게 결합하지 않는다.
+- 소유자가 지명한 기술을 무비판적으로 채택하지 않는다 — 더 나은 대안을 제안한다.
+- 첫 구현은 단순하게, 그러나 나중에 통째로 버려야 할 것을 만들지 않는다.
+  미래를 위해 과하게 추상화하지도 않는다.
 
-1. **Road** — ✅ 2026-08-29.
-2. **Human trace record/replay** — ✅ 2026-08-29 (`DriverTrace`).
-3. **Rebuild evaluation around recorded drives** — ✅ 2026-08-29 (`TraceEvaluator`,
-   `ComparisonRunner`).
-4. **Feasibility ceiling** — ✅ 2026-08-29 (`HindsightOptimizer`). **Gate result:
-   does not beat rigid (F5)** → premise adjustment deferred until after the draft.
-5. **The draft (vertical slice)** — ✅ complete 2026-08-29: experiment profile ·
-   residual-RL wiring · BC warm-start · policy-serving process · ①②③ comparison
-   in the app · standalone build. Honest headline so far: ① rigid wins (F5).
-6. **Then:** premise adjustment (F5), a real RL run, domain randomization,
-   per-episode logging, the control panel and trainer GUI — as refinement passes
-   over a working whole.
+## 로드맵 (이 리뷰 이후)
+
+> **2026-08-29 갱신 (step-back + 초안 우선).** 첫 RL 실행의 교훈은 F1/F4 절벽;
+> feasibility 천장(④)이 강체를 못 이김 (F5). 소유자 결정: 파이프라인 전체를
+> **초안(수직 슬라이스)** 으로 먼저 만들고, 그다음 전제 조정. 살아있는 계획:
+> **[experiment-plan.md](experiment-plan.md)**.
+
+1. **도로** — ✅ 2026-08-29
+2. **인간 트레이스 녹화/재생** — ✅ 2026-08-29 (`DriverTrace`)
+3. **녹화 주행 중심으로 평가 재구성** — ✅ 2026-08-29 (`TraceEvaluator`, `ComparisonRunner`)
+4. **feasibility 천장** — ✅ 2026-08-29 (`HindsightOptimizer`). **게이트 결과:
+   강체를 못 이김 (F5)** → 전제 조정은 초안 이후로 연기
+5. **초안 (수직 슬라이스)** — ✅ 완료 2026-08-29: 실험 프로파일 · 잔차 RL 배관 ·
+   BC 웜스타트 · 정책 서빙 프로세스 · 앱 내 ①②③ 비교 · standalone 빌드.
+   지금까지의 정직한 헤드라인: ① 강체가 이김 (F5)
+6. **그다음:** 전제 조정 (F5), 실제 RL 실행, 도메인 랜덤화, 에피소드 로깅,
+   컨트롤 패널과 학습기 GUI — 돌아가는 전체를 다듬는 반복으로
+
+## 이 단계에 없는 것
+
+본격 기능 개발은 아직. ROS 2, Unity ML-Agents, 유체 시뮬 플러그인, 기타 큰
+의존성을 반사적으로 설치하지 않는다. "나중에 필요할 테니 지금 설치" 금지.
