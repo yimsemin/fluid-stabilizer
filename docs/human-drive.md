@@ -112,9 +112,11 @@ whether a stabilizer actually keeps more water in the tank than doing nothing.
   a particle/SPH fluid — no foam or splashes (out of scope: determinism + RL
   step budget).
 - Vehicle is a reduced 3-DOF sprung-mass model (pitch / roll / heave). Feel is
-  "laden truck": heavy, long braking, lazy steering. Press **G** for a real road
-  (grade, bank, roughness, potholes) — a scrolling road strip then appears under
-  the truck so you can see the bump arrive before the tank reacts; flat road
-  (no strip) is the default.
+  "laden truck": heavy, long braking, lazy steering. Press **G** for a real road:
+  a **winding course** (fixed per seed) with grade, bank, surface roughness and
+  potholes. The truck **follows the road's curve on its own** — your steering is
+  a correction (lane changes, holding the line through a bend). A textured road
+  strip scrolls under the truck so you see the curve and the bump arrive before
+  the tank reacts. Flat straight road (no strip) is the default.
 - Stabilizer option 3 uses information a real sensor could not give — it is only
   there as a comparison ceiling.

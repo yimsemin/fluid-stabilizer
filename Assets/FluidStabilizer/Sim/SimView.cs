@@ -32,6 +32,10 @@ namespace FluidStabilizer.Sim
         /// </summary>
         public SimulationLoop LoopOverride;
 
+        /// <summary>When true, <see cref="LateUpdate"/> does nothing — the owner
+        /// (e.g. <see cref="ComparisonRunner"/>) calls <see cref="RenderTick"/> itself.</summary>
+        public bool ExternallyDriven;
+
         [Header("Rig (wired by SceneBuilder)")]
         public Transform TruckBody;
         public Transform TankPivot;   // child of TruckBody, at the gimbal pivot
@@ -65,7 +69,7 @@ namespace FluidStabilizer.Sim
         private double _lastOverflow;
         private float _spillFlash;
 
-        private void LateUpdate() => RenderTick();
+        private void LateUpdate() { if (!ExternallyDriven) RenderTick(); }
 
         /// <summary>One visual update. Public so a test can drive it (no Unity player loop).</summary>
         public void RenderTick()

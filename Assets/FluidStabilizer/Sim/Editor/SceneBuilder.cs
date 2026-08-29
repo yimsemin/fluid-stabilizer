@@ -28,7 +28,8 @@ namespace FluidStabilizer.SimEditor
             var ground = GameObject.CreatePrimitive(PrimitiveType.Plane);
             ground.name = "Ground";
             ground.transform.localScale = new Vector3(2000, 1, 2000);
-            ground.GetComponent<Renderer>().sharedMaterial = SolidMaterial("Ground", new Color(0.22f, 0.24f, 0.26f));
+            ground.transform.position = new Vector3(0, -0.04f, 0); // just below the road strip (RoadRibbon sits at ~0.05)
+            ground.GetComponent<Renderer>().sharedMaterial = SolidMaterial("Ground", new Color(0.17f, 0.19f, 0.16f));
 
             var lightGo = new GameObject("Sun");
             var light = lightGo.AddComponent<Light>();

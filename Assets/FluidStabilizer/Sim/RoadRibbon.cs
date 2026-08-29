@@ -6,12 +6,12 @@ using UnityEngine;
 namespace FluidStabilizer.Sim
 {
     /// <summary>
-    /// Draws the road the truck is driving on — a strip that scrolls toward you as
-    /// the truck advances, tilting with grade and bank and dipping into potholes.
-    /// It makes the disturbance visible: you see the bump arrive, then see the
-    /// tank react (experiment-plan.md step 2b).
+    /// Draws the road the truck is driving on — a strip that follows the road's
+    /// curve, tilts with grade and bank, and dips into potholes, scrolling toward
+    /// you as the truck advances. It makes the disturbance visible: you see the
+    /// bend and the bump arrive, then see the tank react (experiment-plan.md 2b).
     ///
-    /// Purely cosmetic. It rebuilds an independent <see cref="RoadModel"/> from the
+    /// Purely cosmetic. Rebuilds an independent <see cref="RoadModel"/> from the
     /// loop's seed and config, so it reproduces the same profile the physics sees
     /// without touching it. Hidden when the road is off.
     /// </summary>
@@ -20,26 +20,30 @@ namespace FluidStabilizer.Sim
         public SimulationRunner Runner;
         public SimulationLoop LoopOverride;
         public Vector3 WorldOffset = Vector3.zero;
+        public bool ExternallyDriven;
 
         [Header("Extent")]
-        public float AheadMetres = 46f;
-        public float BehindMetres = 12f;
-        public int LongSamples = 72;
-        public float HalfWidthMetres = 3.0f;
-        public int CrossSamples = 7;
+        public float AheadMetres = 42f;
+        public float BehindMetres = 10f;
+        public float SampleSpacingMetres = 0.4f;
+        public float HalfWidthMetres = 2.3f;
+        public float VerticalExaggeration = 7.0f;
+        public float TileMetres = 6f;           // one dash + gap of the texture
 
         private RoadModel _road;
         private ulong _roadSeed = ulong.MaxValue;
-        private bool _roadEnabled;
 
         private Transform _strip;
         private Mesh _mesh;
         private Vector3[] _verts;
         private Color[] _colors;
+        private Vector2[] _uv;
+        private const int Nx = 7;               // cross samples (odd → a centre column)
+        private int _nz;
 
         private SimulationLoop Loop => LoopOverride ?? Runner?.Loop;
 
-        private void LateUpdate() => RenderTick();
+        private void LateUpdate() { if (!ExternallyDriven) RenderTick(); }
 
         public void RenderTick()
         {
@@ -56,13 +60,11 @@ namespace FluidStabilizer.Sim
             EnsureStrip();
             _strip.gameObject.SetActive(true);
 
-            // (Re)build the road replica if the episode changed.
-            if (_road == null || loop.Seed != _roadSeed || _roadEnabled != cfg.Road.Enabled)
+            if (_road == null || loop.Seed != _roadSeed)
             {
                 _road = new RoadModel(cfg.Road);
                 _road.Reset(new DeterministicRandom(loop.Seed).Fork("road"));
                 _roadSeed = loop.Seed;
-                _roadEnabled = cfg.Road.Enabled;
             }
 
             var v = loop.VehicleState;
@@ -71,66 +73,90 @@ namespace FluidStabilizer.Sim
             if (worldFwd.sqrMagnitude < 1e-6f) worldFwd = Vector3.forward;
 
             Vector3 basePos = Frames.ToUnity(v.OriginWorld);
-            basePos.y = 0.05f; // clear of the ground plane (avoids z-fighting)
-            _strip.SetPositionAndRotation(basePos + WorldOffset, Quaternion.LookRotation(worldFwd.normalized, Vector3.up));
+            basePos.y = 0.05f; // just above the ground plane (which SceneBuilder drops to -0.04)
+            _strip.SetPositionAndRotation(basePos + WorldOffset,
+                Quaternion.LookRotation(worldFwd.normalized, Vector3.up));
 
             Rebuild(loop.DistanceTraveled);
         }
 
-        private void Rebuild(double distanceAtTruck)
+        private void Rebuild(double sTruck)
         {
-            int nz = LongSamples, nx = CrossSamples;
-            float total = AheadMetres + BehindMetres;
-            float dz = total / (nz - 1);
+            int nz = _nz;
+            float dz = SampleSpacingMetres;
+            int truckI = Mathf.Clamp(Mathf.RoundToInt(BehindMetres / dz), 0, nz - 1);
 
-            // Walk s forward, accumulating the grade slope into a height profile.
-            double gradeY = 0.0;
-            var profileY = new float[nz];
+            // Sample the road, and integrate curvature into a centreline path in
+            // the strip's local frame (+Z forward at the truck, heading φ = 0).
+            var cx = new float[nz];
+            var cz = new float[nz];
+            var cphi = new float[nz];
+            var gradeY = new float[nz];
             var surf = new float[nz];
-            var bank = new float[nz];
-            double prevGrade = 0.0;
+            var bankTan = new float[nz];
+
+            double phi = 0, x = 0, z = 0, gy = 0;
+            double prevGrade = 0;
             for (int i = 0; i < nz; i++)
             {
-                double s = distanceAtTruck - BehindMetres + i * dz;
+                double s = sTruck - BehindMetres + i * dz;
                 RoadInput r = _road.Sample(s);
-                // uphill grade (positive) → the road ahead rises in +Y.
-                if (i > 0) gradeY += System.Math.Tan(0.5 * (r.Grade + prevGrade)) * dz;
+
+                if (i > 0)
+                {
+                    phi += r.Curvature * dz;                     // dφ/ds = curvature
+                    x += -System.Math.Sin(phi) * dz;
+                    z += System.Math.Cos(phi) * dz;
+                    gy += System.Math.Tan(0.5 * (r.Grade + prevGrade)) * dz;
+                }
                 prevGrade = r.Grade;
-                profileY[i] = (float)gradeY;
+
+                cx[i] = (float)x; cz[i] = (float)z; cphi[i] = (float)phi;
+                gradeY[i] = (float)gy;
                 surf[i] = (float)r.SurfaceHeight;
-                bank[i] = (float)r.Bank;
+                bankTan[i] = (float)System.Math.Tan(r.Bank);
             }
 
-            // Zero the profile at the truck (localZ = 0 → i where s = distanceAtTruck).
-            int truckI = Mathf.Clamp(Mathf.RoundToInt(BehindMetres / dz), 0, nz - 1);
-            float y0 = profileY[truckI] + surf[truckI];
-            var asphalt = new Color(0.12f, 0.12f, 0.14f);
-            var paint = new Color(0.80f, 0.74f, 0.42f);
-            var edge = new Color(0.62f, 0.62f, 0.66f);
+            // Zero the frame at the truck station.
+            float ox = cx[truckI], oz = cz[truckI], ophi = cphi[truckI];
+            float oy = gradeY[truckI] + surf[truckI] * VerticalExaggeration;
+            float cosO = Mathf.Cos(-ophi), sinO = Mathf.Sin(-ophi);
 
+            var asphalt = new Color(1f, 1f, 1f);
             for (int i = 0; i < nz; i++)
             {
-                double s = distanceAtTruck - BehindMetres + i * dz;
-                bool dashOn = ((int)System.Math.Floor(s / 3.0) & 1) == 0;
-                float localZ = -BehindMetres + i * dz;
-                float bankTan = (float)System.Math.Tan(bank[i]);
-                float shade = Mathf.Clamp(1f + surf[i] * 5f, 0.55f, 1.5f);
+                // centreline in truck-local frame (rotate so the truck heads +Z)
+                float rx = cx[i] - ox, rz = cz[i] - oz;
+                float lx = rx * cosO - rz * sinO;
+                float lz = rx * sinO + rz * cosO;
+                float lphi = cphi[i] - ophi;
 
-                for (int j = 0; j < nx; j++)
+                float dip = surf[i] * VerticalExaggeration;
+                float y = gradeY[i] + dip - oy;
+
+                // pothole → dark, bump → light
+                float shade = Mathf.Clamp(1f + surf[i] * 16f, 0.3f, 1.7f);
+                Color c = asphalt * shade;
+
+                float rightX = Mathf.Cos(lphi), rightZ = Mathf.Sin(lphi);
+                float vTex = (float)((sTruck - BehindMetres + i * dz) / TileMetres);
+
+                for (int j = 0; j < Nx; j++)
                 {
-                    float localX = Mathf.Lerp(-HalfWidthMetres, HalfWidthMetres, j / (float)(nx - 1));
-                    float y = profileY[i] - y0 + surf[i] - localX * bankTan;
-                    int k = i * nx + j;
-                    _verts[k] = new Vector3(localX, y, localZ);
-
-                    Color c = asphalt;
-                    if (Mathf.Abs(localX) > HalfWidthMetres - 0.28f) c = edge;
-                    else if (Mathf.Abs(localX) < 0.16f && dashOn) c = paint;
-                    _colors[k] = c * shade;
+                    float u = j / (float)(Nx - 1);
+                    float localX = Mathf.Lerp(-HalfWidthMetres, HalfWidthMetres, u);
+                    int k = i * Nx + j;
+                    _verts[k] = new Vector3(
+                        lx + rightX * localX,
+                        y - localX * bankTan[i],
+                        lz + rightZ * localX);
+                    _colors[k] = c;
+                    _uv[k] = new Vector2(u, vTex);
                 }
             }
 
             _mesh.vertices = _verts;
+            _mesh.uv = _uv;
             _mesh.colors = _colors;
             _mesh.RecalculateNormals();
             _mesh.RecalculateBounds();
@@ -140,6 +166,9 @@ namespace FluidStabilizer.Sim
         {
             if (_strip != null) return;
 
+            _nz = Mathf.Max(8, Mathf.CeilToInt((AheadMetres + BehindMetres) / SampleSpacingMetres) + 1);
+            int n = _nz * Nx;
+
             var go = new GameObject("RoadRibbon");
             go.transform.SetParent(transform, worldPositionStays: false);
             _strip = go.transform;
@@ -148,29 +177,62 @@ namespace FluidStabilizer.Sim
             var mr = go.AddComponent<MeshRenderer>();
             mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
 
-            var sh = Shader.Find("Sprites/Default");
-            mr.sharedMaterial = sh != null
-                ? new Material(sh) { name = "RoadRibbon" }
-                : new Material(Shader.Find("Standard")) { name = "RoadRibbon", color = new Color(0.13f, 0.13f, 0.15f) };
+            var sh = Shader.Find("FluidStabilizer/RoadRibbon");
+            mr.sharedMaterial = new Material(sh != null ? sh : Shader.Find("Sprites/Default")) { name = "RoadRibbon" };
+            mr.sharedMaterial.mainTexture = BuildRoadTexture();
 
-            int nz = LongSamples, nx = CrossSamples, n = nz * nx;
             _verts = new Vector3[n];
             _colors = new Color[n];
+            _uv = new Vector2[n];
 
-            var tris = new System.Collections.Generic.List<int>((nz - 1) * (nx - 1) * 6);
-            for (int i = 0; i < nz - 1; i++)
-            for (int j = 0; j < nx - 1; j++)
+            var tris = new System.Collections.Generic.List<int>((_nz - 1) * (Nx - 1) * 6);
+            for (int i = 0; i < _nz - 1; i++)
+            for (int j = 0; j < Nx - 1; j++)
             {
-                int a = i * nx + j, b = i * nx + j + 1, c = (i + 1) * nx + j, d = (i + 1) * nx + j + 1;
-                tris.Add(a); tris.Add(c); tris.Add(b);
-                tris.Add(b); tris.Add(c); tris.Add(d);
+                int a = i * Nx + j, b = i * Nx + j + 1, cc = (i + 1) * Nx + j, d = (i + 1) * Nx + j + 1;
+                tris.Add(a); tris.Add(cc); tris.Add(b);
+                tris.Add(b); tris.Add(cc); tris.Add(d);
             }
 
             _mesh = new Mesh { name = "RoadRibbon" };
             _mesh.MarkDynamic();
             _mesh.vertices = _verts;
+            _mesh.uv = _uv;
             _mesh.triangles = tris.ToArray();
             mf.sharedMesh = _mesh;
+        }
+
+        /// <summary>Asphalt with a dashed centre line and solid edge lines, tiled along V.</summary>
+        private static Texture2D BuildRoadTexture()
+        {
+            const int w = 64, h = 128;
+            var tex = new Texture2D(w, h, TextureFormat.RGBA32, false)
+            {
+                wrapModeU = TextureWrapMode.Clamp,
+                wrapModeV = TextureWrapMode.Repeat,
+                filterMode = FilterMode.Bilinear,
+                name = "RoadTex",
+            };
+            var rng = new System.Random(12345);
+            var px = new Color32[w * h];
+            for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++)
+            {
+                float u = x / (float)(w - 1);
+                float noise = (float)(rng.NextDouble() - 0.5) * 0.06f;
+                Color c = new Color(0.115f + noise, 0.115f + noise, 0.125f + noise);
+
+                // solid edge lines
+                if (u < 0.06f || u > 0.94f) c = new Color(0.72f, 0.72f, 0.68f);
+                // dashed centre line: painted for the first 55% of each tile
+                else if (Mathf.Abs(u - 0.5f) < 0.045f && y < h * 0.55f)
+                    c = new Color(0.78f, 0.66f, 0.20f);
+
+                px[y * w + x] = c;
+            }
+            tex.SetPixels32(px);
+            tex.Apply();
+            return tex;
         }
 
         private void OnDisable()
