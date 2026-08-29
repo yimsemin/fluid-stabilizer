@@ -110,6 +110,7 @@ namespace FluidStabilizer.SimEditor
             var controls = simGo.AddComponent<PlayControls>();
             var traceRec = simGo.AddComponent<TraceRecorder>();
             var comparison = simGo.AddComponent<ComparisonRunner>();
+            var roadRibbon = simGo.AddComponent<RoadRibbon>();
 
             view.Runner = runner;
             view.TruckBody = rig.transform;
@@ -129,6 +130,8 @@ namespace FluidStabilizer.SimEditor
             comparison.Runner = runner;
             comparison.RigTemplate = rig.transform;
             comparison.Camera = cam;
+
+            roadRibbon.Runner = runner;
 
             // --- save ---
             Directory.CreateDirectory(Path.GetDirectoryName(ScenePath));

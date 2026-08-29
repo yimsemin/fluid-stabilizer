@@ -107,6 +107,8 @@ whether a stabilizer actually keeps more water in the tank than doing nothing.
   step budget).
 - Vehicle is a reduced 3-DOF sprung-mass model (pitch / roll / heave). Feel is
   "laden truck": heavy, long braking, lazy steering. Press **G** for a real road
-  (grade, bank, roughness, potholes); flat road is the default.
+  (grade, bank, roughness, potholes) — a scrolling road strip then appears under
+  the truck so you can see the bump arrive before the tank reacts; flat road
+  (no strip) is the default.
 - Stabilizer option 3 uses information a real sensor could not give — it is only
   there as a comparison ceiling.

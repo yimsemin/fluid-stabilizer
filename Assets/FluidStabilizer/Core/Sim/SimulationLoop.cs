@@ -78,6 +78,9 @@ namespace FluidStabilizer.Core.Sim
         /// <summary>Instantaneous smallest freeboard this step (m); negative while overflowing.
         /// Distinct from <see cref="GroundTruthFrame.MinFreeboard"/>, which is the running worst.</summary>
         public double CurrentMinFreeboard => _lastSlosh.MinFreeboard;
+
+        /// <summary>Distance travelled along the road (m) — the argument the road profile is indexed by.</summary>
+        public double DistanceTraveled => _distanceTraveled;
         public bool EpisodeComplete =>
             _cfg.EpisodeSeconds > 0.0 && _clock.StepCount >= _cfg.TotalPhysicsSteps;
 

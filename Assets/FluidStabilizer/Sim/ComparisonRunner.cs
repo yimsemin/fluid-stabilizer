@@ -87,7 +87,12 @@ namespace FluidStabilizer.Sim
 
             if (withRigs)
             {
-                if (Runner != null) Runner.enabled = false;
+                if (Runner != null)
+                {
+                    Runner.enabled = false;
+                    SetComponentEnabled<SimView>(Runner.gameObject, false);
+                    SetComponentEnabled<RoadRibbon>(Runner.gameObject, false);
+                }
                 if (RigTemplate != null) RigTemplate.gameObject.SetActive(false);
             }
 
@@ -116,6 +121,11 @@ namespace FluidStabilizer.Sim
                     view.LiquidMesh = view.TankBody.Find("LiquidMesh").GetComponent<MeshFilter>();
                     view.LoopOverride = loop;
                     view.WorldOffset = new Vector3(x0 + i * LaneSpacing, 0f, 0f);
+
+                    var ribbon = rig.AddComponent<RoadRibbon>();
+                    ribbon.LoopOverride = loop;
+                    ribbon.WorldOffset = view.WorldOffset;
+
                     lane.Rig = rig;
                 }
 
@@ -136,7 +146,12 @@ namespace FluidStabilizer.Sim
             Active = false;
 
             if (RigTemplate != null) RigTemplate.gameObject.SetActive(true);
-            if (Runner != null) Runner.enabled = true;
+            if (Runner != null)
+            {
+                Runner.enabled = true;
+                SetComponentEnabled<SimView>(Runner.gameObject, true);
+                SetComponentEnabled<RoadRibbon>(Runner.gameObject, true);
+            }
             Debug.Log("[compare] stopped");
         }
 
@@ -173,7 +188,7 @@ namespace FluidStabilizer.Sim
 
         private void UpdateCamera()
         {
-            if (Camera == null || _lanes.Count == 0) return;
+            if (Camera == null || _lanes.Count == 0 || _lanes[0].Rig == null) return;
             Transform lead = _lanes[0].Rig.transform;
             float span = (Lanes.Length - 1) * LaneSpacing;
 
@@ -243,6 +258,12 @@ namespace FluidStabilizer.Sim
         }
 
         private GUIStyle Green(GUIStyle s) => new GUIStyle(s) { normal = { textColor = new Color(0.5f, 1f, 0.55f) } };
+
+        private static void SetComponentEnabled<T>(GameObject go, bool on) where T : Behaviour
+        {
+            var c = go.GetComponent<T>();
+            if (c != null) c.enabled = on;
+        }
 
         // ----------------------------------------------------------- GUI helpers
 
