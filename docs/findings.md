@@ -1,39 +1,35 @@
-# Findings
+# 발견 (findings)
 
-Empirical results from the simulation as it is built. Newest first.
+시뮬레이션을 만들면서 실험으로 밝혀진 사실들. 최신순.
 
-> **2026-08-29 — tank resized `TankHeightZ` 0.8 → 0.6 m** (a shallower open tank
-> spills far more readily; it puts the three-way comparison in the regime that
-> matters — see [experiment-plan.md](experiment-plan.md)). **The numeric tables
-> in F1–F4 below predate this** and a full re-sweep is pending. The *direction*
-> of every finding is unchanged, and on the discriminating scenarios it is now
-> **stronger**: on the 0.6 m tank, locked Hold vs the reactive tilt laws —
-> `HighwayBriskLowFreeboard` 0.67 L vs ~27 L, `RoughRoadHighway` 0 L vs ~8 L,
-> `RoughRoadLowFreeboard` 0.1 L vs ~30 L, `HighFillAggressive` 35 L vs ~68 L.
-> Rigid still wins everywhere; anticipation is still the only way past it.
-> Guards `EvaluatorTests` retuned to the new magnitudes.
+> **2026-08-29 — 탱크 리사이즈 `TankHeightZ` 0.8 → 0.6 m** (더 얕은 개방형 탱크가
+> 훨씬 잘 넘침; 3-way 비교를 중요한 조건으로 옮김 — [experiment-plan.md](experiment-plan.md)).
+> **아래 F1~F4 의 수치 표는 이 변경 전 것**이고 전면 재실행이 밀려 있다. 모든
+> 발견의 *방향*은 그대로이고, 판별 시나리오에서는 이제 **더 강하다**: 0.6 m
+> 탱크에서 잠근 Hold vs 반응형 틸트 법칙 — `HighwayBriskLowFreeboard` 0.67 L vs
+> ~27 L, `RoughRoadHighway` 0 L vs ~8 L, `RoughRoadLowFreeboard` 0.1 L vs ~30 L,
+> `HighFillAggressive` 35 L vs ~68 L. 강체가 여전히 어디서나 이긴다. 예측이
+> 유일한 돌파구. `EvaluatorTests` 가드를 새 크기로 재조정.
 
 ---
 
-## F5 — 2026-08-29 — Feasibility ceiling: full-hindsight gimbal control still loses to a locked tank on the recorded drives
+## F5 — 2026-08-29 — Feasibility 천장: 완전한 후행지식 짐벌 제어도 녹화 주행에서 잠근 탱크에 진다
 
-**The experiment-plan.md step-3 decision gate — and it does not pass.**
+**experiment-plan.md 의 step-3 결정 게이트 — 그리고 통과하지 못한다.**
 
-`HindsightOptimizer` (engine-free, `FluidStabilizer.Core.Sim.Eval`): for one fixed
-recorded drive, a gradient-free `(1+1)`-ES with random restarts searches a
-low-dimensional gimbal-**rate** trajectory (per axis, 6–10 Catmull-Rom knots over
-the whole drive, scaled to the real `MaxRateRadPerSec`) for the feed-forward
-motion that minimises spill. Full hindsight (the optimiser sees the entire
-drive), real actuator limits (rate, ±30° travel, 900/420 N·m thermal), replayed
-bit-deterministically. Restart 0 starts from the zero (do-nothing) trajectory, so
-the result can never "beat" by losing. Run via **Menu ▸ FluidStabilizer ▸
-Feasibility Ceiling (Hindsight)** or `-executeMethod …HindsightEvalRunner.Run`
-→ `Logs/hindsight-eval.txt` + per-drive optimal trajectories in
-`Logs/hindsight/*.traj.csv`.
+`HindsightOptimizer` (엔진프리, `FluidStabilizer.Core.Sim.Eval`): 고정된 한
+녹화 주행에 대해, gradient-free `(1+1)`-ES + 무작위 재시작이 저차원 짐벌-**rate**
+궤적(축당 6~10 Catmull-Rom knot, 실제 `MaxRateRadPerSec` 로 스케일)을 탐색해서
+스필을 최소화하는 feed-forward 동작을 찾는다. 완전한 후행지식(옵티마이저가 주행
+전체를 봄), 실제 액추에이터 제약(rate, ±30° travel, 900/420 N·m 열), 비트
+결정론적 재생. 재시작 0 은 zero(무동작) 궤적에서 시작 → 결과가 절대 지면서
+"이길" 수 없음. 실행: **메뉴 ▸ FluidStabilizer ▸ Feasibility Ceiling
+(Hindsight)** 또는 `-executeMethod …HindsightEvalRunner.Run` →
+`Logs/hindsight-eval.txt` + 주행별 최적 궤적 `Logs/hindsight/*.traj.csv`.
 
-### Result — 6 held-out drives (road on, fill 0.62, 30–48 s), spill [L]
+### 결과 — 홀드아웃 주행 6개 (도로 on, fill 0.62, 30~48 s), 스필 [L]
 
-| drive | Hold (locked) | do-nothing (servo @0) | ceiling (hindsight) | ceiling − Hold |
+| 주행 | Hold (잠금) | 무동작 (서보 @0) | 천장 (hindsight) | 천장 − Hold |
 |---|---|---|---|---|
 | 132335 | 19.3 | 25.6 | 24.1 | **−4.8** |
 | 132407 | 19.4 | 25.3 | 24.9 | **−5.4** |
@@ -42,87 +38,79 @@ Feasibility Ceiling (Hindsight)** or `-executeMethod …HindsightEvalRunner.Run`
 | 140321 | 20.8 | 26.6 | 26.1 | **−5.2** |
 | 140440 | 21.1 | 28.0 | 27.2 | **−6.1** |
 
-Pendulum ROM. Under **shallow water** the ceiling is 30–140 L *worse* than Hold on
-every drive (one −10 L "win" appeared on a single drive at one search budget and
-vanished at every other budget / knot count / rate authority — a ROM-fit artefact,
-exactly what bracket discipline F3 exists to catch).
+진자 ROM. **얕은물**에서는 천장이 모든 주행에서 Hold 보다 30~140 L *더 나쁨*
+(한 주행에서 한 탐색 예산일 때 −10 L "승리" 가 나타났으나 다른 모든 예산 /
+knot 수 / rate authority 에서 사라짐 — ROM-fit 아티팩트, 정확히 브래킷 규율 F3
+이 잡으려는 것).
 
-**Why more search won't flip it.** As the budget grows (42 → 364 evaluations,
-6 → 16 knots/axis, rate authority 0.2 → 1.0) the pendulum ceiling creeps down
-from ≈ 25.5 L toward ≈ 23 L on drive 132335 — i.e. active anti-slosh recovers
-only ≈ 2–3 L of the ≈ 6 L the servo loses to the locked joint just by being an
-active servo — and plateaus there, still ≈ 4 L above locked Hold. The wall is the
-`do-nothing` floor (25 L), not the optimiser.
+**더 많은 탐색이 이걸 뒤집지 못하는 이유.** 예산이 커지면서 (42 → 364 평가,
+6 → 16 knot/축, rate authority 0.2 → 1.0) 진자 천장이 주행 132335 에서 ≈ 25.5 L
+에서 ≈ 23 L 쪽으로 조금씩 내려가다 거기서 정체 — 즉 능동 anti-slosh 가 서보가
+잠근 관절에 잃는 ≈ 6 L 중 ≈ 2~3 L 만 회복하고, 여전히 잠근 Hold 보다 ≈ 4 L
+위. 벽은 `무동작` 바닥(25 L)이지 옵티마이저가 아니다.
 
-**Limitation to keep in mind:** the trajectory is deliberately low-bandwidth
-(6–16 knots over a 30–48 s drive ≈ 0.1–0.3 Hz). It can shape the tank to the
-maneuver profile (braking / cornering events last 1–5 s) but cannot do
-per-wave-cycle anti-slosh modulation at the ≈ 1.2 Hz roll-slosh frequency. A
-higher-bandwidth feed-forward might do better — but it would also be far outside
-what a causal sensor-only policy could ever reproduce, so it does not change the
-gate decision.
+**염두에 둘 한계:** 궤적은 의도적으로 저대역폭 (30~48 s 주행에 6~16 knot ≈
+0.1~0.3 Hz). 기동 프로파일(제동/코너링 이벤트는 1~5 s 지속)에 탱크를 맞출 수는
+있지만 ≈ 1.2 Hz roll-slosh 주파수의 파동 주기별 anti-slosh 변조는 못 한다.
+더 높은 대역폭 feed-forward 가 더 잘할 수도 있지만, 그건 인과적 센서전용 정책이
+재현할 수 있는 범위를 한참 벗어나므로 게이트 결정을 바꾸지 않는다.
 
-### What it means
+### 이것이 의미하는 것
 
-1. **The servo commanding zero already loses ≈ 5–7 L to a mechanically locked
-   joint** (F3-addendum / D5, now quantified on real drives): the 4 kW-class
-   gimbal is torque-limited against the true slosh moment, so "hold 0" is dragged
-   off target and *pumps* the mode. `do-nothing` is the optimiser's own starting
-   point.
-2. **No feed-forward trajectory the optimiser found recovers that gap**, let alone
-   beats Hold — even with the entire future known. This is **F1/F4 sharpened**:
-   not just reactive control, but *hindsight-optimal* control loses to bolting the
-   tank down, on the owner's real recorded drives, under both slosh models.
-3. The `IdealTiltTracking_…` diagnostic (F4) that showed head-room is a *kinematic*
-   tank-rotation result with no actuator; put the real servo + 900 N·m limit +
-   ±30° travel in the loop and the head-room is gone at this freeboard.
+1. **0 을 명령하는 서보가 이미 기계적으로 잠근 관절에 ≈ 5~7 L 진다** (F3 부록
+   / D5, 이제 실주행에서 정량화): 4 kW 급 짐벌이 실제 슬로시 모멘트에 토크
+   제한되어 "hold 0" 이 목표에서 끌려가며 모드를 *펌핑*. `무동작`이 옵티마이저
+   자신의 출발점.
+2. **옵티마이저가 찾은 어떤 feed-forward 궤적도 그 격차를 회복하지 못한다**,
+   Hold 를 이기는 건 고사하고 — 미래 전체를 알아도. 이건 **F1/F4 를 더 날카롭게**
+   한 것: 반응형 제어뿐 아니라 *hindsight-최적* 제어도 탱크를 볼트로 고정하는
+   것에 진다, 소유자의 실제 녹화 주행에서, 슬로시 2종 모두에서.
+3. head-room 을 보여준 `IdealTiltTracking_…` 진단(F4)은 액추에이터 없는
+   *운동학적* 탱크 회전 결과. 실제 서보 + 900 N·m 한계 + ±30° travel 을 루프에
+   넣으면 이 freeboard 에서 head-room 이 사라진다.
 
-### Decision-gate verdict: **do not start residual RL yet** (experiment-plan step 3, fail branch)
+### 결정 게이트 판정: **아직 잔차 RL 시작하지 말 것** (experiment-plan step 3, 실패 분기)
 
-A causal sensor-only policy cannot beat what full hindsight cannot beat. The
-premise has to change first — candidates, for the owner:
+인과적 센서전용 정책은 완전한 후행지식이 못 이기는 걸 못 이긴다. 전제를 먼저
+바꿔야 한다 — 소유자용 후보:
 
-- **Freeboard.** Fill 0.62 on the 0.6 m tank = 0.23 m freeboard; a *locked* tank
-  already spills 19–22 L on these drives. The driving is simply too violent for
-  this freeboard regardless of stabilisation. Lower fill / taller tank until a
-  locked tank is near the spill threshold, so there is a gap for control to close.
-- **Road / driving severity.** `RoadConfig.Severity`, or record calmer held-out
-  drives.
-- **The actuator, or the action space.** The "hold" state for the *active*
-  controller is a sagging servo, not a rigid joint. A hybrid action that can
-  **mechanically lock** unless actively correcting (so the baseline for residual
-  RL is 19 L, not 25 L) would remove the structural handicap — worth designing
-  before step 4.
-- Preview/look-ahead is *not* the fix on its own: the hindsight trajectory
-  already has perfect look-ahead and still fails.
+- **Freeboard.** 0.6 m 탱크에 fill 0.62 = 0.23 m freeboard; *잠근* 탱크가 이
+  주행들에서 이미 19~22 L 스필. 안정화와 무관하게 운전이 이 freeboard 에는
+  너무 격렬. 잠근 탱크가 스필 문턱 근처에 오도록 fill 낮추기 / 탱크 높이기.
+- **도로 / 운전 강도.** `RoadConfig.Severity`, 또는 더 얌전한 홀드아웃 주행 녹화.
+- **액추에이터, 또는 액션 공간.** *능동* 컨트롤러의 "hold" 상태는 강체 관절이
+  아니라 처지는 서보. 능동 보정할 때만 아니면 **기계적으로 잠글** 수 있는
+  하이브리드 액션(그러면 잔차 RL 의 베이스라인이 25 L 가 아니라 19 L)이 구조적
+  핸디캡을 없앰 — step 4 전에 설계할 가치 있음.
+- Preview/look-ahead 단독은 해결책 아님: hindsight 궤적은 이미 완벽한
+  look-ahead 를 갖고도 실패.
 
-### Guards
+### 가드
 
-`HindsightOptimizerTests` (5): search determinism, actuator limits bound an absurd
-commanded trajectory, ceiling never worse than do-nothing, trajectory-CSV export,
-"inconclusive" verdict when a locked tank never spills.
+`HindsightOptimizerTests` (5): 탐색 결정론, 액추에이터 한계가 말도 안 되는 명령
+궤적을 유계로 만듦, 천장이 무동작보다 나쁘지 않음, trajectory-CSV 내보내기,
+잠근 탱크가 안 넘칠 때 "판정 불가" 결과.
 
 ---
 
-## F4 — 2026-08-28 — A rigid (locked) Hold baseline is near-unbeatable by reactive tilt control
+## F4 — 2026-08-28 — 강체(잠금) Hold 베이스라인은 반응형 틸트 제어로 거의 이길 수 없다
 
-**Supersedes F2.** After the F3 addendum (the "Hold" servo saturates and sags
-under aggressive slosh loads), the owner set two things:
+**F2 대체.** F3 부록("Hold" 서보가 공격적 슬로시 하중에 포화·처짐) 이후 소유자가
+두 가지를 정함:
 
-- **`Hold` = a mechanically *locked* joint** (decision D5): the tank is rigid to
-  the vehicle, the slosh moment is reacted by the vehicle structure, not the
-  actuator. New `StabilizerCommandMode.Locked`; it consumes no torque and cannot
-  saturate or sag. This is the true "no stabilizer" floor.
-- **Actuator resized for realism, under-actuation kept deliberate:**
-  `MaxTorqueNm` 650 → **900** (covers the ≈ 740 N·m quasi-static slosh moment at
-  the 0.45 g friction limit with margin, still under-powered for aggressive
-  dynamic tracking); `ContinuousTorqueNm` 280 → **420** and now *enforced* by an
-  I²t winding-heat model (`ThermalTimeConstantSeconds` = 15 s) — bursts to peak
-  are fine, sustained hard maneuvers derate the peak toward continuous.
+- **`Hold` = 기계적으로 *잠근* 관절** (D5): 탱크가 차량에 강체, 슬로시 모멘트는
+  액추에이터가 아니라 차체 구조가 받음. 새 `StabilizerCommandMode.Locked`;
+  토크를 안 쓰고 포화·처짐 불가. 진짜 "스태빌라이저 없음" 바닥.
+- **현실성 위해 액추에이터 리사이즈, under-actuation 은 의도적으로 유지:**
+  `MaxTorqueNm` 650 → **900** (0.45 g 마찰 한계에서 ≈ 740 N·m quasi-static
+  슬로시 모멘트를 마진과 함께 커버, 공격적 동적 추종엔 여전히 부족);
+  `ContinuousTorqueNm` 280 → **420**, 이제 I²t 권선열 모델
+  (`ThermalTimeConstantSeconds` = 15 s)로 *강제* — 피크로의 버스트는 OK, 지속적
+  하드 기동은 피크를 연속 쪽으로 디레이트.
 
-### Baseline re-evaluation — pendulum ROM, mean spill [L], 6 seeds
+### 베이스라인 재평가 — 진자 ROM, 평균 스필 [L], seed 6개
 
-| scenario | Hold (locked) | SFA | PID | PrivFF |
+| 시나리오 | Hold (잠금) | SFA | PID | PrivFF |
 |---|---|---|---|---|
 | HighwayCalm | **0** | 0 | 0 | 0 |
 | HighwayBrisk | **0** | 0 | 0 | 0 |
@@ -131,246 +119,230 @@ under aggressive slosh loads), the owner set two things:
 | AggressiveRandom | **0** | 0 | 0 | 0 |
 | HighFillAggressive (0.22 m) | **9.8** | 42.6 | 56.5 | 97.6 |
 
-**With a rigid Hold, no analytic tilt controller beats it on any scenario.** On
-low-freeboard highway driving the reactive laws now *spill where Hold does not*
-(they add slosh energy by rotating the tank — F1's mechanism). In the one
-scenario that defeats even a rigid tank (`HighFillAggressive`), reactive tilt
-control spills 4–10× more and the actuator sits at 90–100 % torque-saturated —
-authority-limited, exactly as intended.
+**강체 Hold 상대로 어떤 분석적 틸트 컨트롤러도 어느 시나리오에서도 못 이긴다.**
+저-freeboard 고속도로 운전에서는 반응형 법칙이 이제 *Hold 가 안 넘치는 데서
+넘친다* (탱크를 회전시켜 슬로시 에너지를 더함 — F1 의 메커니즘). 강체 탱크조차
+지는 한 시나리오(`HighFillAggressive`)에서 반응형 틸트는 4~10× 더 넘치고
+액추에이터가 90~100% 토크 포화 — authority 제한, 의도한 그대로.
 
-F2's headline ("tilt beats Hold ~15× on brisk highway") was an artefact of the
-*sagging servo* Hold it compared against. Against a rigid Hold that advantage is
-gone.
+F2 의 헤드라인("brisk highway 에서 틸트가 Hold 를 ~15× 이김")은 그것이 비교했던
+*처지는 서보* Hold 의 산물이었다. 강체 Hold 상대로는 그 이점이 사라진다.
 
-### What this means for the project
+### 이것이 프로젝트에 의미하는 것
 
-The value proposition is now unambiguous: **rigid is a strong baseline, and
-beating it needs anticipation / learning, not reactive feedback.** The
-ideal-tilt diagnostic still shows head-room (perfect tank-tilt tracking → 0.40×
-wall wave, `IdealTiltTracking_…`), but no causal reactive law reaches it. This is
-the gap the RL policy (phase-1 item 12) and a privileged MPC exist to close.
-`PrivilegedFeedforward` (most aggressive tilting) remains the *worst* controller
-under stress — over-actuation is the enemy.
+가치 제안이 이제 명확: **강체는 강한 베이스라인이고, 이기려면 반응형 피드백이
+아니라 예측/학습이 필요하다.** ideal-tilt 진단은 여전히 head-room 을 보여줌
+(완벽한 탱크-틸트 추종 → 벽 파도 0.40×, `IdealTiltTracking_…`), 그러나 어떤
+인과적 반응 법칙도 거기 도달 못 함. 이게 RL 정책과 특권 MPC 가 메우려 존재하는
+격차. `PrivilegedFeedforward` (가장 공격적으로 틸트)는 스트레스 하에서 여전히
+*최악* 컨트롤러 — 과도한 작동이 적이다.
 
-Bracket-model discipline (F3) still stands. **Shallow-water re-run with the D5
-config confirms it** — locked Hold beats every reactive tilt controller on every
-scenario (`HighwayBriskLowFreeboard`: Hold 0.0004 L vs 15–20 L; `AggressiveRandom`:
-0.48 vs 7–50 L; `HighFillAggressive`: 56 vs 94–231 L). Shallow-water Hold does
-spill in the aggressive regime (a rigid tank still transmits the truck jerk to
-the liquid) — that residual is the real target for a learned/anticipatory policy.
+브래킷 규율(F3) 여전히 유효. **D5 config 로 얕은물 재실행이 확인** — 잠근 Hold
+가 모든 시나리오에서 모든 반응형 틸트 컨트롤러를 이김 (`HighwayBriskLowFreeboard`:
+Hold 0.0004 L vs 15~20 L; `AggressiveRandom`: 0.48 vs 7~50 L;
+`HighFillAggressive`: 56 vs 94~231 L). 얕은물 Hold 는 공격적 조건에서 스필함
+(강체 탱크도 트럭 jerk 를 액체에 전달) — 그 잔차가 학습/예측 정책의 진짜 타깃.
 
-### Guards
+### 가드
 
 `EvaluatorTests.RigidHold_NotBeatenByReactiveTilt_OnLowFreeboardHighway`,
 `ReactiveTilt_LosesToRigidHold_UnderAggressiveHighFill`,
-`GimbalActuatorTests` (locked joint, thermal derate).
+`GimbalActuatorTests` (잠근 관절, 열 디레이트).
 
 ---
 
-## F3 — 2026-08-28 — Shallow-water reference model: raw run flipped F2; with wave-breaking it reconciles F1 + F2
+## F3 — 2026-08-28 — 얕은물 참조 모델: 원시 실행은 F2 를 뒤집음; wave-breaking 을 넣으면 F1+F2 조화
 
-The deciding experiment promised in F1 (interpretation 1). `ShallowWaterSloshModel`
-— a 2-D depth-averaged Saint-Venant solver on a ~48×28 grid (decision D4) —
-dropped in behind `ISloshModel`; the whole baseline evaluation re-run
-(6 scenarios × 4 controllers × 6 seeds, `ShallowWaterValidationTests`, all
-`[Explicit]`, full sweep ~25–40 min).
+F1 에서 약속한 결정 실험(해석 1). `ShallowWaterSloshModel` — ~48×28 격자의 2-D
+깊이평균 Saint-Venant 솔버(D4) — 를 `ISloshModel` 뒤에 넣고 전체 베이스라인 평가
+재실행 (시나리오 6 × 컨트롤러 4 × seed 6, `ShallowWaterValidationTests`, 전부
+`[Explicit]`, 전체 스윕 ~25~40 분).
 
-### Stage 1 — raw NLSW solver: tilt control never beat `Hold`
+### 스테이지 1 — 원시 NLSW 솔버: 틸트 제어가 `Hold` 를 결코 못 이김
 
-The first run said **no analytic tilt controller beats holding the tank rigid on
-any highway scenario**, and `HighwayBriskLowFreeboard` — where F2 had tilt
-control winning 15× under the ROM — had tilt tying/losing while `Hold` itself
-spilled ~6× more than the ROM predicted. Grid-converged (27.6/27.0/27.0 L across
-30×18/48×28/71×41) and CFL-stable (sub-steps 2–4 of 64, no clamps) — **not a
-numerical artifact**. Low-amplitude agreement with the ROM still held (surface
-tilt within ~2 %, 13 % at 5 m/s²); the models only diverged at large amplitude.
+첫 실행은 **어떤 분석적 틸트 컨트롤러도 어느 고속도로 시나리오에서도 탱크를
+강체로 잡는 것을 못 이긴다** 고 말했고, `HighwayBriskLowFreeboard` — F2 에서
+ROM 하에 틸트가 15× 이겼던 곳 — 에서 틸트가 비기거나 지고 `Hold` 자체가 ROM
+예측보다 ~6× 더 넘쳤다. Grid-converged (30×18/48×28/71×41 에서 27.6/27.0/27.0 L)
+이고 CFL-stable (서브스텝 64 중 2~4, 클램프 없음) — **수치 아티팩트 아님**.
+저진폭 ROM 일치는 여전히 유지 (표면 틸트 ~2% 이내, 5 m/s² 에서 13%); 모델은
+큰 진폭에서만 갈라졌다.
 
-Cause: shallow-water equations **cannot break a wave** — it steepens into a bore
-that carries water up the wall instead of white-capping and dissipating — so
-NLSW is known to over-predict wall run-up, and every wave that touched the rim
-was counted as spilled.
+원인: 얕은물 방정식은 **파동을 깰 수 없다** — white-cap 으로 흩어지는 대신
+bore 로 가팔라져 물을 벽 위로 나름 — 그래서 NLSW 는 벽 run-up 을 과대예측하는
+것으로 알려졌고, rim 에 닿은 모든 파도가 스필로 계산됐다.
 
-### Stage 2 — add the missing physics (owner's call: "fix shallow water first")
+### 스테이지 2 — 빠진 물리 추가 (소유자 결정: "얕은물 먼저 고쳐라")
 
-Two physically-standard additions to `ShallowWaterSloshModel` (decision D4):
+`ShallowWaterSloshModel` 에 물리적으로 표준적인 두 추가 (D4):
 
-- **Wave-breaking eddy viscosity** — across a front steeper than ~31° a
-  diffusive momentum flux `ν = C·Δ·√(g·h̄)·ramp` damps the front (Kennedy et al.
-  2000, simplified to a slope trigger). `C = 0.6`.
-- **Rim run-up return** — the weir head is measured from a low-passed boundary
-  surface (`τ = 0.2 s`), not the instantaneous peak: a wave that slaps the rim
-  and recedes barely spills, only a sustained surge does.
+- **파동-breaking eddy viscosity** — ~31° 보다 가파른 front 를 가로질러 확산성
+  momentum flux `ν = C·Δ·√(g·h̄)·ramp` 가 front 를 감쇠 (Kennedy et al. 2000,
+  slope trigger 로 단순화). `C = 0.6`.
+- **rim run-up 복귀** — weir head 를 순간 피크가 아니라 low-pass 경계면
+  (`τ = 0.2 s`)에서 측정: rim 을 때리고 물러나는 파도는 거의 안 넘치고, 지속적
+  surge 만 넘침.
 
-Both constants are within the literature range and were fixed before re-running.
-Solver still healthy (sub-steps 4–14, no clamps), grid-converged
-(37.8/39.2/40.3 L), low-amplitude ROM agreement unchanged.
+두 상수 모두 문헌 범위 안이고 재실행 전에 고정. 솔버 여전히 건강 (서브스텝
+4~14, 클램프 없음), grid-converged (37.8/39.2/40.3 L), 저진폭 ROM 일치 변함 없음.
 
-### Stage 3 — result with wave-breaking: F1 and F2 reconciled
+### 스테이지 3 — wave-breaking 결과: F1 과 F2 조화
 
-Mean spill [L] over 6 seeds — `Hold` vs the best analytic tilt controller:
+seed 6개 평균 스필 [L] — `Hold` vs 최선 분석적 틸트 컨트롤러:
 
-| scenario | ROM Hold→tilt | SW Hold→tilt | verdict (both models) |
+| 시나리오 | ROM Hold→틸트 | SW Hold→틸트 | 판정 (두 모델) |
 |---|---|---|---|
-| HighwayCalm | 0 → 0 | **0 → 0** | nobody spills |
-| HighwayBrisk | — | **0 → 0** | nobody spills |
-| HighwayBriskLowFreeboard (0.27 m) | 6.98 → 0.39 | **22.4 → 15.5** | tilt helps (ROM 15×, SW ~1.4×) |
-| ScriptedManeuver (clean 1-axis) | — | **27.1 → 0.0004** | tilt helps enormously |
-| AggressiveRandom | tilt worse | **0.72 → 8.4** | **tilt hurts** (pumps slosh) |
-| HighFillAggressive | tilt worse | **90.9 → 138** | **tilt hurts** |
+| HighwayCalm | 0 → 0 | **0 → 0** | 아무도 안 넘침 |
+| HighwayBrisk | — | **0 → 0** | 아무도 안 넘침 |
+| HighwayBriskLowFreeboard (0.27 m) | 6.98 → 0.39 | **22.4 → 15.5** | 틸트가 도움 (ROM 15×, SW ~1.4×) |
+| ScriptedManeuver (깨끗한 1축) | — | **27.1 → 0.0004** | 틸트가 엄청 도움 |
+| AggressiveRandom | 틸트가 나쁨 | **0.72 → 8.4** | **틸트가 해로움** (슬로시 펌핑) |
+| HighFillAggressive | 틸트가 나쁨 | **90.9 → 138** | **틸트가 해로움** |
 
-`PrivilegedFeedforward` (most aggressive tilting) is the **worst** controller in
-every scenario under stress (`AggressiveRandom` 70 L, `HighFillAggressive`
-210 L). Over-actuation is the enemy.
+`PrivilegedFeedforward` (가장 공격적 틸트)는 스트레스 하 모든 시나리오에서
+**최악** 컨트롤러 (`AggressiveRandom` 70 L, `HighFillAggressive` 210 L).
+과도한 작동이 적이다.
 
-**The two independent slosh models now agree on direction everywhere:**
-- gentle / moderate highway → nobody spills;
-- brisk highway at tight freeboard → reactive tilt control helps (ROM says a
-  lot, shallow water says a little);
-- clean single-axis manoeuvre → tilt control nearly eliminates the spill;
-- aggressive / adversarial transients → reactive tilt control *pumps* the slosh
-  and loses to holding rigid — **this is the RL / anticipation target** (F1 stands).
+**두 독립 슬로시 모델이 이제 어디서나 방향에 동의:**
+- 완만/중간 고속도로 → 아무도 안 넘침;
+- 좁은 freeboard 의 brisk 고속도로 → 반응형 틸트가 도움 (ROM 은 많이, 얕은물은
+  조금);
+- 깨끗한 단일축 기동 → 틸트가 스필을 거의 없앰;
+- 공격적/적대적 일시현상 → 반응형 틸트가 슬로시를 *펌핑*하고 강체로 잡는 것에
+  진다 — **이게 RL / 예측 타깃** (F1 유효).
 
-They differ on magnitude: the ROM is optimistic about how much tilt helps on
-highways, shallow water is pessimistic about aggressive driving being
-controllable. The `HighwayBriskLowFreeboard` "tilt helps ~1.4×" sits in the
-regime where the breaking constants matter — treat it as "small positive", not a
-precise number.
+크기에서는 다름: ROM 은 고속도로에서 틸트가 얼마나 도움되는지 낙관적, 얕은물은
+공격적 운전이 제어 가능한지 비관적. `HighwayBriskLowFreeboard` 의 "틸트 ~1.4×
+도움" 은 breaking 상수가 중요한 조건 — "작은 양수" 로 다루지 정확한 수로 보지 말 것.
 
-### Net effect on the project
+### 프로젝트에 미친 순효과
 
-- The premise is **not** broken. Tank-tilt stabilization is a real, well-posed
-  task for highway driving; a modest rule-based win, with headroom for a learned
-  policy (ideal-tilt tracking → 0.40× wall wave, `IdealTiltTracking_…`).
-- The pendulum ROM is **trustworthy enough for bulk RL training** — it agrees
-  with the 2-D model on direction and ranking. Shallow water is the fidelity
-  check.
-- **Adopted: bracket-model discipline** (interpretation 3). Report controllers
-  against both models; a result counts only if it holds under both. RL trains on
-  the ROM (cheap), is validated on shallow water.
+- 전제는 **깨지지 않음.** 탱크-틸트 안정화는 고속도로 운전에 대해 실재하는
+  well-posed 과제; modest 한 규칙기반 승리 + 학습 정책의 head-room
+  (ideal-tilt 추종 → 벽 파도 0.40×, `IdealTiltTracking_…`).
+- 진자 ROM 은 **대량 RL 학습에 충분히 신뢰 가능** — 2-D 모델과 방향·순위에
+  동의. 얕은물은 정밀도 체크.
+- **채택: 브래킷 모델 규율** (해석 3). 컨트롤러를 두 모델에 대해 보고;
+  두 모델 모두에서 유지될 때만 결과로 인정. RL 은 ROM 으로 학습(쌈),
+  얕은물로 검증.
 
-### Guards / how to re-check
+### 가드 / 재확인 방법
 
-`ShallowWaterValidationTests` — all `[Explicit]` (full sweep ~25–40 min; too slow
-for the default suite, unlike the ROM guards in `EvaluatorTests`). Run
+`ShallowWaterValidationTests` — 전부 `[Explicit]` (전체 스윕 ~25~40 분; 기본
+스위트에 넣기엔 너무 느림). 얕은물 모델·액추에이터·분석적 컨트롤러를 바꾸면
 `SolverHealth_AcrossScenarios` + `BaselineEvaluation_UnderShallowWater_PrintsReport`
-after any change to the shallow-water model, the actuator, or the analytic
-controllers. `GridConvergence_…` if the scheme changes.
+실행. 스킴을 바꾸면 `GridConvergence_…`.
 
-### Addendum (2026-08-28) — shallow-water reaction ≈ 2× the ROM's → the Hold gimbal saturates
+### 부록 (2026-08-28) — 얕은물 반응 ≈ ROM 의 2× → Hold 짐벌 포화
 
-> **Resolved by decision D5 / finding F4.** The owner's call: the actuator was
-> resized (`MaxTorqueNm` 650 → 900, `ContinuousTorqueNm` 280 → 420 now enforced
-> via an I²t thermal model) and, more importantly, `Hold` is now a *mechanically
-> locked* joint that does not use the actuator at all — so "Hold" can no longer
-> sag. The 2× reaction difference between the models is real and still matters
-> for the *active* controllers; it no longer muddies the Hold baseline.
+> **D5 / F4 로 해결됨.** 소유자 결정: 액추에이터 리사이즈 (`MaxTorqueNm` 650 →
+> 900, `ContinuousTorqueNm` 280 → 420 이제 I²t 열 모델로 강제), 그리고 더
+> 중요하게 `Hold` 가 이제 액추에이터를 전혀 안 쓰는 *기계적으로 잠근* 관절 —
+> 그래서 "Hold" 는 더 이상 처질 수 없음. 모델 간 2× 반응 차이는 실재하고
+> *능동* 컨트롤러에는 여전히 중요; Hold 베이스라인을 흐리지는 않음.
 
-Found while rebuilding the scene visualisation (`SceneCapture`). Under the
-aggressive `ScriptedManeuverDriver` + `Hold`:
+씬 시각화 재구축(`SceneCapture`) 중 발견. 공격적 `ScriptedManeuverDriver` +
+`Hold` 하에서:
 
-| slosh model | max gimbal pitch | angle-limited | spill |
+| 슬로시 모델 | 최대 짐벌 pitch | 각도 제한 | 스필 |
 |---|---|---|---|
-| Pendulum ROM | ~0° (servo holds) | no | 0 L |
-| Shallow water | **30° (pegged at the travel limit)** | yes | 1.1 L |
+| 진자 ROM | ~0° (서보가 잡음) | 아니오 | 0 L |
+| 얕은물 | **30° (travel 한계에 박힘)** | 예 | 1.1 L |
 
-Under the realistic `HighwayDriver` (briskness 0.5) the shallow-water Hold gimbal
-stays at ~0° and does not spill — this is an aggressive-maneuver effect only.
+현실적 `HighwayDriver` (briskness 0.5) 하에서 얕은물 Hold 짐벌은 ~0° 에
+머물고 안 넘침 — 이건 공격적 기동에서만 나는 효과.
 
-Why: the fore-aft reaction moment on a rigidly-held tank under a hard
-longitudinal maneuver is ~M·aₓ·(h/2 + L²/12h) ≈ 500 N·m at 3 m/s². The pendulum
-ROM returns roughly half that (~230 N·m): it caps the participating mass at 0.45
-and puts the remainder on-axis, where it makes little moment. The gimbal's
-`ContinuousTorqueNm = 280` sits between the two, so the Hold servo holds under
-the ROM and saturates under shallow water.
+이유: 강체로 잡은 탱크에 대한 전후 반응 모멘트는 하드 종방향 기동에서
+~M·aₓ·(h/2 + L²/12h) ≈ 3 m/s² 에서 500 N·m. 진자 ROM 은 대략 절반(~230 N·m)을
+반환: participating mass 를 0.45 로 캡하고 나머지를 축상에 놓아 모멘트를 거의
+안 만듦. 짐벌의 `ContinuousTorqueNm = 280` 이 둘 사이에 있어서 Hold 서보가 ROM
+하에서는 잡고 얕은물 하에서는 포화. (그 후 D5 로 값이 조정됨.)
 
-Consequences:
-- F3's aggressive-regime rows still rank `Hold` best, but under shallow water
-  "Hold" there is *a saturated servo sagging toward its 30° limit*, not a rigid
-  tank. Part of why aggressive driving is hard under shallow water is that the
-  actuator is torque-limited against the true slosh moment.
-- The ROM is optimistic about **actuator loading**, not only about spill.
-- Open questions for the owner (not yet actioned): (a) is
-  `GimbalConfig.ContinuousTorqueNm` / `MaxTorqueNm` sized for the real slosh
-  moment, or is under-authority the intended challenge? (b) should the `Hold`
-  baseline model a *locked* joint (moment reacted by the truck, no sag) as the
-  true floor, distinct from "servo commanding 0"?
+결과:
+- F3 의 공격적 조건 행은 여전히 `Hold` 를 최선으로 순위 매기지만, 얕은물
+  하에서 "Hold" 는 강체 탱크가 아니라 *30° 한계 쪽으로 처지는 포화 서보*.
+  얕은물에서 공격적 운전이 어려운 이유의 일부는 액추에이터가 실제 슬로시
+  모멘트에 토크 제한되는 것.
+- ROM 은 스필뿐 아니라 **액추에이터 하중**에도 낙관적.
+- (이후 D5 로 액션됨) 열린 질문이었던 것: (a) `GimbalConfig.ContinuousTorqueNm`
+  / `MaxTorqueNm` 가 실제 슬로시 모멘트에 맞게 크기 조정됐나, 아니면 under-authority
+  가 의도된 도전인가? (b) `Hold` 베이스라인이 "0 을 명령하는 서보" 와 구별되는
+  *잠근* 관절(모멘트를 트럭이 받음, 처짐 없음)을 진짜 바닥으로 모델링해야 하나?
 
 ---
 
-## F2 — 2026-08-28 — A realistic driver flips F1: tilt control works for highway driving
+## F2 — 2026-08-28 — 현실적 운전자가 F1 을 뒤집음: 틸트 제어가 고속도로 운전에 통한다
 
-> **Superseded by F4.** The "tilt beats Hold ~15×" result here compared against a
-> Hold whose servo *sagged* under slosh load. Against the rigid locked-joint Hold
-> (decision D5) that advantage disappears — reactive tilt control does not beat a
-> rigid tank on any scenario. Kept for the driver-design reasoning.
+> **F4 로 대체됨.** 여기 "틸트가 Hold 를 ~15× 이김" 결과는 슬로시 하중에 서보가
+> *처지는* Hold 와 비교한 것. 강체 잠금관절 Hold(D5) 상대로는 그 이점이 사라짐 —
+> 반응형 틸트는 어느 시나리오에서도 강체 탱크를 못 이김. 운전자 설계 논리
+> 때문에 남겨둠.
 
-Interpretation 3 of F1 (the synthetic driver was too broadband) largely holds.
+F1 의 해석 3 (합성 운전자가 너무 광대역)이 대체로 유지.
 
-`HighwayDriver` — slow lane-keeping wander plus **smooth** (raised-cosine)
-maneuvers: lane changes, a highway curve held and released, easing for traffic,
-a firm-but-not-emergency brake. No sharp edges near the slosh frequency.
+`HighwayDriver` — 느린 차선유지 배회 + **매끄러운**(raised-cosine) 기동: 차선
+변경, 유지했다 푸는 고속도로 커브, 교통에 맞춘 감속, 확실하지만 비상은 아닌
+제동. 슬로시 주파수 근처의 날카로운 모서리 없음.
 
-Re-running the evaluation with it (`HighwayBriskLowFreeboard`: 0.27 m freeboard,
-briskness 0.9, 40 s, 6 seeds):
+이걸로 평가 재실행 (`HighwayBriskLowFreeboard`: 0.27 m freeboard, briskness 0.9,
+40 s, seed 6):
 
-| controller | spill (L, mean) | spill / episodes |
+| 컨트롤러 | 스필 (L, 평균) | 스필 / 에피소드 |
 |---|---|---|
 | PID (SpecificForceAlignment+I) | **0.39** | 4/6 |
 | SpecificForceAlignment | **0.44** | 4/6 |
 | PrivilegedFeedforwardTilt | 0.50 | 4/6 |
-| **Hold** | **6.98** (max 38.8) | 4/6 |
+| **Hold** | **6.98** (최대 38.8) | 4/6 |
 
-The analytic tilt controllers now spill **~15× less than doing nothing**. For
-realistic highway driving the task is well-posed and rule-based control helps.
+분석적 틸트 컨트롤러가 이제 **아무것도 안 하는 것보다 ~15× 덜 넘침**. 현실적
+고속도로 운전에 대해 과제는 well-posed 이고 규칙기반 제어가 도움.
 
-**But the aggressive/adversarial regime is unchanged** (`AggressiveRandom`,
-`HighFillAggressive`): every tilt controller still spills more than Hold and runs
-2–13× the slosh energy — the sharp broadband maneuvers push the equivalent-
-pendulum ROM out of its small-amplitude validity and the tilt loop resonates.
+**그러나 공격적/적대적 조건은 변함 없음** (`AggressiveRandom`,
+`HighFillAggressive`): 모든 틸트 컨트롤러가 여전히 Hold 보다 더 넘치고 슬로시
+에너지를 2~13× 씀 — 날카로운 광대역 기동이 등가진자 ROM 을 소진폭 유효 범위
+밖으로 밀어내고 틸트 루프가 공진.
 
-**Net picture — a healthy problem:**
-- Highway driving: rule-based tilt control works; RL should match/beat it easily.
-- Aggressive transients + plant randomization: where RL / anticipation earns its
-  place, and where the shallow-water check (F1 interpretation 1, still to do)
-  matters for trusting the numbers.
+**순 그림 — 건강한 문제:**
+- 고속도로 운전: 규칙기반 틸트 제어가 통함; RL 은 쉽게 매칭/이겨야 함.
+- 공격적 일시현상 + 플랜트 랜덤화: RL / 예측이 제 값을 하는 곳, 그리고
+  얕은물 체크가 수를 신뢰하는 데 중요한 곳.
 
-**LQR shelved as a baseline.** `LqrSloshController` resonates in every scenario:
-its linear design model (ideal rate follower) is too far from the real
-servo + transport delay + angle-command actuator. `AxisLqr`'s Riccati math is
-correct and still tested; a proper MPC on the real actuator model is future work.
+**LQR 을 베이스라인에서 보류.** `LqrSloshController` 는 모든 시나리오에서 공진:
+선형 설계 모델(이상적 rate follower)이 실제 서보 + 전송지연 + 각도명령
+액추에이터와 너무 멀다. `AxisLqr` 의 Riccati 수학은 맞고 여전히 테스트됨;
+실제 액추에이터 모델에 대한 제대로 된 MPC 는 미래 작업.
 
-Guard: `EvaluatorTests.TiltControl_ClearlyBeatsHold_OnRealisticBriskDriving` and
+가드: `EvaluatorTests.TiltControl_ClearlyBeatsHold_OnRealisticBriskDriving`,
 `NaiveTiltControl_StillExcitesSlosh_UnderAggressiveDriving`.
 
 ---
 
-## F1 — 2026-08-28 — No baseline controller beats "hold the tank rigid"
+## F1 — 2026-08-28 — 어떤 베이스라인 컨트롤러도 "탱크를 강체로 잡기" 를 못 이긴다
 
-**Superseded in part by F2** (realistic driver) — kept for the reasoning and the
-plant-model history. The aggressive-regime finding still stands.
+**F2 로 부분 대체** (현실적 운전자) — 논리와 플랜트 모델 이력 때문에 남겨둠.
+공격적 조건 발견은 여전히 유효.
 
-**Status: project-shaping. Needs a direction decision (see end).**
+**상태: 프로젝트 형태를 정하는 발견. 방향 결정 필요.**
 
-### What was tried (design-review option A: build a real ceiling)
+### 시도한 것 (design-review 옵션 A: 진짜 천장 만들기)
 
-Four baselines, evaluated over the fixed 6-scenario set × 6 seeds
+고정 6-시나리오 셋 × seed 6 에 대해 평가한 4 베이스라인
 (`BaselineControllerTests.Report_PrintsAndIsDeterministic`):
 
-- **Hold** — command joint angle 0 (tank rigid to the bed). The floor.
-- **SpecificForceAlignment** — command the joint *angle* = low-passed felt tilt
-  (sensor-only). Servo tracks it.
-- **SpecificForceAlignment+I** — the above plus a clamped integral trim.
-- **PrivilegedFeedforwardTilt** — command the joint angle = low-passed
-  *slosh-free* ideal tilt (privileged: clean specific force).
-- **LQR** — per-axis discrete LQR on the coupled slosh + gimbal model, using the
-  true slosh state and modal frequency/damping (privileged). Solved via the
-  discrete Riccati recursion (`AxisLqr`).
+- **Hold** — 관절 각도 0 명령 (탱크가 베드에 강체). 바닥.
+- **SpecificForceAlignment** — 관절 *각도* = low-pass 한 felt tilt 명령
+  (센서전용). 서보가 추종.
+- **SpecificForceAlignment+I** — 위 + 클램프된 적분 트림.
+- **PrivilegedFeedforwardTilt** — 관절 각도 = low-pass 한 *슬로시 없는*
+  이상적 틸트 명령 (특권: 깨끗한 specific force).
+- **LQR** — 결합 슬로시 + 짐벌 모델에 대한 축당 이산 LQR, 실제 슬로시 상태와
+  모달 주파수/감쇠 사용 (특권). 이산 Riccati 재귀(`AxisLqr`)로 풂.
 
-### Result
+### 결과
 
-On the four low/moderate scenarios nobody spills. On the two that discriminate:
+낮은/중간 4 시나리오에서 아무도 안 넘침. 판별하는 둘에서:
 
-| ModerateFreeboard (0.30 m freeboard) | spill (L, mean) |
+| ModerateFreeboard (0.30 m freeboard) | 스필 (L, 평균) |
 |---|---|
 | **Hold** | **0.4** |
 | SpecificForceAlignment | 5.8 |
@@ -378,65 +350,57 @@ On the four low/moderate scenarios nobody spills. On the two that discriminate:
 | PrivilegedFeedforwardTilt | 35.9 |
 | LQR | 36.7 |
 
-Every active controller spills **more** than doing nothing, and *more
-intervention makes it worse* (the aggressive trackers, Priv and LQR, are worst).
-HighFillAggressive shows the same ordering.
+모든 능동 컨트롤러가 아무것도 안 하는 것보다 **더** 넘치고, *더 많이 개입할수록
+더 나빠짐* (공격적 트래커 Priv 와 LQR 이 최악). HighFillAggressive 도 같은 순서.
 
-### Why
+### 이유
 
-Rotating the tank to track a tilt target excites the first slosh mode — through
-the gravity-vector rotation transient and the Euler term (tank angular
-acceleration forces the pendulum). For this driver's broadband, event-driven
-maneuvers the slosh energy added by moving the tank exceeds the spill reduction
-from being aligned.
+틸트 타깃을 추종하려 탱크를 회전시키면 1차 슬로시 모드를 여기함 — 중력벡터 회전
+일시현상과 Euler 항(탱크 각가속이 진자를 밀어냄)을 통해. 이 운전자의 광대역
+이벤트 구동 기동에 대해, 탱크를 움직여 더해지는 슬로시 에너지가 정렬되어 얻는
+스필 감소를 초과.
 
-This is **not** fixable by actuator authority (`ActuatorAuthorityTests`): the
-privileged controller stays at ~36–42 L spill across ±30°→±60° travel, 2× rate,
-2× torque, 2× bandwidth, and all of them combined. Widening the travel limit
-actually makes **Hold worse** (the load-dragged servo swings further off-target
-and kicks the slosh), so the ±30° limit is currently *protecting* Hold.
+이건 액추에이터 authority 로 **고칠 수 없음** (`ActuatorAuthorityTests`): 특권
+컨트롤러가 ±30°→±60° travel, 2× rate, 2× 토크, 2× 대역폭, 그리고 이 전부
+합쳐서도 ~36~42 L 스필에 머묾. travel 한계를 넓히면 사실 **Hold 가 더 나빠짐**
+(하중에 끌린 서보가 타깃에서 더 멀리 흔들려 슬로시를 참), 그래서 현재 ±30°
+한계가 Hold 를 *보호*하고 있음.
 
-Yet an isolated diagnostic (`PlantControllabilityTests`) shows that *kinematic*
-tank tilt tracking a clean sinusoidal maneuver cuts the wall wave ~12× (perfect)
-or ~3× (through a 2 Hz lag). So tilt control helps for smooth single-axis input;
-it fails for the sharp, two-axis, actuator-in-the-loop case.
+그러나 고립 진단(`PlantControllabilityTests`)은 *운동학적* 탱크 틸트가 깨끗한
+사인 기동을 추종하면 벽 파도를 ~12×(완벽) 또는 ~3×(2 Hz 지연 통과) 줄임을 보임.
+즉 틸트 제어는 매끄러운 단일축 입력에는 도움; 날카롭고 2축이고
+actuator-in-the-loop 인 경우엔 실패.
 
-### Interpretations (the decision)
+### 해석 (결정)
 
-1. **Slosh-ROM coupling too pessimistic.** The equivalent-pendulum model's
-   response to tank rotation (Euler term + gravity-rotation transient) may
-   over-penalize tank motion. A shallow-water model could show control helping.
-   → calibrate/upgrade the slosh model before trusting the controllability
-   verdict (design-review §6 caveat; this was the deferred "option B").
-2. **The task as posed is near-uncontrollable for aggressive driving.** Real tank
-   trucks use baffles + careful driving, not active gimbals. 2-axis rotation of
-   an open tank may simply not have the authority. → adjust the premise: add
-   preview/anticipation, a third (heave) axis, baffles, or accept a "robustness
-   under mild conditions" framing.
-3. **The synthetic driver is too broadband.** `RandomManeuverDriver` fires sharp
-   0.3–1.0 s events that sit near the roll slosh period (~0.8 s) and resonate.
-   Real highway driving is gentler and more band-limited. → redesign the driver
-   distribution and re-evaluate.
+1. **슬로시 ROM 커플링이 너무 비관적.** 등가진자 모델의 탱크 회전 응답(Euler
+   항 + 중력회전 일시현상)이 탱크 운동을 과벌할 수 있음. 얕은물 모델이 제어가
+   도움됨을 보일 수도. → controllability 판정을 신뢰하기 전에 슬로시 모델
+   보정/업그레이드.
+2. **제시된 대로의 과제가 공격적 운전에 대해 거의 제어 불가능.** 실제 탱크
+   트럭은 능동 짐벌이 아니라 배플 + 조심스러운 운전을 씀. 개방형 탱크의 2축
+   회전은 그냥 authority 가 없을 수도. → 전제 조정: preview/예측, 3번째(heave)
+   축, 배플 추가, 또는 "온화한 조건에서의 robustness" 프레이밍 수용.
+3. **합성 운전자가 너무 광대역.** `RandomManeuverDriver` 가 roll 슬로시
+   주기(~0.8 s) 근처의 날카로운 0.3~1.0 s 이벤트를 쏘고 공진. 실제 고속도로
+   운전은 더 완만하고 대역제한적. → 운전자 분포 재설계하고 재평가.
 
-### Model changes made along the way (committed)
+### 도중에 만든 모델 변경 (커밋됨)
 
-- Overflow rewritten as a bounded wedge + weir; wave elevation capped at
-  0.8·depth (the old weir over-estimated ~100×).
-- Quadratic (amplitude-dependent) slosh damping added — models wave-breaking
-  dissipation, keeps the ROM from running far outside small-amplitude validity
-  (Dodge/Keulegan).
-- Gimbal reported angular acceleration low-passed (18 Hz) so raw servo accel
-  doesn't kick the pendulum.
-- `StabilizerCommand` gained a `JointAngle` mode (design-review §11); the
-  analytic baselines command angle, the actuator servo tracks it. RL keeps
-  `JointRate`.
-- `AxisLqr` (discrete Riccati) + `LqrSloshController`; `PrivilegedObservation`
-  now carries the true modal frequencies/damping.
-- Realistic magnitudes: brake/friction ≈ 0.45 g, tank 0.8 m tall, 0.5 fill.
-  (Tank later resized to 0.6 m tall — see the note at the top of this file.)
+- Overflow 를 유계 wedge + weir 로 재작성; 파동 elevation 을 0.8·depth 로 캡
+  (예전 weir 가 ~100× 과대추정).
+- 2차(진폭 의존) 슬로시 감쇠 추가 — 파동-breaking 소산 모델링, ROM 이 소진폭
+  유효성 밖으로 멀리 안 가게 유지 (Dodge/Keulegan).
+- 짐벌 보고 각가속을 low-pass (18 Hz) — 원시 서보 accel 이 진자를 안 차게.
+- `StabilizerCommand` 에 `JointAngle` 모드 추가 (design-review §11); 분석적
+  베이스라인이 각도 명령, 액추에이터 서보가 추종. RL 은 `JointRate` 유지.
+- `AxisLqr` (이산 Riccati) + `LqrSloshController`; `PrivilegedObservation`
+  이 이제 실제 모달 주파수/감쇠를 담음.
+- 현실적 크기: 제동/마찰 ≈ 0.45 g, 탱크 0.8 m 높이, 0.5 fill. (탱크는 이후
+  0.6 m 높이로 리사이즈 — 이 파일 상단 노트.)
 
-### Guards
+### 가드
 
-`EvaluatorTests.NoBaselineControllerBeatsHold_OnTheDiscriminatingScenario` and
-`NaiveFeedbackControllers_ExciteSlosh_AndWorsenSpill` lock in the current state;
-if a plant/controller change flips either, this file must be revisited.
+`EvaluatorTests.NoBaselineControllerBeatsHold_OnTheDiscriminatingScenario`,
+`NaiveFeedbackControllers_ExciteSlosh_AndWorsenSpill` 가 현재 상태를 고정;
+플랜트/컨트롤러 변경이 둘 중 하나를 뒤집으면 이 파일을 재검토해야 한다.
