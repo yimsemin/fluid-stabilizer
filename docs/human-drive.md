@@ -1,122 +1,109 @@
-# Driving it yourself
+# 직접 운전하기
 
-## Open
+## 열기
 
-1. Open the project in Unity **6000.5.10f1** (Unity Hub → Add → this folder).
-2. **menu ▸ FluidStabilizer ▸ Rebuild Play Scene**  — this generates
-   `Assets/FluidStabilizer/Scenes/PlayScene.unity` (it is not in git: the builder
-   reshuffles every id on each run, so it is regenerated on demand).
-3. Open that scene and press **Play**.
+1. Unity **6000.5.10f1** 에서 프로젝트 열기 (Unity Hub → Add → 이 폴더).
+2. **메뉴 ▸ FluidStabilizer ▸ Rebuild Play Scene** — `Assets/FluidStabilizer/Scenes/PlayScene.unity`
+   생성 (git 에 없음: 빌더가 매 실행마다 모든 id 를 재배열해서 필요시 재생성).
+3. 그 씬을 열고 **Play** 누르기.
 
-Re-run the menu item any time the scene looks wrong or you changed `SceneBuilder`.
+씬이 이상해 보이거나 `SceneBuilder` 를 바꿨으면 아무 때나 메뉴 항목 재실행.
 
-## Controls
+## 조작
 
 | | |
 |---|---|
-| **W / S**  or  gamepad **triggers** | throttle / brake |
-| **A / D**  or  left **stick** | steer |
-| **Space** | stabilizer **on / off** (feel the difference) |
-| **0 / 1 / 2 / 3** | pick stabilizer: 0 = off, 1 = specific-force align, 2 = + integral, 3 = privileged feed-forward (cheats — comparison only) |
-| **M** | slosh model: pendulum ROM ⇄ shallow water (restarts the run) |
-| **G** | road: flat ⇄ real road (rolling grade, curve bank, roughness, potholes) |
-| **R** | reset the run |
-| **T** | slow-mo (0.25×) |
-| **Tab** | camera: chase → side → top |
-| **P** | **record** your drive to a trace file / press again to stop & save |
-| **L** | **replay** the newest recorded trace / press again to drive again |
-| **C** | **compare** stabilizers side by side on the newest trace / press again to exit |
+| **W / S** 또는 게임패드 **트리거** | 가속 / 제동 |
+| **A / D** 또는 왼쪽 **스틱** | 조향 |
+| **Space** | 스태빌라이저 **on / off** (차이를 느껴봐) |
+| **0 / 1 / 2 / 3 / 4** | 스태빌라이저 선택: 0 = off(강체), 1 = specific-force align, 2 = + 적분, 3 = 특권 feed-forward(치트 — 비교용), 4 = 학습 정책 (`serve_policy.py` 필요) |
+| **M** | 슬로시 모델: 진자 ROM ⇄ 얕은물 (실행 재시작) |
+| **G** | 도로: 평평 ⇄ 실제 도로 (굽이치는 grade, 커브 bank, 거칠기, 포트홀) |
+| **R** | 실행 리셋 |
+| **T** | 슬로모 (0.25×) |
+| **Tab** | 카메라: 추적 → 측면 → 위 |
+| **P** | 주행 **녹화** 시작 / 다시 눌러 정지 & 저장 |
+| **L** | 최신 녹화 트레이스 **재생** / 다시 눌러 다시 운전 |
+| **C** | 최신 트레이스로 스태빌라이저 나란히 **비교** / 다시 눌러 종료 |
 
-A banner across the top of the screen always shows the trace state: **idle**,
-**● REC** (with elapsed time + step count, plus a red border), or **▶ REPLAY**
-(with a progress bar). Every save logs the full file path to the Console.
+화면 상단 배너가 항상 트레이스 상태를 표시: **idle**, **● REC** (경과 시간 +
+스텝 수 + 빨간 테두리), 또는 **▶ REPLAY** (진행 바). 저장할 때마다 전체 파일
+경로를 콘솔에 로그.
 
-## What you're looking at
+## 보고 있는 것
 
-- The blue flatbed is the truck; on a short dark mount above it sits the tank —
-  drawn as an **open edge frame** (12 beams, no panels) so you can see straight
-  in. The tank is lifted a small cosmetic amount (`SimView.TankVisualLift`) so
-  the surface tilt and any overflow are clearly visible; the physics is
-  unchanged. The frame flashes **red** on a spill.
-- Inside is the liquid — a closed, deforming water body whose top surface is the
-  slosh model's free surface, translucent (fresnel edge, specular glint,
-  ripple). It never overhangs the walls; anything cresting the rim is overflow.
-- Under a hard maneuver with the stabilizer **off** and the **shallow-water**
-  model the tank can visibly sag to its 30° travel limit — the gimbal servo
-  saturates against the slosh moment (see `docs/findings.md` F3 addendum). This
-  does not happen under gentle driving or the pendulum model.
-- **M** switches the slosh model. **Pendulum ROM** (default): the surface is a
-  tilted plane from the two first-mode angles — a proxy, the ROM has no spatial
-  surface. **Shallow water**: the surface is the 2-D solver's real height field —
-  travelling waves that run up the walls and slop over the rim.
-- It is not photoreal and never will be — no particles, foam or spray. Full
-  SPH/FLIP fluid breaks determinism and the RL step budget (design-review §6,
-  §21). "Clearly a body of sloshing liquid" is the target, not CGI water.
-- HUD: speed, longitudinal / lateral g, **min freeboard** (turns red near 0),
-  litres spilled (flashes on a spill), slosh energy, and which stabilizer is on.
+- 파란 flatbed 가 트럭; 그 위 짧은 어두운 마운트에 탱크 — **개방 edge frame**
+  (기둥 12개, 패널 없음)으로 그려져 안이 훤히 보임. 탱크는 표면 틸트와 overflow
+  가 잘 보이도록 약간 (`SimView.TankVisualLift`) 들려 있음; 물리는 변함 없음.
+  스필하면 프레임이 **빨갛게** 번쩍임.
+- 안에는 액체 — 닫힌, 변형하는 water body, 윗면이 슬로시 모델의 자유표면,
+  반투명 (fresnel edge, specular glint, 잔물결). 벽을 넘어 튀어나오지 않음;
+  rim 을 넘는 건 overflow.
+- 스태빌라이저 **off** + **얕은물** 모델로 하드 기동 시 탱크가 눈에 띄게 30°
+  travel 한계까지 처질 수 있음 — 짐벌 서보가 슬로시 모멘트에 포화
+  (`docs/findings.md` F3 부록). 완만한 운전이나 진자 모델에서는 안 일어남.
+- **M** 이 슬로시 모델 전환. **진자 ROM** (기본): 표면이 두 1차 모드 각에서
+  나온 기울어진 평면 — 프록시, ROM 은 공간 표면이 없음. **얕은물**: 표면이 2-D
+  솔버의 실제 height field — 벽을 타고 올라 rim 을 넘는 이동 파도.
+- 포토리얼 아니고 앞으로도 아님 — 입자, 거품, 물보라 없음. 완전 SPH/FLIP 유체는
+  결정론과 RL 스텝 예산을 깸 (design-review §6, §21). "명백히 출렁이는 액체
+  덩어리" 가 목표, CGI 물이 아님.
+- HUD: 속도, 종/횡 g, **최소 freeboard** (0 근처면 빨강), 스필 리터 (스필하면
+  번쩍), 슬로시 에너지, 어떤 스태빌라이저가 켜졌는지 + 현재 `experiment.txt` 프로파일.
 
-## What to try
+## 해볼 것
 
-- Drive smoothly on a straight, then a gentle lane change — watch the surface
-  wobble and settle.
-- Hard brake with the stabilizer **off** (Space), then **on** — compare the
-  freeboard bar and the spill counter.
-- A quick swerve at speed: the naive stabilizers (1, 2) can *pump* the slosh on
-  sharp inputs (finding F1); smooth driving is where they clearly help (F2).
+- 직선에서 매끄럽게 운전하다 완만한 차선 변경 — 표면이 흔들리고 가라앉는 걸 봐.
+- 스태빌라이저 **off** (Space)로 하드 제동, 그다음 **on** — freeboard 바와
+  스필 카운터 비교.
+- 속도에서 빠른 swerve: 순진한 스태빌라이저 (1, 2)는 날카로운 입력에 슬로시를
+  *펌핑*할 수 있음 (finding F1); 매끄러운 운전이 그것들이 명확히 돕는 곳 (F2).
 
-## Recording your drives (for the three-way comparison)
+## 주행 녹화하기 (3-way 비교용)
 
-Press **P**, drive, press **P** again. The drive is saved as a small text file
-to **`<project>/Traces/drive-<timestamp>.trace.csv`** (in the Editor) — a header
-with the setup (seed, fill, road, slosh model) and one `throttle,brake,steer`
-row per physics step. The whole simulation is deterministic given the seed, so
-this file is a complete, reproducible definition of that drive.
+**P** 누르고, 운전하고, **P** 다시. 주행이 작은 텍스트 파일로 저장됨:
+**`<project>/Traces/drive-<timestamp>.trace.csv`** (Editor) — 설정(seed, fill,
+도로, 슬로시 모델) 헤더 + 물리 스텝당 `throttle,brake,steer` 행 하나. 전체
+시뮬레이션이 seed 로 결정론적이라 이 파일이 그 주행의 완전하고 재현 가능한 정의.
 
-Press **L** to replay the newest one. During replay you are *not* driving — the
-recorded inputs play back — so you can press **0–3** to switch the stabilizer
-and watch the *same* drive handled by rigid / rule-based / (later) the learned
-policy, over the *same* road. That is the headline comparison; the next step
-adds side-by-side replay of two tanks at once plus a running spill count.
+**L** 로 최신 것 재생. 재생 중에는 운전 *안 함* — 녹화된 입력이 재생 — 그래서
+**0~4** 를 눌러 스태빌라이저를 전환하고 *같은* 주행이 강체 / 규칙기반 / 학습
+정책으로 *같은* 도로에서 처리되는 걸 볼 수 있음. 그게 헤드라인 비교.
 
-Record several *different* drives (calm commute, brisk highway, a rough-road run
-with **G** on). Some become the training disturbance data; some are held out as
-the evaluation set. For drives meant to *discriminate* the stabilizers, keep the
-**road on (`G`)** and the tank fairly full — below about 55 % fill the pendulum
-model's waves never reach the rim, so nothing spills.
+*다른* 주행 여러 개 녹화 (차분한 통근, brisk 고속도로, **G** 켠 거친 도로 주행).
+일부는 학습 disturbance 데이터, 일부는 평가 셋으로 홀드아웃. 스태빌라이저를
+*판별*하려는 주행은 **도로 on (`G`)** 유지하고 탱크를 꽤 채워 — 약 55% fill
+아래면 진자 모델의 파도가 rim 에 도달 못 해서 아무것도 안 넘침.
 
-**Batch numbers:** menu ▸ *FluidStabilizer ▸ Evaluate Recorded Drives* replays
-every trace in `Traces/` through the analytic baselines and writes a per-drive
-litre table to `Logs/trace-eval.txt`.
+**배치 수치:** 메뉴 ▸ *FluidStabilizer ▸ Evaluate Recorded Drives* 가 `Traces/`
+의 모든 트레이스를 분석적 베이스라인으로 재생하고 주행별 리터 표를
+`Logs/trace-eval.txt` 에 씀.
 
-## Comparing stabilizers side by side (C)
+## 스태빌라이저 나란히 비교하기 (C)
 
-Press **C** to replay the newest trace through **three tanks at once**, lined up
-across the screen over the same road:
+**C** 를 눌러 최신 트레이스를 **탱크 3개로 동시에** 재생, 같은 도로 위에 화면
+가로로 정렬:
 
-- **Rigid (no stabilizer)** — the tank bolted down (① in the three-way comparison)
-- **Rule: PID** — the reactive tilt law (②)
-- **Privileged feed-forward** — a reference that cheats (uses the true slosh-free
-  tilt); the learned policy (③) will take a lane here once it exists
+- **Rigid (스태빌라이저 없음)** — 볼트로 고정한 탱크 (① 3-way 비교의)
+- **Rule: PID** — 반응형 틸트 법칙 (②)
+- **Learned policy (③)** — `serve_policy.py` 에 연결. 서버가 안 켜졌으면
+  "(offline → Hold)" 표시하고 잠근 Hold 로 폴백
 
-Each lane has a live panel: **litres spilled** (big), time spent **near the rim**,
-**peak slosh energy**, and how long the actuator sat **torque-saturated**. The
-lowest-spill lane gets a green border. `R` restarts, `T` is slow-mo, `C` exits.
+각 레인에 실시간 패널: **스필 리터** (크게), **rim 근접** 시간, **슬로시 에너지
+피크**, 액추에이터가 **토크 포화** 앉은 시간. 최저 스필 레인에 초록 테두리.
+`R` 재시작, `T` 슬로모, `C` 종료.
 
-This is the headline result of the project — the point where you can *see*
-whether a stabilizer actually keeps more water in the tank than doing nothing.
+이게 프로젝트의 헤드라인 결과 — 스태빌라이저가 아무것도 안 하는 것보다 실제로
+물을 더 지키는지 *볼 수* 있는 지점.
 
-## Notes / current limitations
+## 메모 / 현재 한계
 
-- Two slosh models are available (**M**): the cheap pendulum ROM (proxy
-  surface) and the 2-D shallow-water solver (real height-field mesh). Neither is
-  a particle/SPH fluid — no foam or splashes (out of scope: determinism + RL
-  step budget).
-- Vehicle is a reduced 3-DOF sprung-mass model (pitch / roll / heave). Feel is
-  "laden truck": heavy, long braking, lazy steering. Press **G** for a real road:
-  a **winding course** (fixed per seed) with grade, bank, surface roughness and
-  potholes. The truck **follows the road's curve on its own** — your steering is
-  a correction (lane changes, holding the line through a bend). A textured road
-  strip scrolls under the truck so you see the curve and the bump arrive before
-  the tank reacts. Flat straight road (no strip) is the default.
-- Stabilizer option 3 uses information a real sensor could not give — it is only
-  there as a comparison ceiling.
+- 슬로시 모델 2종 (**M**): 싼 진자 ROM (프록시 표면)과 2-D 얕은물 솔버 (실제
+  height-field 메시). 둘 다 입자/SPH 유체 아님 — 거품이나 물보라 없음 (범위
+  밖: 결정론 + RL 스텝 예산).
+- 차량은 축약된 3-DOF 스프렁매스 모델 (pitch / roll / heave). 느낌은 "적재
+  트럭": 무겁고, 긴 제동, 느린 조향. **G** 로 실제 도로: seed 로 고정된
+  **굽이치는 코스**, grade, bank, 노면 거칠기, 포트홀. 트럭이 **도로 곡률을
+  스스로 추종** — 당신 조향은 보정 (차선 변경, 굽이에서 라인 유지). 텍스처
+  도로 strip 이 트럭 아래로 스크롤. 평평한 직선 도로 (strip 없음) 가 기본.
+- 스태빌라이저 옵션 3 은 실제 센서가 못 줄 정보를 씀 — 비교 천장으로만 존재.
