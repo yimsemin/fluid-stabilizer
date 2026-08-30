@@ -104,8 +104,8 @@ namespace FluidStabilizer.Core.Sim
                 ("비포장 도로",       p => { p.RoadEnabled = true;  p.RoadSeverity = 1.8; p.RoadCurve = 1.1; p.RoadHills = 1.1; p.Grip = 0.9;  p.FillRatio = 0.62; }),
                 ("굽은 길",           p => { p.RoadEnabled = true;  p.RoadSeverity = 0.6; p.RoadCurve = 2.4; p.RoadHills = 0.8; p.Grip = 1.0;  p.FillRatio = 0.62; }),
                 ("급경사 길",         p => { p.RoadEnabled = true;  p.RoadSeverity = 0.6; p.RoadCurve = 0.9; p.RoadHills = 2.6; p.Grip = 1.0;  p.FillRatio = 0.62; }),
-                ("빗길 (미끄러움)",   p => { p.RoadEnabled = true;  p.RoadSeverity = 0.8; p.RoadCurve = 1.0; p.RoadHills = 0.9; p.Grip = 0.6;  p.FillRatio = 0.62; }),
-                ("눈길 (매우 미끄러움)", p => { p.RoadEnabled = true; p.RoadSeverity = 0.7; p.RoadCurve = 1.0; p.RoadHills = 0.9; p.Grip = 0.35; p.FillRatio = 0.62; }),
+                ("빗길 (미끄러움)",   p => { p.RoadEnabled = true;  p.RoadSeverity = 0.8; p.RoadCurve = 1.0; p.RoadHills = 0.9; p.Grip = 0.5;  p.FillRatio = 0.62; }),
+                ("눈길 (매우 미끄러움)", p => { p.RoadEnabled = true; p.RoadSeverity = 0.7; p.RoadCurve = 1.0; p.RoadHills = 0.9; p.Grip = 0.30; p.FillRatio = 0.62; }),
             };
 
         /// <summary>Apply the named preset (road/tank fields only; driver/slosh/seed untouched). Returns false if unknown.</summary>

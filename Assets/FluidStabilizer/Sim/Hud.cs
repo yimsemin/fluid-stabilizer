@@ -45,9 +45,18 @@ namespace FluidStabilizer.Sim
             GUILayout.Label($"{loop.VehicleState.Speed * 3.6:F0} km/h", _big);
             GUILayout.Label($"accel  {aLong:+0.00;-0.00} g   lateral {aLat:+0.00;-0.00} g", _label);
             if (cfg.Road.Enabled)
-                GUILayout.Label($"road  grade {Math.Tan(gt.RoadGrade) * 100:+0.0;-0.0}%   " +
-                                $"bank {gt.RoadBank * 57.29578:+0.0;-0.0}°   " +
-                                $"surf {gt.RoadSurfaceHeight * 100:+0.0;-0.0} cm", _label);
+                GUILayout.Label($"도로  경사 {Math.Tan(gt.RoadGrade) * 100:+0.0;-0.0}%   " +
+                                $"뱅크 {gt.RoadBank * 57.29578:+0.0;-0.0}°   " +
+                                $"노면 {gt.RoadSurfaceHeight * 100:+0.0;-0.0} cm", _label);
+
+            double slip = Runner.Loop.VehicleState.TyreSlip;
+            if (slip > 0.03)
+            {
+                var c = _label.normal.textColor;
+                _label.normal.textColor = new Color(1f, 0.55f, 0.35f);
+                GUILayout.Label($"⚠ 타이어 미끄러짐 {Bar(slip, 0.0, 1.0)}", _label);
+                _label.normal.textColor = c;
+            }
             GUILayout.Space(6);
 
             var fbStyle = freeboard < 0.05 ? _warn : _big;
