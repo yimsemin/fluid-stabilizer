@@ -1,4 +1,8 @@
 using System;
+using System.IO;
+using System.Linq;
+using System.Net.Sockets;
+using System.Threading;
 using FluidStabilizer.Core.Sim;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -21,8 +25,16 @@ namespace FluidStabilizer.Sim
 
         private bool _open;
         private ExperimentProfile _edit;   // working copy
+        private Vector2 _scroll;
         private string _status = "";
         private float _statusFade;
+
+        // --- policy server (③) ---
+        public int PolicyPort = 5601;
+        private System.Diagnostics.Process _serverProc;   // non-null only if we launched it
+        private volatile bool _portListening;
+        private float _probeIn;
+        private string _serverMsg = "";
 
         private GUIStyle _h1, _h2, _lbl, _btn, _btnOn;
 
@@ -46,7 +58,34 @@ namespace FluidStabilizer.Sim
             var kb = Keyboard.current;
             if (kb != null && kb.backquoteKey.wasPressedThisFrame) Toggle();
             if (_statusFade > 0f) _statusFade -= Time.unscaledDeltaTime;
+
+            _probeIn -= Time.unscaledDeltaTime;
+            if (_probeIn <= 0f)
+            {
+                _probeIn = 2f;
+                int port = PolicyPort;
+                ThreadPool.QueueUserWorkItem(_ =>
+                {
+                    try
+                    {
+                        using var c = new TcpClient();
+                        var ar = c.BeginConnect("127.0.0.1", port, null, null);
+                        _portListening = ar.AsyncWaitHandle.WaitOne(300) && c.Connected;
+                        if (c.Connected) c.EndConnect(ar);
+                    }
+                    catch { _portListening = false; }
+                });
+            }
+
+            if (_serverProc != null && _serverProc.HasExited)
+            {
+                _serverMsg = $"서버 프로세스 종료됨 (코드 {_serverProc.ExitCode})";
+                _serverProc = null;
+            }
         }
+
+        private void OnApplicationQuit() => StopServer(quiet: true);
+        private void OnDestroy() { StopServer(quiet: true); }
 
         // ------------------------------------------------------------------- GUI
 
@@ -74,13 +113,14 @@ namespace FluidStabilizer.Sim
                 return;
             }
 
-            float w = 360f, x = Screen.width - w - 10f, y = 10f, h = Mathf.Min(Screen.height - 20f, 560f);
+            float w = 366f, x = Screen.width - w - 10f, y = 10f, h = Screen.height - 20f;
             var panel = new Rect(x, y, w, h);
             SimGui.Panel(panel, 0.92f);
 
             GUILayout.BeginArea(new Rect(panel.x + 14, panel.y + 12, panel.width - 28, panel.height - 24));
+            _scroll = GUILayout.BeginScrollView(_scroll);
 
-            GUILayout.Label("설정 패널", _h1);
+            GUILayout.Label("설정 패널   (` 로 닫기)", _h1);
             GUILayout.Label("도로 프리셋", _h2);
 
             // preset grid
@@ -123,6 +163,25 @@ namespace FluidStabilizer.Sim
             GUILayout.Label("슬로시 모델", _h2);
             _edit.SloshModel = Choice("", _edit.SloshModel, "pendulum", "shallow");
 
+            GUILayout.Space(8);
+            GUILayout.Label("정책 서버 (③ 학습 정책)", _h2);
+            var dot = _portListening ? new Color(0.5f, 1f, 0.55f) : new Color(1f, 0.55f, 0.4f);
+            var pc = _lbl.normal.textColor; _lbl.normal.textColor = dot;
+            GUILayout.Label(_portListening
+                ? $"● 실행 중 · 포트 {PolicyPort} 응답"
+                : $"○ 꺼짐 · 포트 {PolicyPort} 무응답", _lbl);
+            _lbl.normal.textColor = pc;
+            GUILayout.BeginHorizontal();
+            using (new Disabled(_portListening || !Application.isEditor))
+                if (GUILayout.Button("서버 시작", _btn, GUILayout.Height(24))) StartServer();
+            using (new Disabled(_serverProc == null))
+                if (GUILayout.Button("서버 중지", _btn, GUILayout.Height(24))) StopServer();
+            GUILayout.EndHorizontal();
+            if (!string.IsNullOrEmpty(_serverMsg))
+                GUILayout.Label(_serverMsg, SimGui.Shadowed(11, new Color(1, 1, 1, 0.7f)));
+            if (!Application.isEditor)
+                GUILayout.Label("빌드: 터미널에서 `python serve_policy.py`", SimGui.Shadowed(11, new Color(1, 1, 1, 0.55f)));
+
             GUILayout.Space(12);
             GUILayout.BeginHorizontal();
             if (GUILayout.Button("적용 (씬 재시작)", _btn, GUILayout.Height(30))) Apply();
@@ -142,6 +201,7 @@ namespace FluidStabilizer.Sim
             }
             GUILayout.Label("파일: experiment.txt", SimGui.Shadowed(11, new Color(1, 1, 1, 0.5f)));
 
+            GUILayout.EndScrollView();
             GUILayout.EndArea();
         }
 
@@ -170,6 +230,80 @@ namespace FluidStabilizer.Sim
         }
 
         private void Flash(string s) { _status = s; _statusFade = 3.5f; }
+
+        // ---------------------------------------------------------- policy server
+
+        private static string RepoRoot() =>
+            Directory.GetParent(Application.dataPath)?.FullName ?? Application.dataPath;
+
+        private string PythonExe()
+        {
+            string venv = Path.Combine(RepoRoot(), "python", ".venv", "bin", "python");
+            if (File.Exists(venv)) return venv;
+            venv = Path.Combine(RepoRoot(), "python", ".venv", "Scripts", "python.exe");
+            if (File.Exists(venv)) return venv;
+            return Application.platform == RuntimePlatform.WindowsEditor
+                || Application.platform == RuntimePlatform.WindowsPlayer ? "python" : "python3";
+        }
+
+        /// <summary>Newest <c>python/runs/*/actor.pt</c>, else <c>runs/bc/actor.pt</c>, else null.</summary>
+        private string LatestCheckpoint()
+        {
+            string runs = Path.Combine(RepoRoot(), "python", "runs");
+            if (!Directory.Exists(runs)) return null;
+            try
+            {
+                string newest = Directory.GetFiles(runs, "actor.pt", SearchOption.AllDirectories)
+                    .OrderByDescending(File.GetLastWriteTimeUtc)
+                    .FirstOrDefault();
+                return newest;
+            }
+            catch { return null; }
+        }
+
+        private void StartServer()
+        {
+            if (!Application.isEditor)
+            {
+                _serverMsg = "빌드에서는 터미널에서 실행:  python serve_policy.py --port " + PolicyPort;
+                return;
+            }
+            if (_portListening) { _serverMsg = "이미 " + PolicyPort + " 포트에서 응답 중"; return; }
+
+            string ckpt = LatestCheckpoint();
+            if (ckpt == null) { _serverMsg = "체크포인트 없음 — 먼저 학습 필요 (python/runs/*/actor.pt)"; return; }
+
+            string script = Path.Combine(RepoRoot(), "python", "serve_policy.py");
+            if (!File.Exists(script)) { _serverMsg = "serve_policy.py 를 찾을 수 없음"; return; }
+
+            try
+            {
+                var psi = new System.Diagnostics.ProcessStartInfo(PythonExe())
+                {
+                    Arguments = $"\"{script}\" --checkpoint \"{ckpt}\" --port {PolicyPort}",
+                    WorkingDirectory = Path.Combine(RepoRoot(), "python"),
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    RedirectStandardOutput = false,
+                    RedirectStandardError = false,
+                };
+                _serverProc = System.Diagnostics.Process.Start(psi);
+                _serverMsg = $"시작함 — {Path.GetFileName(Path.GetDirectoryName(ckpt))}/actor.pt (pid {_serverProc.Id})";
+            }
+            catch (Exception e)
+            {
+                _serverProc = null;
+                _serverMsg = "시작 실패: " + e.Message;
+            }
+        }
+
+        private void StopServer(bool quiet = false)
+        {
+            if (_serverProc == null) { if (!quiet) _serverMsg = "우리가 시작한 서버가 없음 (터미널에서 켰다면 그쪽에서 종료)"; return; }
+            try { if (!_serverProc.HasExited) _serverProc.Kill(); } catch { }
+            _serverProc = null;
+            if (!quiet) _serverMsg = "중지함";
+        }
 
         // -------------------------------------------------------------- widgets
 
