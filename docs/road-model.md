@@ -56,6 +56,48 @@ grade, 커브 bank, 노면 거칠기, 간간이 포트홀 — 는 강체 탱크�
 코너링은 lateral 슬로시 disturbance 도 더함. 도로가 off 면 `Curvature` 가 0,
 레인 모델을 완전히 건너뛰고, 동작이 이전과 바이트 동일.
 
+## 좌우 바퀴 트랙 비대칭 (묶음 2a, 2026-08-30)
+
+소유자 피드백: "왼쪽 바퀴에 돌맹이가 있으면 왼쪽으로 들썩거릴 수 있잖아? 그런게
+지금 적용 안 된 건가." 맞다 — v1 은 단일 트랙 프로파일이었다. 이제 좌/우 바퀴
+트랙을 구분한다.
+
+- `RoadInput.SurfaceHeightLeft` / `SurfaceHeightRight` — 각 바퀴 트랙 아래 노면
+  높이. `SurfaceHeight` 는 둘의 **평균** (기존 heave 경로가 그대로 씀).
+- **긴 undulation 은 공유**, **짧은 거칠기는 좌우 독립 위상** (약 2 m 떨어진
+  노면은 짧은 파장에서 decorrelate), **이산 이벤트는 ~55% 가 한쪽 바퀴만**
+  (돌, 가장자리 포트홀) — 나머지는 양쪽 (신축 조인트, 넓은 포트홀).
+- `RoadConfig.WheelTrackRoughnessFrac` (기본 0.35) 가 차등 거칠기 진폭을
+  `RoughnessRmsM` 의 비율로. **0 = 옛 대칭 단일 트랙 도로** (이벤트도 전부 양쪽).
+- `VehicleModel` 이 `atan2(heightL − heightR, TrackWidthM)` 를 도로 유발 roll
+  목표로 만들어 기존 roll 2차 서스펜션(1.6 Hz)으로 필터 → 한쪽 범프가
+  일시적 roll 로 온다. `VehicleConfig.TrackWidthM` (2.0), `RoadRollGain` (1.0).
+- **결정론:** 차등 채널은 `road.Fork("wheeltracks")` 전용 스트림에서 뽑는다 →
+  도로 평균/grade/bank/이벤트위치/곡률은 이 채널 존재 전과 **바이트 동일**,
+  새 roll 채널만 추가.
+- **3분할 비교와의 정합성:** 세 트럭이 같은 트레이스(같은 조향)를 재생 → 같은
+  거리에서 같은 lateral 위치 → 동일한 L/R 트랙을 샘플링. 시각적 오프셋은 무관.
+  통제된 비교 유지.
+
+## 미끄러운 노면 슬립 프록시 (묶음 2b, 2026-08-30)
+
+소유자 피드백: "빗길/눈길 프리셋인데 별로 안 미끄러움." 원인: v1 은 마찰 한계만
+낮춰서 급기동이 덜 먹혀 오히려 슬로시가 *줄었다*. 이제 lumped 슬립 프록시가
+있다 (design-review §8/§18 은 완전한 타이어 모델을 defer — 이건 싼 대역).
+
+- `VehicleModel._slip ∈ [0,1]`: 요구 가속이 마찰 한계를 넘으면 빠르게 상승
+  (`SlipOnsetTau` 0.08 s), 천천히 회복 (`SlipRecoverTau` 0.35 s).
+- 슬립 중: (1) 접지력 추가 감소 `SlipGripLoss` (kinetic < static), (2) 조향
+  under-response — 요레이트 저역통과, 시정수가 `SlipYawLag · _slip` → grip
+  복귀 시 시정수가 붕괴해 "홱 잡힘"(grab), (3) OU 요 wander `SlipYawWander`
+  (fishtail). (2)+(3) 이 탱크를 출렁이게 한다.
+- `SlipOnsetFraction` = 1.02 — 한계 초과 시에만 (한계에선 아직 접지). 정상
+  하드 주행은 깨끗, adversarial 운전자나 저접지 노면만 슬립.
+- 전용 RNG: `vehicle.Fork("slip")` — 도로/센서/슬로시 스트림 무영향. Gaussian
+  을 매 스텝 뽑되 `_slip > 0` 일 때만 적용 → 슬립 궤적과 RNG 소비 분리 (결정론 안정).
+- `VehicleState.TyreSlip` 노출 → HUD 에 "⚠ 타이어 미끄러짐" 표시.
+- 프리셋: 빗길 grip 0.5, 눈길 0.30.
+
 ## 서스펜션 heave
 
 `VehicleModel` 이 3번째 스프렁매스 DOF 를 얻음 (pitch + roll 만 있었음;

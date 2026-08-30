@@ -5,6 +5,32 @@
 
 ---
 
+## D7 — 2026-08-30 — 좌우 바퀴 트랙 비대칭 + lumped 슬립 프록시 (묶음 2)
+
+소유자가 초안을 만져본 뒤 두 가지 현실성 갭을 지적: (a) "왼쪽 바퀴에 돌맹이 →
+왼쪽으로 들썩" 이 안 됨 (D6 은 단일 트랙 프로파일), (b) "빗길/눈길" 프리셋이
+별로 안 미끄러움.
+
+**결정:**
+
+1. **좌우 바퀴 트랙을 구분한다.** `RoadInput.SurfaceHeightLeft/Right`, 평균이
+   `SurfaceHeight`. 긴 파동 공유, 짧은 거칠기 좌우 독립, 이산 이벤트의 절반쯤은
+   한쪽 바퀴만. `(L−R)` 이 body roll 을 유발 (기존 roll 서스펜션으로 필터).
+   `RoadConfig.WheelTrackRoughnessFrac` (0 = 옛 대칭 모델). 차등 채널은 전용
+   RNG 스트림 → 도로 평균/grade/bank/이벤트/곡률은 바이트 동일.
+2. **lumped 타이어-슬립 프록시.** design-review §8/§18 이 완전한 타이어 모델을
+   defer 했지만, "미끄러움" 이 그냥 낮은 마찰 한계면 급기동이 덜 먹혀 오히려
+   슬로시가 준다 — 비현실적. 그래서 `_slip ∈ [0,1]` 상태: 요구가 한계를 넘으면
+   빠르게 상승·천천히 회복, 슬립 중 접지력 추가 감소 + 조향 under-response 후
+   grip 복귀 시 "홱 잡힘" + OU fishtail. 온셋 1.02 (한계 초과 시에만) →
+   정상 하드 주행 불변, adversarial/저접지만 슬립. 전용 RNG fork.
+
+상세: [road-model.md](road-model.md). 결과: 도로-on 시나리오 수치가 다시
+조금 이동 (roll 채널 추가). `EvaluatorTests` 가드 하나(`RigidHold_NotBeaten...`)
+는 10× → 유지 (온셋 1.02 로 정상 주행 슬립 없앰).
+
+---
+
 ## D6 — 2026-08-29 — 도로 모델 + 서스펜션 heave DOF
 
 계획 리뷰([project-goals.md](project-goals.md)) 결과. 도로에는 스텁(`RoadInput`)만
