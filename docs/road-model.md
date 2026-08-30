@@ -96,7 +96,20 @@ grade, 커브 bank, 노면 거칠기, 간간이 포트홀 — 는 강체 탱크�
 - 전용 RNG: `vehicle.Fork("slip")` — 도로/센서/슬로시 스트림 무영향. Gaussian
   을 매 스텝 뽑되 `_slip > 0` 일 때만 적용 → 슬립 궤적과 RNG 소비 분리 (결정론 안정).
 - `VehicleState.TyreSlip` 노출 → HUD 에 "⚠ 타이어 미끄러짐" 표시.
-- 프리셋: 빗길 grip 0.5, 눈길 0.30.
+
+**격렬함 조절 (`slipIntensity`, 2026-08-30).** 소유자 피드백: "너무 미끌려서
+운전 중이라는 느낌이 안 든다." 코드 기본값(YawWander 0.35 등)이 데모에 과했다.
+`ExperimentProfile.SlipIntensity` 가 슬립의 *결과* 세 가지 —
+`SlipYawWander`(fishtail) · `SlipGripLoss`(추가 접지 손실) · `SlipYawLag`(조향
+under-response + grab) — 를 한 번에 스케일. `Grip` 과 독립: `Grip` 은 *언제*
+미끄러지기 시작하나, `SlipIntensity` 는 미끄러진 뒤 *얼마나* 요동치나.
+  - `0` = 슬립 dynamics 완전 제거 (묶음 2b 이전 느낌, 마찰한계만 유지).
+  - `0.5` = 순하고 제어 가능 — **기본값**.
+  - `1` = 코드 기본값 그대로.
+  - `2~3` (클램프) = 의도적으로 격렬한 슬라이드.
+- 프리셋: 일반/굽은/급경사 0.5, 비포장 0.6, 빗길 0.7 (grip 0.6), 눈길 0.9
+  (grip 0.38). 예전의 거센 느낌은 `experiment.txt` 에서 `slipIntensity: 1.5`
+  이상으로.
 
 ## 서스펜션 heave
 

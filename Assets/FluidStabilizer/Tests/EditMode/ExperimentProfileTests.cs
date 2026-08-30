@@ -19,7 +19,7 @@ namespace FluidStabilizer.Tests
             {
                 Preset = "눈길 (매우 미끄러움)",
                 FillRatio = 0.71, TankHeightZ = 0.55, RoadEnabled = false, RoadSeverity = 1.6,
-                RoadCurve = 2.2, RoadHills = 0.3, Grip = 0.42,
+                RoadCurve = 2.2, RoadHills = 0.3, Grip = 0.42, SlipIntensity = 1.3,
                 Driver = "aggressive", DriverIntensity = 0.8, EpisodeSeconds = 25.0,
                 SloshModel = "shallow", Seed = 42,
             };
@@ -34,6 +34,7 @@ namespace FluidStabilizer.Tests
             Assert.AreEqual(p.RoadCurve, q.RoadCurve, 1e-9);
             Assert.AreEqual(p.RoadHills, q.RoadHills, 1e-9);
             Assert.AreEqual(p.Grip, q.Grip, 1e-9);
+            Assert.AreEqual(p.SlipIntensity, q.SlipIntensity, 1e-9);
             Assert.AreEqual(p.Driver, q.Driver);
             Assert.AreEqual(p.DriverIntensity, q.DriverIntensity, 1e-9);
             Assert.AreEqual(p.EpisodeSeconds, q.EpisodeSeconds, 1e-9);
@@ -69,6 +70,27 @@ namespace FluidStabilizer.Tests
             Assert.AreEqual(baseline.Road.CurvatureAmplitudeRadPerM * 2.0, c.Road.CurvatureAmplitudeRadPerM, 1e-12);
             Assert.AreEqual(baseline.Road.GradeAmplitudeRad * 0.5, c.Road.GradeAmplitudeRad, 1e-12);
             Assert.AreEqual(baseline.Vehicle.FrictionLimit * 0.5, c.Vehicle.FrictionLimit, 1e-12);
+        }
+
+        [Test]
+        public void ToConfig_SlipIntensity_ScalesTheSlideDynamics_IndependentlyOfGrip()
+        {
+            var baseline = new SimulationConfig();
+
+            var gentle = new ExperimentProfile { SlipIntensity = 0.5 }.ToConfig();
+            Assert.AreEqual(baseline.Vehicle.SlipYawWander * 0.5, gentle.Vehicle.SlipYawWander, 1e-12);
+            Assert.AreEqual(baseline.Vehicle.SlipGripLoss * 0.5, gentle.Vehicle.SlipGripLoss, 1e-12);
+            Assert.AreEqual(baseline.Vehicle.SlipYawLag * 0.5, gentle.Vehicle.SlipYawLag, 1e-12);
+
+            // 0 = the slide has no dynamics left (pre-묶음2b feel).
+            var none = new ExperimentProfile { SlipIntensity = 0.0 }.ToConfig();
+            Assert.AreEqual(0.0, none.Vehicle.SlipYawWander, 1e-12);
+            Assert.AreEqual(0.0, none.Vehicle.SlipYawLag, 1e-12);
+
+            // clamped to 3, and does not touch the friction limit (that is Grip's job).
+            var wild = new ExperimentProfile { SlipIntensity = 9.0, Grip = 1.0 }.ToConfig();
+            Assert.AreEqual(baseline.Vehicle.SlipYawWander * 3.0, wild.Vehicle.SlipYawWander, 1e-12);
+            Assert.AreEqual(baseline.Vehicle.FrictionLimit, wild.Vehicle.FrictionLimit, 1e-12);
         }
 
         [Test]

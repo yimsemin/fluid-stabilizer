@@ -39,6 +39,12 @@ namespace FluidStabilizer.Core.Sim
         public double RoadCurve = 1.0;      // × the nominal curvature (windiness)
         public double RoadHills = 1.0;      // × the nominal grade (up/down steepness)
         public double Grip = 1.0;           // × tyre friction/brake/accel.  1 dry, ~0.6 wet, ~0.35 snow
+        /// <summary>How hard a slide bites once the tyres break loose (fishtail +
+        /// steering under-response + extra grip loss). 0 = no slide dynamics at
+        /// all (pre-묶음2b feel), 0.5 = gentle/controllable (default), 1 = the full
+        /// code defaults, up to 3 for a deliberately wild slide. Independent of
+        /// <see cref="Grip"/>, which sets *when* you start to slide.</summary>
+        public double SlipIntensity = 0.5;
 
         // ---- the driver (synthetic runs only; a replayed trace uses its own inputs) ----
         /// <summary>"highway", "aggressive", or "scripted".</summary>
@@ -75,6 +81,14 @@ namespace FluidStabilizer.Core.Sim
             c.Vehicle.MaxBrake *= g;
             c.Vehicle.MaxAccel *= g;
 
+            // How violently a slide behaves once it starts (not how easily it
+            // starts — that is Grip shrinking the friction limit). Scales the
+            // three "you're sliding now" effects together.
+            double slipI = MathClamp(SlipIntensity, 0.0, 3.0);
+            c.Vehicle.SlipYawWander *= slipI;   // fishtail amplitude
+            c.Vehicle.SlipGripLoss *= slipI;    // extra kinetic grip loss
+            c.Vehicle.SlipYawLag *= slipI;      // steering under-response + grab
+
             return c;
         }
 
@@ -99,13 +113,13 @@ namespace FluidStabilizer.Core.Sim
         public static readonly List<(string name, Action<ExperimentProfile> apply)> Presets =
             new List<(string, Action<ExperimentProfile>)>
             {
-                ("평지 · 도로 없음", p => { p.RoadEnabled = false; p.RoadSeverity = 1; p.RoadCurve = 1; p.RoadHills = 1; p.Grip = 1; p.FillRatio = 0.55; }),
-                ("일반 고속도로",     p => { p.RoadEnabled = true;  p.RoadSeverity = 0.5; p.RoadCurve = 0.8; p.RoadHills = 0.7; p.Grip = 1.0;  p.FillRatio = 0.62; }),
-                ("비포장 도로",       p => { p.RoadEnabled = true;  p.RoadSeverity = 1.8; p.RoadCurve = 1.1; p.RoadHills = 1.1; p.Grip = 0.9;  p.FillRatio = 0.62; }),
-                ("굽은 길",           p => { p.RoadEnabled = true;  p.RoadSeverity = 0.6; p.RoadCurve = 2.4; p.RoadHills = 0.8; p.Grip = 1.0;  p.FillRatio = 0.62; }),
-                ("급경사 길",         p => { p.RoadEnabled = true;  p.RoadSeverity = 0.6; p.RoadCurve = 0.9; p.RoadHills = 2.6; p.Grip = 1.0;  p.FillRatio = 0.62; }),
-                ("빗길 (미끄러움)",   p => { p.RoadEnabled = true;  p.RoadSeverity = 0.8; p.RoadCurve = 1.0; p.RoadHills = 0.9; p.Grip = 0.5;  p.FillRatio = 0.62; }),
-                ("눈길 (매우 미끄러움)", p => { p.RoadEnabled = true; p.RoadSeverity = 0.7; p.RoadCurve = 1.0; p.RoadHills = 0.9; p.Grip = 0.30; p.FillRatio = 0.62; }),
+                ("평지 · 도로 없음", p => { p.RoadEnabled = false; p.RoadSeverity = 1; p.RoadCurve = 1; p.RoadHills = 1; p.Grip = 1; p.SlipIntensity = 0.5; p.FillRatio = 0.55; }),
+                ("일반 고속도로",     p => { p.RoadEnabled = true;  p.RoadSeverity = 0.5; p.RoadCurve = 0.8; p.RoadHills = 0.7; p.Grip = 1.0;  p.SlipIntensity = 0.5; p.FillRatio = 0.62; }),
+                ("비포장 도로",       p => { p.RoadEnabled = true;  p.RoadSeverity = 1.8; p.RoadCurve = 1.1; p.RoadHills = 1.1; p.Grip = 0.9;  p.SlipIntensity = 0.6; p.FillRatio = 0.62; }),
+                ("굽은 길",           p => { p.RoadEnabled = true;  p.RoadSeverity = 0.6; p.RoadCurve = 2.4; p.RoadHills = 0.8; p.Grip = 1.0;  p.SlipIntensity = 0.5; p.FillRatio = 0.62; }),
+                ("급경사 길",         p => { p.RoadEnabled = true;  p.RoadSeverity = 0.6; p.RoadCurve = 0.9; p.RoadHills = 2.6; p.Grip = 1.0;  p.SlipIntensity = 0.5; p.FillRatio = 0.62; }),
+                ("빗길 (미끄러움)",   p => { p.RoadEnabled = true;  p.RoadSeverity = 0.8; p.RoadCurve = 1.0; p.RoadHills = 0.9; p.Grip = 0.6;  p.SlipIntensity = 0.7; p.FillRatio = 0.62; }),
+                ("눈길 (매우 미끄러움)", p => { p.RoadEnabled = true; p.RoadSeverity = 0.7; p.RoadCurve = 1.0; p.RoadHills = 0.9; p.Grip = 0.38; p.SlipIntensity = 0.9; p.FillRatio = 0.62; }),
             };
 
         /// <summary>Apply the named preset (road/tank fields only; driver/slosh/seed untouched). Returns false if unknown.</summary>
@@ -137,6 +151,7 @@ namespace FluidStabilizer.Core.Sim
             w.WriteLine("roadCurve:       " + RoadCurve.ToString("0.###", ic) + "     # × 곡률 (굽은 정도)");
             w.WriteLine("roadHills:       " + RoadHills.ToString("0.###", ic) + "     # × 경사 (오르내림)");
             w.WriteLine("grip:            " + Grip.ToString("0.###", ic) + "     # × 타이어 마찰. 1 마른길, ~0.6 빗길, ~0.35 눈길");
+            w.WriteLine("slipIntensity:   " + SlipIntensity.ToString("0.###", ic) + "     # 미끄러진 뒤 얼마나 요동치나. 0 없음 .. 0.5 순함(기본) .. 1 코드기본값 .. 3 격렬");
             w.WriteLine();
             w.WriteLine("# --- 운전자 (합성 실행만; 재생은 트레이스 입력 사용) ---");
             w.WriteLine("driver:          " + Driver + "  # highway / aggressive / scripted");
@@ -183,6 +198,7 @@ namespace FluidStabilizer.Core.Sim
                     case "roadcurve": p.RoadCurve = ParseD(val, ic, p.RoadCurve); break;
                     case "roadhills": p.RoadHills = ParseD(val, ic, p.RoadHills); break;
                     case "grip": p.Grip = ParseD(val, ic, p.Grip); break;
+                    case "slipintensity": p.SlipIntensity = ParseD(val, ic, p.SlipIntensity); break;
                     case "driver": p.Driver = val.ToLowerInvariant(); break;
                     case "driverintensity": p.DriverIntensity = ParseD(val, ic, p.DriverIntensity); break;
                     case "episodeseconds": p.EpisodeSeconds = ParseD(val, ic, p.EpisodeSeconds); break;

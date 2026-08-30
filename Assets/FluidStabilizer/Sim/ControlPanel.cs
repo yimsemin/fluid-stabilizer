@@ -152,6 +152,7 @@ namespace FluidStabilizer.Sim
                 _edit.RoadCurve = Slider("굽은 정도", _edit.RoadCurve, 0.0, 3.0, "×");
                 _edit.RoadHills = Slider("오르내림", _edit.RoadHills, 0.0, 3.0, "×");
                 _edit.Grip = Slider("접지력 (↓미끄러움)", _edit.Grip, 0.25, 1.2, "×");
+                _edit.SlipIntensity = Slider("미끄러짐 격렬함", _edit.SlipIntensity, 0.0, 2.0, "×");
             }
 
             GUILayout.Space(6);
