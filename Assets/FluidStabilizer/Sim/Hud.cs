@@ -39,7 +39,9 @@ namespace FluidStabilizer.Sim
             double aLong = gt.VehicleLongAccel / 9.80665;
             double aLat = gt.VehicleLatAccel / 9.80665;
 
-            GUILayout.BeginArea(new Rect(16, 12, 360, 260));
+            var topPanel = new Rect(12, 10, 380, 286);
+            SimGui.Panel(topPanel);
+            GUILayout.BeginArea(new Rect(topPanel.x + 12, topPanel.y + 10, topPanel.width - 24, topPanel.height - 20));
             GUILayout.Label($"{loop.VehicleState.Speed * 3.6:F0} km/h", _big);
             GUILayout.Label($"accel  {aLong:+0.00;-0.00} g   lateral {aLat:+0.00;-0.00} g", _label);
             if (cfg.Road.Enabled)
@@ -68,10 +70,12 @@ namespace FluidStabilizer.Sim
                             $"tank {cfg.Slosh.TankHeightZ:0.00} m   (experiment.txt)", _label);
             GUILayout.EndArea();
 
-            GUILayout.BeginArea(new Rect(16, Screen.height - 108, 820, 104));
-            GUILayout.Label("W/S or triggers: throttle/brake   A/D or stick: steer", _label);
-            GUILayout.Label("Space: stabilizer on/off   0-4: pick stabilizer (4 = learned, needs serve_policy.py)   M: slosh model   G: road   R: reset   T: slow-mo   Tab: camera", _label);
-            GUILayout.Label("P: record your drive   L: replay newest   C: compare ①②③ side-by-side", _label);
+            var botPanel = new Rect(12, Screen.height - 96, Mathf.Min(940, Screen.width - 24), 86);
+            SimGui.Panel(botPanel);
+            GUILayout.BeginArea(new Rect(botPanel.x + 12, botPanel.y + 8, botPanel.width - 24, botPanel.height - 16));
+            GUILayout.Label("W/S 또는 트리거: 가감속   A/D 또는 스틱: 조향   Space: 스태빌라이저 on/off", _label);
+            GUILayout.Label("0-4: 스태빌라이저 선택 (4 = 학습, serve_policy.py 필요)   M: 슬로시 모델   G: 도로   R: 리셋   T: 슬로모   Tab: 카메라", _label);
+            GUILayout.Label("P: 주행 녹화   L: 최신 재생   C: ①②③ 비교   `(백틱): 컨트롤 패널", _label);
             GUILayout.EndArea();
         }
 
