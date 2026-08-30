@@ -58,6 +58,13 @@ namespace FluidStabilizer.SimEditor
                 Override = c => { c.Slosh.FillRatio = 0.55; Grip(c, 0.6); } },
             new Condition { Id = "S7", Desc = "fill 0.50 + road severity 0.6x (easiest — sanity ceiling)",
                 Override = c => { c.Slosh.FillRatio = 0.50; c.Road.Enabled = true; c.Road.Severity = 0.6; } },
+
+            // Fine probe of the razor's edge between "rigid dry" (fill 0.55) and
+            // "rigid spills, unbeatable" (fill 0.62) — where a winnable bracket
+            // would have to live if it exists at all.
+            new Condition { Id = "S8", Desc = "fill 0.60 (probe)", Override = c => c.Slosh.FillRatio = 0.60 },
+            new Condition { Id = "S9", Desc = "fill 0.58 (probe)", Override = c => c.Slosh.FillRatio = 0.58 },
+            new Condition { Id = "S10", Desc = "fill 0.57 (probe)", Override = c => c.Slosh.FillRatio = 0.57 },
         };
 
         private static void Grip(SimulationConfig c, double g)

@@ -44,8 +44,12 @@ finding F5: 완전한 후행지식 짐벌 궤적조차 녹화 주행에서 기�
 잠금 보너스는 reward-hacking 표면만 넓혀서 넣지 않음.
 
 세부: `LockGate.cs`, `GimbalConfig` 의 `Lock*` 필드. `-hsLockCapable` /
-`-rlLockCapable` 로 켠다. 게이트 통과 결과는 [findings.md](findings.md) F6, 2c
-스윕은 [experiment-plan.md](experiment-plan.md).
+`-rlLockCapable` 로 켠다.
+
+**결과 ([F6](findings.md), 2026-08-30):** lock-capable 이 F5 의 구조적 핸디캡은
+없앴다 (do-nothing 바닥이 25 L → 잠근 Hold 19 L). 하지만 2c 스윕 11개 운영점에서
+hindsight 는 여전히 강체를 못 이긴다 — 강체가 넘치는 모든 fill 에서 회복 1~2%.
+잔차 RL 은 시작하지 않음. lock-capable 인프라는 유지 (전제가 바뀌면 재사용).
 
 **가드:** `LockCapableActionTests` (8) — 게이트 잠금/해제/히스테리시스/최소 체류,
 큰 각도에서 잠금 거부, lock-capable env 결정론, 잠금 시 액추에이터 토크 0,

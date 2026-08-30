@@ -92,14 +92,22 @@ BC 데이터셋 → BC 사전학습 → PPO 미세조정 → `serve_policy.py` �
   `(L−R)` → body roll. `RoadConfig.WheelTrackRoughnessFrac`. [road-model.md](road-model.md), D7
 - **2b ✅** 미끄러운 노면 lumped 슬립 프록시 — 접지력 감소 + under-response/grab + fishtail.
   `VehicleState.TyreSlip` HUD 표시. D7
-- **2c ⬜** "어떤 조건에서 학습 모델이 ①②를 이기나" 탐색 — F5 전제 조정의 확장판.
-  후보: freeboard 낮추기 (잠근 Hold 가 스필 문턱 근처에), 도로/운전 강도,
-  하이브리드 "보정할 때만 풀림" 액션 (잔차 RL 베이스라인이 19 L 잠근 탱크가 되도록).
-  Preview 단독은 해결책 아님 (hindsight 는 이미 완벽한 look-ahead).
+- **2c ✅ (2026-08-30) — 결과: 이기는 조건 없음 (finding [F6](findings.md)).**
+  하이브리드 "보정할 때만 풀림" 액션을 만들고 (**D8** lock-capable, `LockGate`),
+  F5 게이트를 11개 운영점(fill 0.50~0.62 × 도로강도 × grip)에서 재실행.
+  lock-capable 이 F5 의 구조적 핸디캡(처지는 서보 25 L vs 잠금 19 L)은 없앴지만
+  — 강체가 조금이라도 넘치는 모든 fill 에서 hindsight 가 회복하는 건 스필의
+  1~2% 뿐. 승리 가능 구간이 없다. 도구: `SweepRunner`.
 
-### 묶음 3 — 학습 정확성 ⬜
-잔차 RL 제대로 배선(B 완료) + BC 웜스타트(C 완료) + **긴 학습**. 2c 와 짝 —
-조건을 바꿔가며 ③ 이 이기는 지점을 찾는다. 그다음 도메인 랜덤화 + 에피소드 로깅.
+### 묶음 3 — 학습 정확성 ⏸ (게이트 미통과, 소유자 결정 대기)
+잔차 RL 배선(B)·BC 웜스타트(C)·lock-capable 액션(D8)·`train_ppo.py --resume`
+모두 준비됨. 그러나 **2c 게이트가 통과하지 못했다** ([F6](findings.md)) — 긴
+잔차 RL 학습은 시작하지 않았다 (CLAUDE.md 하드룰: hindsight 가 강체를 이기는 걸
+보이기 전까지 RL 없음).
+
+소유자 선택: (a) 정직한 헤드라인 수용 + 묶음 3 나머지(도메인 랜덤화 + 에피소드
+로깅) 및 데모 다듬기로 진행, (b) 탱크 형상 변경 후 재게이트, (c) 더 얌전한 홀드아웃
+주행 녹화 후 재게이트. F6 "게이트 판정" 절 참고.
 
 ## step-back 세션의 3가지 우려 — 해결됨
 
