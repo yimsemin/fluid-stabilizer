@@ -121,6 +121,16 @@ rate 로 clamp. 정책은 멀쩡한 동작점 주변에서 작은 보정만 학�
 `baselineFactory` / `residualRateScaleRadPerSec` ctor 인자 + `ActorName` /
 `GimbalState` getter 추가. `ResidualRlTests` (4).
 
+**lock-capable 하이브리드 액션 (D8, `-rlLockCapable`, 기본 baseline≠none 이면 on):**
+합성 rate 가 데드밴드(`GimbalConfig.LockRateThresholdRadPerSec`) 안이고 관절이
+0 근처면 env 가 `Locked` 명령을 발행 — 처지는 서보가 아니라 강체 관절.
+`LockGate` (engine-free 결정론 상태기계, 히스테리시스+최소 체류). ③ 의 바닥이
+①(잠근 탱크)이 되어 F5 의 구조적 핸디캡 제거. **결과 (F6): 그래도 후행지식이
+강체를 못 이김** — 긴 학습 보류. `LockCapableActionTests` (8), [decisions.md](decisions.md) D8.
+**메모:** `serve_policy.py` 는 raw actor 출력(잔차)만 반환하므로, lock-capable
+잔차 정책을 실제로 서빙하려면 `RemotePolicyController` 가 같은 baseline 합성 +
+`LockGate` 를 로컬로 돌려야 함 (아직 미구현 — 학습 재개 시).
+
 **병렬 롤아웃:** 서버는 단일 클라이언트. N 포트에 N 서버를 띄우고 N 개
 `FluidStabEnv` 를 Gymnasium `AsyncVectorEnv` 로 감쌈 (v1 PPO 스크립트는
 단일 env — 처리량이 중요해지면 확장).

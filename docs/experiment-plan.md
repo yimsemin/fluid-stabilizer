@@ -4,28 +4,26 @@
 [project-goals.md](project-goals.md), 밝혀진 사실은 [findings.md](findings.md),
 설계 결정은 [decisions.md](decisions.md) 에 있고 여기서는 링크만 건다.
 
-## 한 문단 현황 (2026-08-29)
+## 한 문단 현황 (2026-08-30)
 
-결정론적 시뮬레이션 전체가 만들어지고 테스트됨(물리, 도로, 액추에이터, 슬로시
-모델 2종, 센서, 베이스라인, 평가기, 플레이 씬, RL 브릿지). findings **F1~F4** 로
-평평한 도로에서 **강체로 잠근 탱크는 반응형 틸트 제어로 거의 이길 수 없다**는 걸
-안다 — 이기려면 *예측(anticipation)* 이 필요하고, 그게 학습 정책 ③ 이 존재하는
-이유. 첫 RL 실행이 반대편을 확인해줬다: 맨땅 PPO 는 예측 정책을 못 찾는다 (무작위
-탐색 짐벌 동작이 슬로시를 펌핑해 스필 — "F1/F4 절벽").
+결정론적 시뮬레이션 전체가 만들어지고 테스트됨(물리, 도로+좌우 트랙+슬립, 액추에이터,
+슬로시 모델 2종, 센서, 베이스라인, 평가기, 플레이 씬, RL 브릿지, 3분할 비교,
+에피소드 로깅, standalone 빌드). 파이프라인 전체가 처음부터 끝까지 돈다.
 
-그다음 **녹화 주행**과 **feasibility 천장**을 만들어 돌렸고, **결정 게이트는
-통과하지 못했다** (finding **F5**): 완전한 후행지식 + 실제 액추에이터 제약
-하에서도 최적 짐벌 궤적이 소유자의 실주행에서 기계적으로 잠근 탱크보다 *더* 스필.
+**핵심 발견 — ① 강체 탱크가 이긴다 (findings F1·F4·F5·F6).** 반응형 틸트 제어도
+(F1·F4), 완전한 후행지식 짐벌 궤적도 (F5), lock-capable 하이브리드 액션을 준
+후행지식도 (F6), 소유자의 녹화 주행에서 기계적으로 잠근 탱크를 못 이긴다.
+강체가 조금이라도 넘치는 모든 fill 에서 후행지식 천장이 회복하는 건 스필의
+1~2% 뿐이고, freeboard 가 크면 강체가 아예 안 넘친다. 인과적 센서전용 정책(③)이
+비인과적 천장(④)을 넘어설 수는 없으므로, **긴 잔차 RL 은 전제가 바뀌기 전까지
+시작하지 않는다** (CLAUDE.md 하드룰). 이건 실패가 아니라 결과다.
 
-**소유자 결정 (2026-08-29) — 초안 먼저, 판단은 나중.** 지금 전제를 다시
-튜닝하려고 멈추는 대신, **처음부터 끝까지 완성된 초안**을 먼저 만든다 —
-녹화 → 잔차 RL(BC 웜스타트) → 정책 서빙 → 앱 내 3-way 비교 → standalone 빌드 —
-*강체/규칙기반이 더 나은 걸로 밝혀지더라도.* 프로젝트의 요점은 파이프라인 전체를
-만들고 이해하는 것이지 ③ 이 이긴다는 걸 증명하는 게 아니다. ③ 이 이기는지는
-*발견*이다. F5 전제 조정은 초안이 존재한 *다음*, 돌아가는 전체를 다듬는 작업으로
-한다. 모든 숫자는 이제 편집 가능한 파일 하나(`experiment.txt` /
+**소유자 결정 (2026-08-30): 정직한 헤드라인 수용, 다음으로.** 묶음 3 나머지
+(에피소드 로깅 ✅, 데모 다듬기 ✅, 도메인 랜덤화 보류) 진행. 긴 RL 을 다시
+하려면 전제 조정 필요 — 탱크 형상 또는 강체가 1~5 L 만 스필하는 얌전한 홀드아웃
+주행. 모든 운영점 숫자는 편집 가능한 파일 하나(`experiment.txt` /
 [`ExperimentProfile`](../Assets/FluidStabilizer/Core/Sim/ExperimentProfile.cs))
-에 있어서 운영점(operating point)을 나중에 싸게 바꿀 수 있다.
+에 있어서 나중에 싸게 바꿀 수 있다.
 
 ## 지금까지 만든 것
 
@@ -39,19 +37,20 @@
 | 짐벌 액추에이터 | 🟡 | `GimbalActuator`: 전송지연, PD+I 위치 서보, 피크토크 포화, 마찰, rate/travel 한계, `Locked` 모드(강체 관절), I²t 권선열 모델(피크→연속 토크 디레이트) — D5. 백래시·기어박스 상세 보류 |
 | 슬로시 모델 2종 | ✅ | `PendulumSloshModel` (등가역학 ROM, 축당 진자 1개) + `ShallowWaterSloshModel` (2-D Saint-Venant, ~48×28 격자, Rusanov FV) — D4. **브래킷 규율** (F3): ROM 으로 학습, 얕은물로 검증 |
 | 센서 층 | 🟡 | `SensorSuite`: 차량+탱크 IMU, 엔코더(양자화), 모터, 로드셀 4개, 옵션 레벨/CAN; 샘플당 노이즈 + 에피소드당 바이어스, 번들 지연 |
-| 베이스라인 컨트롤러 | 🟡 | ① `Hold`(잠금), ② `SpecificForceAlignment` / `Pid` / `PrivilegedFullState`. `AxisLqr`/`LqrSloshController` 는 만들었으나 **보류**(공진). **F4**: 강체 Hold 를 반응형 틸트로 못 이김 |
+| 베이스라인 컨트롤러 | 🟡 | ① `Hold`(잠금), ② `SpecificForceAlignment` / `Pid` / `PrivilegedFullState`. `AxisLqr`/`LqrSloshController` 는 만들었으나 **보류**(공진). **F4**: 강체 Hold 를 반응형 틸트로 못 이김. **D8** lock-capable 하이브리드 액션(`LockGate`) — 능동 컨트롤러가 필요없을 때 기계적으로 잠김 |
 | 평가 하네스 | ✅ | `Evaluator` + `ScenarioSet`(8개) + 텍스트 리포트. `TraceEvaluator` (녹화 주행 × 베이스라인 × 슬로시 2종, 주행별 리터). `HindsightOptimizer` (feasibility 천장, F5) |
 | 플레이 씬 (수동 주행) | ✅ | `FluidStabilizer.Sim`: `SimulationRunner` · `HumanDriverInput`(키보드+게임패드) · `SimView` · `Hud` · `PlayControls` · `Frames`. `SceneBuilder` → `PlayScene.unity`. 트레이스 녹화/재생(`P`/`L`), `ComparisonRunner`(`C`), `RoadRibbon` — [human-drive.md](human-drive.md) |
-| RL 경로 | 🟡 | C# 쪽 완료+테스트: `FluidStabilizer.Rl` (`ObservationEncoder` 프레임스택, `PrivilegedEncoder` 비대칭 크리틱, `RewardFunction`, `RlEnvironment`, `TrainingServer` TCP). Python 쪽(`python/`) end-to-end 실행됨. **맨땅 PPO 는 학습 못 함** (F1/F4 절벽) — [rl.md](rl.md) |
+| RL 경로 | 🟡 | C# 쪽 완료+테스트: `FluidStabilizer.Rl` (`ObservationEncoder`, `PrivilegedEncoder`, `RewardFunction`, `RlEnvironment` +잔차 +lock-capable, `TrainingServer` TCP). Python: 비대칭 크리틱 PPO + BC 웜스타트 + `serve_policy.py` + `--resume` 체크포인트 재개. **맨땅 PPO 는 학습 못 함** (F1/F4 절벽); **긴 잔차 RL 은 F6 게이트 때문에 보류** — [rl.md](rl.md) |
 | 에피소드 로깅 | ✅ (2026-08-30) | `EpisodeLog` (engine-free) → `Logs/episodes.csv` 에 에피소드당 한 줄(운영점 + 결과 지표). `TraceEvaluator`·`Evaluator`·`ComparisonRunner` 배선 |
 | 도메인 랜덤화 | ⬜ (보류) | config 구조체는 있음, 랜덤화기 미구현. 활성 RL 학습 없이는 가치 낮아 보류 |
 | 녹화 주행 (녹화 + 재생) | ✅ | `DriverTrace` — 실제 disturbance 데이터 + 홀드아웃 평가 조건 |
-| feasibility 천장 | ✅ | `HindsightOptimizer` — **게이트 미통과** (F5) |
+| feasibility 천장 | ✅ | `HindsightOptimizer` — **게이트 미통과** (F5), lock-capable + 11 운영점 재실행도 미통과 (F6). `SweepRunner` |
+| 3분할 비교 + 판정 | ✅ | `ComparisonRunner` (`C`) — 같은 녹화 주행 ①②③ 나란히, 레인별 리터, 완료 시 한 줄 판정 |
 
 **어셈블리** ([Assets/FluidStabilizer/README.md](../Assets/FluidStabilizer/README.md)):
 `Contracts` / `Core` / `Controller` / `Rl` (모두 엔진프리) · `Sim` / `Sim.Editor` (Unity) · `Tests.EditMode`.
 
-**검증:** EditMode 테스트 **113 통과 / 0 실패 / 8 스킵** (스킵 = `[Explicit]` 진단).
+**검증:** EditMode 테스트 **131 통과 / 0 실패 / 8 스킵** (스킵 = `[Explicit]` 진단).
 ```
 "/Applications/Unity/Hub/Editor/6000.5.10f1/Unity.app/Contents/MacOS/Unity" -batchmode -nographics -projectPath . -runTests -testPlatform EditMode -testResults Logs/editmode-results.xml -logFile -
 ```
@@ -88,7 +87,7 @@ BC 데이터셋 → BC 사전학습 → PPO 미세조정 → `serve_policy.py` �
 - 1d **3분할 화면 비교** (`C`) — 트럭마다 자기 뷰·자기 도로 (동일 seed)
 - 1e `docs/operating-guide.md` (한글 조작 가이드)
 
-### 묶음 2 — 물리 현실성 (진행 중)
+### 묶음 2 — 물리 현실성 ✅ (2026-08-30)
 - **2a ✅** 좌우 바퀴 트랙 비대칭 ("왼쪽 돌맹이 → 들썩") — `RoadInput.SurfaceHeightLeft/Right`,
   `(L−R)` → body roll. `RoadConfig.WheelTrackRoughnessFrac`. [road-model.md](road-model.md), D7
 - **2b ✅** 미끄러운 노면 lumped 슬립 프록시 — 접지력 감소 + under-response/grab + fishtail.
@@ -100,15 +99,20 @@ BC 데이터셋 → BC 사전학습 → PPO 미세조정 → `serve_policy.py` �
   — 강체가 조금이라도 넘치는 모든 fill 에서 hindsight 가 회복하는 건 스필의
   1~2% 뿐. 승리 가능 구간이 없다. 도구: `SweepRunner`.
 
-### 묶음 3 — 학습 정확성 ⏸ (게이트 미통과, 소유자 결정 대기)
+### 묶음 3 — 학습 정확성 ⏸ (게이트 미통과 → 정직한 헤드라인 수용, 2026-08-30)
 잔차 RL 배선(B)·BC 웜스타트(C)·lock-capable 액션(D8)·`train_ppo.py --resume`
 모두 준비됨. 그러나 **2c 게이트가 통과하지 못했다** ([F6](findings.md)) — 긴
 잔차 RL 학습은 시작하지 않았다 (CLAUDE.md 하드룰: hindsight 가 강체를 이기는 걸
 보이기 전까지 RL 없음).
 
-소유자 선택: (a) 정직한 헤드라인 수용 + 묶음 3 나머지(도메인 랜덤화 + 에피소드
-로깅) 및 데모 다듬기로 진행, (b) 탱크 형상 변경 후 재게이트, (c) 더 얌전한 홀드아웃
-주행 녹화 후 재게이트. F6 "게이트 판정" 절 참고.
+**소유자 결정 (2026-08-30): (a) 정직한 헤드라인 수용.** 완료:
+- **에피소드 로깅 ✅** — `EpisodeLog` → `Logs/episodes.csv` (평가·비교 러너 배선).
+- **데모 다듬기 ✅** — 3분할 판정 배너, `docs/demo-guide.md` (시연용 참고 문서).
+- **도메인 랜덤화 — 보류** (활성 RL 학습 없이는 가치 낮음).
+
+긴 잔차 RL 을 다시 하려면 소유자가 전제를 바꿔야 함: (b) 탱크 형상 (더 깊게/넓게),
+또는 (c) 강체가 1~5 L 만 스필하는 얌전한 홀드아웃 주행 녹화 후 `SweepRunner`
+/ `HindsightEvalRunner` 재실행. F6 "게이트 판정" 절 참고.
 
 ## step-back 세션의 3가지 우려 — 해결됨
 
