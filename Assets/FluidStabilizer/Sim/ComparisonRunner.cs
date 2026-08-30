@@ -11,12 +11,13 @@ namespace FluidStabilizer.Sim
 {
     /// <summary>
     /// The headline comparison (experiment-plan.md step 2): replays one recorded
-    /// drive through several stabilizers <em>at once</em>, side by side, over the
-    /// same road — so "which tank keeps the water in?" is a direct visual answer.
+    /// drive through several stabilizers <em>at once</em>, in a <b>split screen</b>
+    /// — one horizontal strip per stabilizer, each its own camera on its own copy
+    /// of the identical road (same seed). So it reads as "the same drive, run
+    /// three ways" and the 4-lane road position never confuses the picture.
     /// Every lane is its own deterministic <see cref="SimulationLoop"/> fed the
-    /// same <see cref="DriverTrace"/>; a per-lane panel shows litres spilled,
-    /// time spent near the rim, and peak slosh energy, with the best lane
-    /// highlighted.
+    /// same <see cref="DriverTrace"/>; a per-strip panel shows litres spilled,
+    /// time near the rim, and peak slosh energy, best strip highlighted.
     ///
     /// Toggle with <c>C</c> in the play scene (uses the newest recorded trace).
     /// While active the normal single-sim runner is paused.
@@ -25,9 +26,9 @@ namespace FluidStabilizer.Sim
     {
         public SimulationRunner Runner;      // paused while a comparison runs
         public Transform RigTemplate;        // the SceneBuilder TruckRig — cloned per lane
-        public Camera Camera;
+        public Camera Camera;                // the main play camera — disabled while a comparison runs
 
-        [Tooltip("One lane per entry — the headline ①②③. The learned lane needs python/serve_policy.py; " +
+        [Tooltip("One strip per entry — the headline ①②③. The learned lane needs python/serve_policy.py; " +
                  "if it is not running that lane shows '(offline)' and falls back to a locked Hold.")]
         public StabilizerChoice[] Lanes =
         {
@@ -36,7 +37,10 @@ namespace FluidStabilizer.Sim
             StabilizerChoice.LearnedPolicy,              // ③ learned policy (serve_policy.py)
         };
 
-        public float LaneSpacing = 3.5f;   // one lane — the trucks sit in adjacent lanes of one shared road
+        // Each lane lives in its own far-apart slice of the world so its camera
+        // never catches a neighbour. Physics is indexed by distance travelled, so
+        // the offset is purely visual.
+        private const float LaneWorldGap = 600f;
 
         [Header("Learned-policy lane (python/serve_policy.py)")]
         public string PolicyHost = "127.0.0.1";
@@ -49,6 +53,9 @@ namespace FluidStabilizer.Sim
 
         public bool Active { get; private set; }
 
+        /// <summary>The first strip's camera (editor screenshot aid — the main camera is disabled while a comparison runs).</summary>
+        public Camera FirstStripCamera => _lanes.Count > 0 ? _lanes[0].Cam : null;
+
         private sealed class Lane
         {
             public StabilizerChoice Choice;
@@ -57,6 +64,8 @@ namespace FluidStabilizer.Sim
             public GameObject Rig;
             public SimView View;
             public RoadRibbon Ribbon;
+            public Camera Cam;
+            public Vector3 WorldOffset;
             public double NearRimSeconds;
             public double PeakSloshKE;
             public double TorqueSatSeconds;
@@ -108,17 +117,22 @@ namespace FluidStabilizer.Sim
                     Runner.GetComponent<RoadRibbon>()?.SetStripVisible(false); // OnDisable isn't reliable outside play mode
                 }
                 if (RigTemplate != null) RigTemplate.gameObject.SetActive(false);
+                if (Camera != null) Camera.enabled = false;   // the split-screen lane cameras take over
             }
 
-            float x0 = -(Lanes.Length - 1) * 0.5f * LaneSpacing;
-            for (int i = 0; i < Lanes.Length; i++)
+            int n = Lanes.Length;
+            for (int i = 0; i < n; i++)
             {
                 IController ctrl = BuildLaneController(Lanes[i], trace);
                 var loop = new SimulationLoop(
                     trace.ToConfig(), ctrl, new RecordedTraceDriver(trace), trace.MakeSloshModel());
                 loop.BeginEpisode(trace.Seed);
 
-                var lane = new Lane { Choice = Lanes[i], Controller = ctrl, Loop = loop };
+                var lane = new Lane
+                {
+                    Choice = Lanes[i], Controller = ctrl, Loop = loop,
+                    WorldOffset = new Vector3(i * LaneWorldGap, 0f, 0f),
+                };
 
                 if (withRigs && RigTemplate != null)
                 {
@@ -132,30 +146,34 @@ namespace FluidStabilizer.Sim
                     view.TankBody = view.TankPivot.Find("TankBody");
                     view.LiquidMesh = view.TankBody.Find("LiquidMesh").GetComponent<MeshFilter>();
                     view.LoopOverride = loop;
-                    view.WorldOffset = new Vector3(x0 + i * LaneSpacing, 0f, 0f);
+                    view.WorldOffset = lane.WorldOffset;
                     view.ExternallyDriven = true;
-
                     lane.Rig = rig;
                     lane.View = view;
 
-                    // One shared road under all the lanes (they drive the same
-                    // trace → the same road) — lane 0 draws it, wide enough to
-                    // span the others sitting in adjacent lanes.
-                    if (i == 0)
-                    {
-                        var ribbon = rig.AddComponent<RoadRibbon>();
-                        ribbon.LoopOverride = loop;
-                        ribbon.WorldOffset = view.WorldOffset;
-                        ribbon.ExternallyDriven = true;
-                        lane.Ribbon = ribbon;
-                    }
+                    // Each strip gets its own copy of the (identical) road.
+                    var ribbon = rig.AddComponent<RoadRibbon>();
+                    ribbon.LoopOverride = loop;
+                    ribbon.WorldOffset = lane.WorldOffset;
+                    ribbon.ExternallyDriven = true;
+                    lane.Ribbon = ribbon;
+
+                    // Its own camera, rendering a horizontal strip (① top → ③ bottom).
+                    var camGo = new GameObject("CompareCam_" + Lanes[i]);
+                    var cam = camGo.AddComponent<Camera>();
+                    if (Camera != null) cam.CopyFrom(Camera);
+                    cam.enabled = true;
+                    cam.targetTexture = null;
+                    cam.depth = 10 + i;
+                    cam.rect = new Rect(0f, 1f - (i + 1f) / n, 1f, 1f / n);
+                    lane.Cam = cam;
                 }
 
                 _lanes.Add(lane);
             }
 
             Active = true;
-            Debug.Log($"[compare] '{trace.Label}' — {_lanes.Count} lanes: {string.Join(", ", Lanes.Select(SimulationRunner.ShortName))}");
+            Debug.Log($"[compare] '{trace.Label}' — split screen, {_lanes.Count} strips: {string.Join(", ", Lanes.Select(SimulationRunner.ShortName))}");
         }
 
         /// <summary>The learned lane is a bridge client; the rest are the engine-free analytic controllers.</summary>
@@ -176,6 +194,7 @@ namespace FluidStabilizer.Sim
             foreach (var l in _lanes)
             {
                 if (l.Controller is IDisposable d) { try { d.Dispose(); } catch { } }
+                if (l.Cam != null) Destroy(l.Cam.gameObject);
                 if (l.Rig != null) Destroy(l.Rig);
             }
             _lanes.Clear();
@@ -184,6 +203,7 @@ namespace FluidStabilizer.Sim
             Active = false;
 
             if (RigTemplate != null) RigTemplate.gameObject.SetActive(true);
+            if (Camera != null) Camera.enabled = true;
             if (Runner != null)
             {
                 Runner.enabled = true;
@@ -206,7 +226,7 @@ namespace FluidStabilizer.Sim
         {
             if (!Active || _lanes.Count == 0) return;
             RenderLanes();
-            UpdateCamera();
+            UpdateCameras();
         }
 
         private void StepLanes(double wallDt)
@@ -250,31 +270,30 @@ namespace FluidStabilizer.Sim
             {
                 StepLanes(frameDt);
                 RenderLanes();
-                UpdateCamera();
+                UpdateCameras();
             }
         }
 
-        private void UpdateCamera()
+        private void UpdateCameras()
         {
-            if (Camera == null || _lanes.Count == 0 || _lanes[0].Rig == null) return;
-
-            // Mean of the lane trucks (they curve with the road, so the pack drifts).
-            Vector3 mean = Vector3.zero;
-            int n = 0;
-            foreach (var l in _lanes)
-                if (l.Rig != null) { mean += l.Rig.transform.position; n++; }
-            if (n == 0) return;
-            mean /= n;
-
-            float span = (Lanes.Length - 1) * LaneSpacing;
-            Vector3 focus = new Vector3(mean.x, 1.6f, mean.z + 5f);
-            Vector3 target = new Vector3(mean.x, 6f + span * 0.16f, mean.z - 12f - span * 0.35f);
-            Quaternion rot = Quaternion.LookRotation(focus - target);
-
             float d = Time.deltaTime > 1e-4f ? Time.deltaTime : 0.05f; // headless capture has dt≈0
             float k = 1f - Mathf.Exp(-5f * d);
-            Camera.transform.position = Vector3.Lerp(Camera.transform.position, target, k);
-            Camera.transform.rotation = Quaternion.Slerp(Camera.transform.rotation, rot, k);
+
+            foreach (var l in _lanes)
+            {
+                if (l.Cam == null || l.Rig == null) continue;
+                Vector3 p = l.Rig.transform.position;
+                Vector3 fwd = l.Rig.transform.forward;
+
+                // A wide-strip chase cam: pulled back and a touch above, looking
+                // slightly down at the tank.
+                Vector3 target = p - fwd * 11f + Vector3.up * 4.2f;
+                Vector3 look = p + Vector3.up * 1.1f + fwd * 2f;
+                Quaternion rot = Quaternion.LookRotation(look - target);
+
+                l.Cam.transform.position = Vector3.Lerp(l.Cam.transform.position, target, k);
+                l.Cam.transform.rotation = Quaternion.Slerp(l.Cam.transform.rotation, rot, k);
+            }
         }
 
         // ------------------------------------------------------------------- HUD
@@ -284,10 +303,11 @@ namespace FluidStabilizer.Sim
         private void EnsureStyles()
         {
             if (_title != null) return;
-            _title = new GUIStyle(GUI.skin.label) { fontSize = 14, fontStyle = FontStyle.Bold, normal = { textColor = Color.white } };
-            _metric = new GUIStyle(GUI.skin.label) { fontSize = 13, normal = { textColor = new Color(1f, 1f, 1f, 0.85f) } };
-            _big = new GUIStyle(GUI.skin.label) { fontSize = 24, fontStyle = FontStyle.Bold, normal = { textColor = Color.white } };
-            _hint = new GUIStyle(GUI.skin.label) { fontSize = 12, alignment = TextAnchor.MiddleCenter, normal = { textColor = new Color(1f, 1f, 1f, 0.6f) } };
+            _title = SimGui.Shadowed(15, Color.white, FontStyle.Bold);
+            _metric = SimGui.Shadowed(12, new Color(1f, 1f, 1f, 0.85f));
+            _big = SimGui.Shadowed(26, Color.white, FontStyle.Bold);
+            _hint = SimGui.Shadowed(12, new Color(1f, 1f, 1f, 0.8f));
+            _hint.alignment = TextAnchor.MiddleCenter;
         }
 
         private void OnGUI()
@@ -295,73 +315,52 @@ namespace FluidStabilizer.Sim
             if (!Active || _lanes.Count == 0) return;
             EnsureStyles();
 
+            int n = _lanes.Count;
             double best = _lanes.Min(l => l.SpillLitres);
             double elapsed = _lanes[0].Loop.SimTime;
             double total = _trace != null ? _trace.DurationSeconds : 0.0;
+            float stripH = Screen.height / (float)n;
 
-            float panelW = 236f, panelH = 132f, gap = 10f;
-            float totalW = _lanes.Count * panelW + (_lanes.Count - 1) * gap;
-            float x = (Screen.width - totalW) * 0.5f;
-            float y = 44f;
-
-            GUI.Label(new Rect(0, 20f, Screen.width, 20f),
-                $"COMPARE  '{_trace?.Label}'   {elapsed:0.0} / {total:0.0} s" +
-                (_finished ? "   — done" : ""), _hint);
-
-            foreach (var l in _lanes)
+            for (int i = 0; i < n; i++)
             {
-                var r = new Rect(x, y, panelW, panelH);
+                Lane l = _lanes[i];
                 bool isBest = l.SpillLitres <= best + 1e-6;
-                DrawRect(r, new Color(0f, 0f, 0f, 0.72f));
-                if (isBest) DrawBorder(r, new Color(0.35f, 0.9f, 0.4f, 0.95f), 2f);
-
                 bool offline = l.Controller is RemotePolicyController rp && !rp.Connected;
 
-                GUILayout.BeginArea(new Rect(r.x + 12, r.y + 8, r.width - 24, r.height - 16));
-                GUILayout.Label(SimulationRunner.ShortName(l.Choice) + (offline ? "  (offline → Hold)" : ""), _title);
-                GUILayout.Space(2);
-                GUILayout.Label($"{l.SpillLitres:0.00} L", isBest ? Green(_big) : _big);
-                GUILayout.Label("spilled", _metric);
-                GUILayout.Space(4);
-                GUILayout.Label($"near rim   {l.NearRimSeconds:0.0} s", _metric);
-                GUILayout.Label($"peak slosh {l.PeakSloshKE:0} J", _metric);
-                GUILayout.Label($"torque sat {l.TorqueSatSeconds:0.0} s", _metric);
-                GUILayout.EndArea();
+                // thin divider between strips
+                if (i > 0) SimGui.Box(new Rect(0, i * stripH - 1, Screen.width, 2), new Color(0, 0, 0, 0.6f));
 
-                x += panelW + gap;
+                var card = new Rect(12, i * stripH + 10, 250, 118);
+                SimGui.Panel(card);
+                if (isBest) SimGui.Border(card, new Color(0.35f, 0.95f, 0.45f, 0.95f), 2f);
+
+                string tag = i < 3 ? "①②③"[i].ToString() + " " : "";
+
+                GUILayout.BeginArea(new Rect(card.x + 12, card.y + 8, card.width - 24, card.height - 16));
+                GUILayout.Label(tag + SimulationRunner.ShortName(l.Choice) + (offline ? "  (offline→Hold)" : ""), _title);
+                GUILayout.Space(2);
+                var prevC = _big.normal.textColor;
+                _big.normal.textColor = isBest ? new Color(0.5f, 1f, 0.55f)
+                    : (l.SpillLitres > 0.01 ? new Color(1f, 0.7f, 0.5f) : Color.white);
+                GUILayout.Label($"{l.SpillLitres:0.00} L 넘침", _big);
+                _big.normal.textColor = prevC;
+                GUILayout.Label($"rim 근접 {l.NearRimSeconds:0.0}s   슬로시피크 {l.PeakSloshKE:0}J", _metric);
+                GUILayout.Label($"토크포화 {l.TorqueSatSeconds:0.0}s", _metric);
+                GUILayout.EndArea();
             }
 
-            GUI.Label(new Rect(0, y + panelH + 6f, Screen.width, 18f),
-                "C: exit compare    R: restart    T: slow-mo", _hint);
+            // bottom bar
+            var bar = new Rect(0, Screen.height - 26, Screen.width, 26);
+            SimGui.Box(bar, new Color(0.05f, 0.06f, 0.08f, 0.8f));
+            _hint.alignment = TextAnchor.MiddleCenter;
+            SimGui.ShadowLabel(bar, $"동일 주행 '{_trace?.Label}' 을 3가지 방식으로   ·   {elapsed:0.0} / {total:0.0} s" +
+                (_finished ? "  — 완료" : "") + "      C: 나가기   R: 다시   T: 슬로모", _hint);
         }
-
-        private GUIStyle Green(GUIStyle s) => new GUIStyle(s) { normal = { textColor = new Color(0.5f, 1f, 0.55f) } };
 
         private static void SetComponentEnabled<T>(GameObject go, bool on) where T : Behaviour
         {
             var c = go.GetComponent<T>();
             if (c != null) c.enabled = on;
-        }
-
-        // ----------------------------------------------------------- GUI helpers
-
-        private static Texture2D _px;
-
-        private static void DrawRect(Rect r, Color c)
-        {
-            if (_px == null) { _px = new Texture2D(1, 1); _px.SetPixel(0, 0, Color.white); _px.Apply(); }
-            var prev = GUI.color;
-            GUI.color = c;
-            GUI.DrawTexture(r, _px);
-            GUI.color = prev;
-        }
-
-        private static void DrawBorder(Rect r, Color c, float t)
-        {
-            DrawRect(new Rect(r.x, r.y, r.width, t), c);
-            DrawRect(new Rect(r.x, r.yMax - t, r.width, t), c);
-            DrawRect(new Rect(r.x, r.y, t, r.height), c);
-            DrawRect(new Rect(r.xMax - t, r.y, t, r.height), c);
         }
 
         // -------------------------------------------------------------- test aid

@@ -65,9 +65,9 @@ namespace FluidStabilizer.SimEditor
             var trace = RecordRoadTrace(seed: 7, seconds: 22.0);
             comparison.StartComparison(trace);
             comparison.PumpForCapture(14.0);
-            Write(cam, "road-compare");
+            Write(comparison.FirstStripCamera ?? cam, "road-compare");   // split-screen: capture strip ①
             comparison.PumpForCapture(6.0);
-            Write(cam, "road-compare-late");
+            Write(comparison.FirstStripCamera ?? cam, "road-compare-late");
             comparison.Stop();
         }
 
