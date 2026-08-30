@@ -28,7 +28,7 @@ findings F1~F4: 강체(잠금 관절) `Hold` 상대로 **어떤 분석적 반응
 | Python env + PPO | `python/` | 🟡 비대칭 크리틱 CleanRL 스타일 PPO; end-to-end 실행됨, obs/return 정규화까지 올림. **맨땅 PPO 는 여전히 학습 못 함** — 튜닝이 아니라 잔차 RL / 커리큘럼 / 웜스타트가 필요. "첫 실행 결과" 참고 |
 | `bc_pretrain.py` / `serve_policy.py` | `python/` | ✅ BC 사전학습 + 정책 추론 프로세스 (step C/D) |
 | 도메인 랜덤화 | — | ⬜ |
-| 커리큘럼 자동화 / 체크포인트 재개 | — | ⬜ (지금은 서버를 더 어려운 플래그로 재시작) |
+| 체크포인트 재개 | `train_ppo.py --resume` | ✅ (2026-08-30, 묶음 3) — `state.pt` 로 이어서 학습. 커리큘럼 자동화는 아직 수동 |
 
 ## 행동 / 관측 / reward
 
@@ -186,9 +186,12 @@ finding F5 참고.** 홀드아웃 6 주행에서 hindsight-최적 짐벌-rate �
   만들지만 TCP 프로토콜(RESET/STEP/CLOSE)이 노출 안 함. 정책을 F4 와 비교하려면
   `SUMMARY` opcode 나 `PolicyEvalRunner` 경로(step D, `Logs/policy-eval.txt`)
   필요.
-- **체크포인트 재개 없음.** `train_ppo.py` 는 항상 무작위 가중치에서 시작
-  (`--init-actor` 는 BC 초기값만). 그래서 커리큘럼 "체크포인트에서 학습 계속"
-  은 아직 불가.
+- **체크포인트 재개 (2026-08-30, 묶음 3):** `train_ppo.py --resume runs/<name>/state.pt`
+  가 agent + optimizer + obs/priv/return 정규화기 + `global_step` 을 복원해
+  이어서 학습한다 (`--init-actor` 보다 우선). `state.pt` 는 `--save-every` (기본
+  20) 업데이트마다 + 종료 시 기록 (`actor.pt` 는 매 업데이트 — serve 호환 슬림).
+  크래시 복구 + 커리큘럼("어려운 플래그로 서버 재시작 후 --resume")에 씀.
+  `runs/` 는 gitignore.
 - **브래킷 모델 규율 (F3):** 진자 ROM 으로 학습(쌈), 승리를 신뢰하기 전에
   *항상* `-rlSlosh shallow` 로 재평가. ROM 하에서만 강체를 이기는 정책은
   아마 ROM 아티팩트를 학습한 것.

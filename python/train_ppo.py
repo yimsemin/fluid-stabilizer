@@ -115,6 +115,12 @@ def main():
     p.add_argument("--init-actor", default=None,
                    help="behaviour-cloning checkpoint from bc_pretrain.py — warm-starts "
                         "actor_mean + the obs whitener (experiment-plan step C)")
+    p.add_argument("--resume", default=None,
+                   help="full training-state checkpoint (runs/<name>/state.pt) to continue from — "
+                        "restores agent + optimizer + obs/priv/return normalisers + global_step. "
+                        "Overrides --init-actor. Enables crash recovery and curriculum (묶음 3).")
+    p.add_argument("--save-every", type=int, default=20,
+                   help="PPO updates between full state.pt writes (actor.pt is written every update)")
     args = p.parse_args()
 
     torch.manual_seed(args.seed)
@@ -140,7 +146,20 @@ def main():
     ret_rms = RunningMeanStd()          # running std of the discounted return
     running_ret = 0.0
 
-    if args.init_actor:
+    start_step = 0
+    if args.resume:
+        st = torch.load(args.resume, map_location=device, weights_only=False)
+        assert st["obs_dim"] == obs_dim and st["act_dim"] == act_dim, "resume checkpoint shape mismatch"
+        agent.load_state_dict({k: v.to(device) for k, v in st["agent"].items()})
+        opt.load_state_dict(st["opt"])
+        for rms, key in ((obs_rms, "obs_rms"), (priv_rms, "priv_rms"), (ret_rms, "ret_rms")):
+            rms.mean = np.asarray(st[key]["mean"], dtype="float64").copy()
+            rms.var = np.asarray(st[key]["var"], dtype="float64").copy()
+            rms.count = float(st[key]["count"])
+        start_step = int(st["global_step"])
+        running_ret = float(st.get("running_ret", 0.0))
+        print(f"[resume] continuing {args.resume} from step {start_step}")
+    elif args.init_actor:
         ck = torch.load(args.init_actor, map_location=device, weights_only=False)
         assert ck["obs_dim"] == obs_dim and ck["act_dim"] == act_dim, "BC checkpoint shape mismatch"
         agent.actor_mean.load_state_dict({k: v.to(device) for k, v in ck["actor_mean"].items()})
@@ -152,6 +171,17 @@ def main():
         obs_rms.count = 1.0e5
         print(f"[init] actor warm-started from {args.init_actor} "
               f"(bc={ck.get('bc', {})})")
+
+    def save_state(step):
+        torch.save(
+            {"agent": agent.state_dict(), "opt": opt.state_dict(),
+             "obs_dim": obs_dim, "act_dim": act_dim, "global_step": step,
+             "running_ret": running_ret,
+             "obs_rms": {"mean": obs_rms.mean, "var": obs_rms.var, "count": obs_rms.count},
+             "priv_rms": {"mean": priv_rms.mean, "var": priv_rms.var, "count": priv_rms.count},
+             "ret_rms": {"mean": ret_rms.mean, "var": ret_rms.var, "count": ret_rms.count}},
+            f"runs/{run_name}/state.pt",
+        )
 
     N = args.rollout
     obs_buf = torch.zeros(N, obs_dim, device=device)
@@ -175,9 +205,11 @@ def main():
     obs, priv = ingest(obs_raw, info)
     ep_ret, ep_len = 0.0, 0          # ep_ret is the RAW (un-normalised) episode return
     ep_ret_hist = deque(maxlen=50)
-    global_step = 0
+    global_step = start_step
+    update_idx = 0
 
     while global_step < args.total_steps:
+        update_idx += 1
         for t in range(N):
             global_step += 1
             obs_buf[t] = obs
@@ -263,7 +295,10 @@ def main():
              "obs_rms_mean": obs_rms.mean, "obs_rms_var": obs_rms.var},
             f"runs/{run_name}/actor.pt",
         )
+        if update_idx % max(1, args.save_every) == 0:
+            save_state(global_step)
 
+    save_state(global_step)
     env.close()
     writer.close()
 
