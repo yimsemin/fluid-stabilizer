@@ -12,6 +12,7 @@
 |---|---|---|
 | [project-goals.md](project-goals.md) | **무엇을 · 왜 · 헤드라인 결과 · 최종 아키텍처.** 의도와 범위의 유일한 출처. | 소유자 |
 | [experiment-plan.md](experiment-plan.md) | **살아있는 현황 + 다음 단계 지도.** 유일한 진행상황 추적기. | 소유자 |
+| [operating-guide.md](operating-guide.md) | **조작 가이드** (비개발자용) — 설정 패널·운전·서버·비교·빌드 | 소유자 |
 | [vision-check.md](vision-check.md) | 초안 단계별 데모 + 소유자 O/X 체크리스트 | 소유자 |
 | [findings.md](findings.md) | **실험으로 밝혀진 사실 F1~F5** (숫자·근거) | 소유자 + Claude |
 | [decisions.md](decisions.md) | **설계 결정 로그 D1~D6** (무엇을 정했고 왜) | Claude + 소유자 |
