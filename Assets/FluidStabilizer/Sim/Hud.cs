@@ -39,7 +39,7 @@ namespace FluidStabilizer.Sim
             double aLong = gt.VehicleLongAccel / 9.80665;
             double aLat = gt.VehicleLatAccel / 9.80665;
 
-            var topPanel = new Rect(12, 10, 380, 286);
+            var topPanel = new Rect(12, 10, 388, 340);
             SimGui.Panel(topPanel);
             GUILayout.BeginArea(new Rect(topPanel.x + 12, topPanel.y + 10, topPanel.width - 24, topPanel.height - 20));
             GUILayout.Label($"{loop.VehicleState.Speed * 3.6:F0} km/h", _big);
@@ -64,10 +64,26 @@ namespace FluidStabilizer.Sim
                 ? loop.Controller.Name                       // shows "@host:port" or "offline → Hold"
                 : Runner.ActiveStabilizer.ToString();
             GUILayout.Label($"stabilizer: {stab}" + (Runner.TimeScale < 1f ? "   [slow-mo]" : ""), _label);
-            GUILayout.Label($"slosh model: {loop.SloshModel.Name}", _label);
-            GUILayout.Label($"profile: fill {cfg.Slosh.FillRatio:0.00}   " +
-                            $"road {(cfg.Road.Enabled ? $"on ×{cfg.Road.Severity:0.0}" : "off")}   " +
-                            $"tank {cfg.Slosh.TankHeightZ:0.00} m   (experiment.txt)", _label);
+            GUILayout.Label($"슬로시 모델: {loop.SloshModel.Name}", _label);
+
+            var prof = Runner.ActiveProfile;
+            if (prof != null)
+            {
+                GUILayout.Space(2);
+                GUILayout.Label($"프리셋: {prof.Preset}", _label);
+                GUILayout.Label(
+                    $"fill {prof.FillRatio:0.00}   " +
+                    (prof.RoadEnabled
+                        ? $"도로 거칠 {prof.RoadSeverity:0.0} · 굽음 ×{prof.RoadCurve:0.0} · 경사 ×{prof.RoadHills:0.0} · 접지 ×{prof.Grip:0.00}"
+                        : "도로 없음"),
+                    _label);
+                GUILayout.Label("`(백틱): 설정 변경", _label);
+            }
+            else
+            {
+                GUILayout.Label($"profile: fill {cfg.Slosh.FillRatio:0.00}   " +
+                                $"road {(cfg.Road.Enabled ? $"on ×{cfg.Road.Severity:0.0}" : "off")}", _label);
+            }
             GUILayout.EndArea();
 
             var botPanel = new Rect(12, Screen.height - 96, Mathf.Min(940, Screen.width - 24), 86);

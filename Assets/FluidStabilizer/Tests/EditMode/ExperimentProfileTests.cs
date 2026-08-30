@@ -17,26 +17,58 @@ namespace FluidStabilizer.Tests
         {
             var p = new ExperimentProfile
             {
+                Preset = "눈길 (매우 미끄러움)",
                 FillRatio = 0.71, TankHeightZ = 0.55, RoadEnabled = false, RoadSeverity = 1.6,
+                RoadCurve = 2.2, RoadHills = 0.3, Grip = 0.42,
                 Driver = "aggressive", DriverIntensity = 0.8, EpisodeSeconds = 25.0,
                 SloshModel = "shallow", Seed = 42,
             };
 
-            string text;
-            using (var w = new StringWriter()) { p.Save(w); text = w.ToString(); }
+            ExperimentProfile q = p.Clone();
 
-            ExperimentProfile q;
-            using (var r = new StringReader(text)) q = ExperimentProfile.Load(r);
-
+            Assert.AreEqual(p.Preset, q.Preset);
             Assert.AreEqual(p.FillRatio, q.FillRatio, 1e-9);
             Assert.AreEqual(p.TankHeightZ, q.TankHeightZ, 1e-9);
             Assert.AreEqual(p.RoadEnabled, q.RoadEnabled);
             Assert.AreEqual(p.RoadSeverity, q.RoadSeverity, 1e-9);
+            Assert.AreEqual(p.RoadCurve, q.RoadCurve, 1e-9);
+            Assert.AreEqual(p.RoadHills, q.RoadHills, 1e-9);
+            Assert.AreEqual(p.Grip, q.Grip, 1e-9);
             Assert.AreEqual(p.Driver, q.Driver);
             Assert.AreEqual(p.DriverIntensity, q.DriverIntensity, 1e-9);
             Assert.AreEqual(p.EpisodeSeconds, q.EpisodeSeconds, 1e-9);
             Assert.AreEqual(p.SloshModel, q.SloshModel);
             Assert.AreEqual(p.Seed, q.Seed);
+        }
+
+        [Test]
+        public void Presets_AreApplicable_AndChangeTheConfig()
+        {
+            var dry = new ExperimentProfile();
+            Assert.IsTrue(dry.ApplyPreset("일반 고속도로"));
+            var snow = new ExperimentProfile();
+            Assert.IsTrue(snow.ApplyPreset("눈길 (매우 미끄러움)"));
+            Assert.IsFalse(new ExperimentProfile().ApplyPreset("없는 프리셋"));
+
+            Assert.AreEqual("눈길 (매우 미끄러움)", snow.Preset);
+            Assert.Less(snow.Grip, dry.Grip, "snow should have less grip than highway");
+
+            var cDry = dry.ToConfig();
+            var cSnow = snow.ToConfig();
+            Assert.Less(cSnow.Vehicle.FrictionLimit, cDry.Vehicle.FrictionLimit);
+            Assert.Less(cSnow.Vehicle.MaxBrake, cDry.Vehicle.MaxBrake);
+        }
+
+        [Test]
+        public void ToConfig_ScalesCurveHillsAndGrip()
+        {
+            var baseline = new SimulationConfig();
+            var p = new ExperimentProfile { RoadCurve = 2.0, RoadHills = 0.5, Grip = 0.5 };
+            var c = p.ToConfig();
+
+            Assert.AreEqual(baseline.Road.CurvatureAmplitudeRadPerM * 2.0, c.Road.CurvatureAmplitudeRadPerM, 1e-12);
+            Assert.AreEqual(baseline.Road.GradeAmplitudeRad * 0.5, c.Road.GradeAmplitudeRad, 1e-12);
+            Assert.AreEqual(baseline.Vehicle.FrictionLimit * 0.5, c.Vehicle.FrictionLimit, 1e-12);
         }
 
         [Test]

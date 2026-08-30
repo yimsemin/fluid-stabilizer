@@ -65,6 +65,9 @@ namespace FluidStabilizer.Sim
         public StabilizerChoice ActiveStabilizer { get; private set; }
         public SloshModelChoice ActiveSloshModel { get; private set; }
 
+        /// <summary>The <c>experiment.txt</c> profile the current loop was built from (null when the Inspector fields are used instead).</summary>
+        public ExperimentProfile ActiveProfile { get; private set; }
+
         private double _accumulator;
         private double _tankHeightZ = 0.60;
         private IController _built;   // tracked so an IDisposable controller (learned policy socket) is released
@@ -108,14 +111,22 @@ namespace FluidStabilizer.Sim
         {
             // Follow experiment.txt in the actual play scene; leave direct
             // BuildLoop() callers (tooling, tests) on their explicit values.
-            if (UseExperimentProfile && Application.isPlaying)
-                ApplyProfile(ExperimentProfileStore.Load());
+            ActiveProfile = (UseExperimentProfile && Application.isPlaying) ? ExperimentProfileStore.Load() : null;
 
-            var cfg = new SimulationConfig { EpisodeSeconds = 0.0 }; // endless
-            cfg.Slosh.FillRatio = FillRatio;
-            cfg.Slosh.TankHeightZ = _tankHeightZ;
-            cfg.Road.Enabled = Road;
-            cfg.Road.Severity = RoadSeverity;
+            SimulationConfig cfg;
+            if (ActiveProfile != null)
+            {
+                cfg = ActiveProfile.ToConfig(0.0);   // 0 = endless
+                ApplyProfile(ActiveProfile);         // sync the read-only Inspector fields
+            }
+            else
+            {
+                cfg = new SimulationConfig { EpisodeSeconds = 0.0 };
+                cfg.Slosh.FillRatio = FillRatio;
+                cfg.Slosh.TankHeightZ = _tankHeightZ;
+                cfg.Road.Enabled = Road;
+                cfg.Road.Severity = RoadSeverity;
+            }
 
             Driver = new HumanDriverInput();
             Loop = new SimulationLoop(cfg, BuildController(Stabilizer),
