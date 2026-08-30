@@ -239,5 +239,109 @@ namespace FluidStabilizer.Tests
             Assert.Greater(rough.SloshEnergyIntegral, flat.SloshEnergyIntegral * 1.2,
                 "driving the same route on a rough road puts more energy into the liquid");
         }
+
+        // ---- left/right wheel-track asymmetry (묶음 2a) ----
+
+        [Test]
+        public void WheelTracks_DifferAtShortWavelength_ButAverageToTheCentre()
+        {
+            var cfg = new RoadConfig { Enabled = true, Severity = 1.5, WheelTrackRoughnessFrac = 0.5 };
+            var m = new RoadModel(cfg);
+            m.Reset(Rng(13));
+
+            double maxDiff = 0.0, avgErr = 0.0;
+            int n = 0;
+            for (double s = 0; s < 3000; s += 0.17)
+            {
+                RoadInput r = m.Sample(s);
+                maxDiff = Math.Max(maxDiff, Math.Abs(r.SurfaceHeightLeft - r.SurfaceHeightRight));
+                avgErr = Math.Max(avgErr, Math.Abs(0.5 * (r.SurfaceHeightLeft + r.SurfaceHeightRight) - r.SurfaceHeight));
+                n++;
+            }
+            Assert.Greater(maxDiff, 3e-3, "the two wheel tracks must actually decorrelate");
+            Assert.Less(avgErr, 1e-9, "SurfaceHeight must be exactly the mean of the two tracks");
+        }
+
+        [Test]
+        public void WheelTracks_AreIdentical_WhenTheDifferentialFractionIsZero()
+        {
+            var cfg = new RoadConfig { Enabled = true, Severity = 1.5, WheelTrackRoughnessFrac = 0.0 };
+            var m = new RoadModel(cfg);
+            m.Reset(Rng(13));
+            for (double s = 0; s < 2000; s += 0.31)
+            {
+                RoadInput r = m.Sample(s);
+                Assert.AreEqual(r.SurfaceHeightLeft, r.SurfaceHeightRight, 1e-12, "no differential → symmetric road");
+            }
+        }
+
+        [Test]
+        public void OneSidedRoadBump_RollsTheTruck_MoreThanASymmetricRoad()
+        {
+            double RollRateRms(double diffFrac)
+            {
+                var cfg = new SimulationConfig { EpisodeSeconds = 20.0 };
+                cfg.Slosh.FillRatio = 0.6;
+                cfg.Road.Enabled = true;
+                cfg.Road.Severity = 1.5;
+                cfg.Road.EventsPerKm = 45.0;
+                cfg.Road.EventHeightM = 0.07;
+                cfg.Road.WheelTrackRoughnessFrac = diffFrac;
+                var loop = new SimulationLoop(cfg, new HoldController(),
+                    new ConstantDriver(new DriverControls { Throttle = 0.18 }), new PendulumSloshModel());
+                loop.BeginEpisode(4);
+                double sumSq = 0.0; int n = 0;
+                while (loop.StepPhysics())
+                {
+                    double rr = loop.VehicleState.AngularVelocityBody.X;
+                    sumSq += rr * rr; n++;
+                }
+                return Math.Sqrt(sumSq / n);
+            }
+
+            double symmetric = RollRateRms(0.0);
+            double asymmetric = RollRateRms(0.8);
+            Assert.Greater(asymmetric, symmetric * 1.3,
+                "independent left/right wheel-track roughness + one-sided potholes roll the body more");
+        }
+
+        // ---- tyre-slip proxy (묶음 2b) ----
+
+        [Test]
+        public void LowGrip_HardManoeuvre_Slips_AndFishtails()
+        {
+            // Same aggressive drive; vary grip and whether the slip fishtail is on.
+            (EpisodeResult res, double slipIntegral, double yawRms) Run(double grip, double fishtail)
+            {
+                var cfg = new SimulationConfig { EpisodeSeconds = 22.0 };
+                cfg.Slosh.FillRatio = 0.62;
+                cfg.Vehicle.FrictionLimit *= grip;
+                cfg.Vehicle.MaxBrake *= grip;
+                cfg.Vehicle.SlipYawWander = fishtail;
+                var loop = new SimulationLoop(cfg, new HoldController(),
+                    new RandomManeuverDriver(2, aggression: 0.7), new PendulumSloshModel());
+                loop.BeginEpisode(2);
+                double slip = 0.0, sumSq = 0.0; int n = 0;
+                while (loop.StepPhysics())
+                {
+                    slip += loop.VehicleState.TyreSlip * cfg.PhysicsStepSeconds;
+                    double y = loop.VehicleState.AngularVelocityBody.Z;
+                    sumSq += y * y; n++;
+                }
+                return (loop.Result(), slip, Math.Sqrt(sumSq / n));
+            }
+
+            var dry = Run(1.0, 0.35);
+            var ice = Run(0.4, 0.35);
+            var iceNoFishtail = Run(0.4, 0.0);
+            var iceRepeat = Run(0.4, 0.35);
+
+            Assert.AreEqual(ice.slipIntegral, iceRepeat.slipIntegral, 0.0, "a low-grip episode is bit-reproducible");
+            Assert.Greater(ice.slipIntegral, dry.slipIntegral * 2.0 + 0.3, "the same driving slides much more on ice");
+            Assert.Greater(ice.yawRms, iceNoFishtail.yawRms * 1.15,
+                "the fishtail adds yaw wander the truck otherwise would not have");
+            Assert.Greater(ice.res.SloshEnergyIntegral, iceNoFishtail.res.SloshEnergyIntegral,
+                "the fishtail slops the tank more than a clean low-grip slide");
+        }
     }
 }

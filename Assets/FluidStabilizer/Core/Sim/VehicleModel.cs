@@ -26,6 +26,9 @@ namespace FluidStabilizer.Core.Sim
         public double HeadingErrorFromRoad;
         /// <summary>Absolute road heading at the truck (rad, integrated curvature). 0 when the road is off.</summary>
         public double RoadHeadingRad;
+
+        /// <summary>Tyre slip [0,1]: 0 = full grip, 1 = sliding. &gt;0 only on a hard maneuver near the friction limit (worse on a low-grip road).</summary>
+        public double TyreSlip;
     }
 
     /// <summary>
@@ -50,6 +53,11 @@ namespace FluidStabilizer.Core.Sim
         private double _lastLatAccel;
         private double _lastYawRate;
 
+        private IRandomSource _slipRng;    // null → no yaw wander (deterministic without a loop seed)
+        private double _slip;              // [0,1] lumped tyre-slip state
+        private double _slipYaw;           // OU noise for the fishtail
+        private double _yawRateGripped;    // tyre yaw rate low-passed while sliding (under-response, then grab)
+
         public VehicleModel(VehicleConfig cfg)
         {
             _cfg = cfg;
@@ -59,7 +67,10 @@ namespace FluidStabilizer.Core.Sim
             Reset();
         }
 
-        public void Reset()
+        public void Reset() => Reset(null);
+
+        /// <param name="rng">A per-episode sub-stream for the tyre-slip yaw wander. Null = no wander.</param>
+        public void Reset(IRandomSource rng)
         {
             _speed = _cfg.InitialSpeed;
             _yaw = 0.0;
@@ -71,6 +82,10 @@ namespace FluidStabilizer.Core.Sim
             _lastLongAccel = 0.0;
             _lastLatAccel = 0.0;
             _lastYawRate = 0.0;
+            _slipRng = rng?.Fork("slip");
+            _slip = 0.0;
+            _slipYaw = 0.0;
+            _yawRateGripped = 0.0;
         }
 
         public VehicleState Step(DriverControls controls, RoadInput road, double dt)
@@ -110,17 +125,50 @@ namespace FluidStabilizer.Core.Sim
 
             double aLat = _speed * tyreYawRate;
 
-            // --- friction circle (tyre forces only) ---
-            double aMag = Math.Sqrt(aLongDesired * aLongDesired + aLat * aLat);
-            if (aMag > _cfg.FrictionLimit && aMag > 1e-9)
+            // --- lumped tyre-slip proxy ---
+            // Break loose as the demanded acceleration nears the friction limit;
+            // recover slowly. While sliding, grip drops further (kinetic < static)
+            // and the rear steps out (a low-freq yaw wander) — so the tank slops.
+            double aDemand = Math.Sqrt(aLongDesired * aLongDesired + aLat * aLat);
             {
-                double scale = _cfg.FrictionLimit / aMag;
+                double ratio = _cfg.FrictionLimit > 1e-6 ? aDemand / _cfg.FrictionLimit : 0.0;
+                double slipTarget = MathD.Clamp(
+                    (ratio - _cfg.SlipOnsetFraction) / Math.Max(0.05, _cfg.SlipSaturationSpan), 0.0, 1.0);
+                double tau = _slip < slipTarget ? _cfg.SlipOnsetTau : _cfg.SlipRecoverTau;
+                double a = dt > 0.0 ? 1.0 - Math.Exp(-dt / Math.Max(1e-3, tau)) : 1.0;
+                _slip += (slipTarget - _slip) * a;
+
+                // Advance the OU wander every step (drawn from a dedicated stream,
+                // so consuming it never shifts the road/sensor/slosh RNG).
+                if (_slipRng != null)
+                {
+                    double b = dt > 0.0 ? 1.0 - Math.Exp(-dt / Math.Max(1e-3, _cfg.SlipYawTau)) : 1.0;
+                    _slipYaw += -b * _slipYaw + Math.Sqrt(2.0 * b) * _slipRng.NextGaussian();
+                }
+            }
+
+            double effLimit = _cfg.FrictionLimit * (1.0 - _cfg.SlipGripLoss * _slip);
+
+            // --- friction circle (tyre forces only) ---
+            double aMag = aDemand;
+            if (aMag > effLimit && aMag > 1e-9)
+            {
+                double scale = effLimit / aMag;
                 aLongDesired *= scale;
                 aLat *= scale;
                 tyreYawRate *= scale;
             }
 
-            double yawRate = tyreYawRate + edgeYawRate;
+            // While sliding, the tyres under-respond to steering, then "grab" when
+            // grip returns (the slip time constant collapses with _slip).
+            double slipLagTau = _cfg.SlipYawLag * _slip;
+            double lg = dt > 0.0 && slipLagTau > 1e-4 ? 1.0 - Math.Exp(-dt / slipLagTau) : 1.0;
+            _yawRateGripped += (tyreYawRate - _yawRateGripped) * lg;
+            tyreYawRate = _yawRateGripped;
+            aLat = _speed * tyreYawRate;
+
+            double yawRate = tyreYawRate + edgeYawRate
+                             + _slip * _cfg.SlipYawWander * _slipYaw;   // fishtail while sliding
 
             // --- integrate speed (no reverse) ---
             double newSpeed = _speed + aLongDesired * dt;
@@ -156,9 +204,12 @@ namespace FluidStabilizer.Core.Sim
                 _lateralOffset = 0.0;
             }
 
-            // --- suspension: body pitch/roll from load transfer ---
+            // --- suspension: body pitch/roll from load transfer + a one-wheel bump ---
+            double roadRoll = roadActive
+                ? Math.Atan2(road.SurfaceHeightLeft - road.SurfaceHeightRight, Math.Max(0.3, _cfg.TrackWidthM))
+                : 0.0;
             double pitchTarget = _cfg.PitchPerLongAccel * aLong + road.Grade;
-            double rollTarget = -_cfg.RollPerLatAccel * aLat + road.Bank;
+            double rollTarget = -_cfg.RollPerLatAccel * aLat + road.Bank + _cfg.RoadRollGain * roadRoll;
             double pitchAccel = _pitch.AccelerationToward(pitchTarget);
             double rollAccel = _roll.AccelerationToward(rollTarget);
             _pitch.Step(pitchTarget, dt);
@@ -198,7 +249,8 @@ namespace FluidStabilizer.Core.Sim
                 LateralAcceleration = aLat,
                 LateralOffsetFromRoadCentre = _lateralOffset,
                 HeadingErrorFromRoad = headingErr,
-                RoadHeadingRad = roadActive ? roadHeadingRad : 0.0
+                RoadHeadingRad = roadActive ? roadHeadingRad : 0.0,
+                TyreSlip = _slip
             };
         }
     }
