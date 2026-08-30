@@ -87,6 +87,36 @@ namespace FluidStabilizer.Core.Sim
         /// <summary>Static roll gain: body roll (rad) per 1 m/s² of lateral accel.</summary>
         public double RollPerLatAccel = 0.012;
 
+        /// <summary>Wheel track width (m, left wheel to right wheel). Sets the roll
+        /// angle a left/right road-height difference produces.</summary>
+        public double TrackWidthM = 2.0;
+
+        /// <summary>How much of the geometric road-roll (from the L/R wheel-height
+        /// difference) reaches the body, before the roll suspension filters it.</summary>
+        public double RoadRollGain = 1.0;
+
+        // --- lumped tyre-slip proxy (slippery-road feel; design-review defers a
+        //     full tyre model, this is the cheap stand-in). Engages only when the
+        //     demanded acceleration approaches the friction limit. ---
+        /// <summary>Demand / friction-limit ratio at which the tyres start to break
+        /// loose (slightly over 1 — at the limit you still grip; beyond it you slide).
+        /// So normal hard driving stays clean and only genuinely over-the-limit
+        /// inputs, or a low-grip road that shrinks the limit, cause a slide.</summary>
+        public double SlipOnsetFraction = 1.02;
+        /// <summary>Demand-ratio span above onset over which slip ramps 0 → 1.</summary>
+        public double SlipSaturationSpan = 0.5;
+        /// <summary>Extra grip lost once fully sliding (kinetic &lt; static friction).</summary>
+        public double SlipGripLoss = 0.28;
+        /// <summary>Yaw-rate wander amplitude while sliding (rad/s per unit slip).</summary>
+        public double SlipYawWander = 0.35;
+        /// <summary>Time constant of the yaw-wander noise (s).</summary>
+        public double SlipYawTau = 0.5;
+        /// <summary>Steering under-response lag while fully sliding (s) — collapses as grip returns (the "grab").</summary>
+        public double SlipYawLag = 0.28;
+        /// <summary>Slip onset / recovery time constants (s) — quick to break loose, slower to regain grip.</summary>
+        public double SlipOnsetTau = 0.08;
+        public double SlipRecoverTau = 0.35;
+
         /// <summary>Initial speed (m/s).</summary>
         public double InitialSpeed = 12.0;
 
@@ -196,6 +226,15 @@ namespace FluidStabilizer.Core.Sim
         public double RoughnessRmsM = 0.006;
         public double RoughnessShortWavelengthM = 0.6;
         public double RoughnessLongWavelengthM = 9.0;
+
+        /// <summary>
+        /// Left/right wheel-track differential roughness, as a fraction of
+        /// <see cref="RoughnessRmsM"/>. The two wheel tracks share the long
+        /// undulations but decorrelate at short wavelength; this fraction sets how
+        /// much independent per-wheel roughness there is → a road-induced roll
+        /// disturbance. 0 = perfectly symmetric road (the old single-track model).
+        /// </summary>
+        public double WheelTrackRoughnessFrac = 0.35;
 
         // ---- discrete events: expansion joints, potholes, stray rocks, curbs ----
         public double EventsPerKm = 18.0;

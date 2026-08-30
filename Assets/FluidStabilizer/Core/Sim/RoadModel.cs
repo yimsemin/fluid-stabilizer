@@ -25,12 +25,20 @@ namespace FluidStabilizer.Core.Sim
         public double Curvature;
 
         /// <summary>
-        /// Vertical displacement of the road surface under the wheels, m. The
-        /// suspension (a heave spring-mass-damper in <see cref="VehicleModel"/>)
-        /// turns this into body vertical motion — so a sharp bump becomes a
-        /// filtered jolt at the tank, not an instantaneous acceleration spike.
+        /// Vertical displacement of the road surface under the wheels, m —
+        /// the <b>average</b> of the two wheel tracks. The suspension (a heave
+        /// spring-mass-damper in <see cref="VehicleModel"/>) turns this into body
+        /// vertical motion, so a sharp bump becomes a filtered jolt at the tank.
         /// </summary>
         public double SurfaceHeight;
+
+        /// <summary>Surface displacement under the left / right wheel track, m.
+        /// They share the long undulations but decorrelate at short wavelength,
+        /// and a stray rock or pothole often hits only one side — so the
+        /// difference rolls the truck (a real disturbance a rigid tank cannot
+        /// reject). Equal to <see cref="SurfaceHeight"/> when the road is off.</summary>
+        public double SurfaceHeightLeft;
+        public double SurfaceHeightRight;
     }
 
     /// <summary>
@@ -62,11 +70,19 @@ namespace FluidStabilizer.Core.Sim
         private double[] _roughPhase = Array.Empty<double>();
         private double[] _roughAmp = Array.Empty<double>();
 
+        // Left/right wheel-track differential roughness: a small red sum with its
+        // own phases, added to one track and subtracted from the other.
+        private double[] _diffK = Array.Empty<double>();
+        private double[] _diffPhase = Array.Empty<double>();
+        private double[] _diffAmp = Array.Empty<double>();
+
         private IRandomSource _eventRng;
+        private IRandomSource _sideRng;   // per-event L/R/both, drawn in strict event order (own stream)
         private readonly List<Event> _events = new List<Event>();
         private double _eventsGeneratedTo;
 
-        private struct Event { public double Pos, Height, HalfLength; }
+        // Side: 0 = both wheels, +1 = left only, -1 = right only.
+        private struct Event { public double Pos, Height, HalfLength; public int Side; }
 
         public RoadModel(RoadConfig cfg)
         {
@@ -124,6 +140,33 @@ namespace FluidStabilizer.Core.Sim
             _curveK2 = 2.7 * _curveK1;
             _curvePhase1 = r.NextDouble(0.0, TwoPi);
             _curvePhase2 = r.NextDouble(0.0, TwoPi);
+
+            // ---- left/right wheel-track differential (own forked stream, so the
+            //      average road above stays byte-identical to before) ----
+            IRandomSource wt = r.Fork("wheeltracks");
+            _sideRng = wt.Fork("eventsides");
+            const int nd = 3;
+            double dkLong = TwoPi / Math.Max(0.05, 0.6 * _cfg.RoughnessLongWavelengthM); // shorter than the shared set
+            double dkShort = TwoPi / Math.Max(0.05, _cfg.RoughnessShortWavelengthM);
+            _diffK = new double[nd];
+            _diffPhase = new double[nd];
+            _diffAmp = new double[nd];
+            double dsumSq = 0.0;
+            for (int i = 0; i < nd; i++)
+            {
+                double f = nd == 1 ? 0.0 : i / (double)(nd - 1);
+                double k = dkLong * Math.Pow(dkShort / dkLong, f);
+                double a = 1.0 / k;
+                _diffK[i] = k;
+                _diffPhase[i] = wt.NextDouble(0.0, TwoPi);
+                _diffAmp[i] = a;
+                dsumSq += a * a;
+            }
+            double drms = Math.Sqrt(0.5 * dsumSq);
+            double dtarget = Math.Max(0.0, _cfg.RoughnessRmsM) * Math.Max(0.0, _cfg.Severity)
+                             * Math.Max(0.0, _cfg.WheelTrackRoughnessFrac);
+            double dgain = drms > 1e-12 ? dtarget / drms : 0.0;
+            for (int i = 0; i < nd; i++) _diffAmp[i] *= dgain;
         }
 
         /// <summary>Centreline curvature at distance <paramref name="s"/> (rad/m, left positive).</summary>
@@ -147,9 +190,14 @@ namespace FluidStabilizer.Core.Sim
             double superelevation = MathD.ClampAbs(_cfg.BankPerCurvature * curvature, 0.08);
             double bank = superelevation + _cfg.BankAmplitudeRad * Math.Sin(_bankK * s + _bankPhase);
 
-            double z = 0.0;
+            double zAvg = 0.0;
             for (int i = 0; i < _roughK.Length; i++)
-                z += _roughAmp[i] * Math.Sin(_roughK[i] * s + _roughPhase[i]);
+                zAvg += _roughAmp[i] * Math.Sin(_roughK[i] * s + _roughPhase[i]);
+
+            // Differential (left − right) roughness.
+            double zDiff = 0.0;
+            for (int i = 0; i < _diffK.Length; i++)
+                zDiff += _diffAmp[i] * Math.Sin(_diffK[i] * s + _diffPhase[i]);
 
             GenerateEventsUpTo(s + 25.0);
             for (int i = 0; i < _events.Count; i++)
@@ -158,13 +206,27 @@ namespace FluidStabilizer.Core.Sim
                 double hl = _events[i].HalfLength;
                 if (ds < -hl || ds > hl) continue;
                 // Raised-cosine bump/pothole: C¹-continuous, zero at the ends.
-                z += _events[i].Height * 0.5 * (1.0 + Math.Cos(Math.PI * ds / hl));
+                double bump = _events[i].Height * 0.5 * (1.0 + Math.Cos(Math.PI * ds / hl));
+                int side = _events[i].Side;
+                if (side == 0) { zAvg += bump; }
+                else
+                {
+                    // one wheel only: half the drop reaches the average, half the difference
+                    zAvg += 0.5 * bump;
+                    zDiff += (side > 0 ? 0.5 : -0.5) * bump;
+                }
             }
             // Drop events well behind the truck so the list stays short.
             if (_events.Count > 0 && _events[0].Pos < s - 40.0)
                 _events.RemoveAll(e => e.Pos < s - 40.0);
 
-            return new RoadInput { Grade = grade, Bank = bank, SurfaceHeight = z, Curvature = curvature };
+            return new RoadInput
+            {
+                Grade = grade, Bank = bank, Curvature = curvature,
+                SurfaceHeight = zAvg,
+                SurfaceHeightLeft = zAvg + zDiff,
+                SurfaceHeightRight = zAvg - zDiff,
+            };
         }
 
         private void GenerateEventsUpTo(double sMax)
@@ -184,7 +246,15 @@ namespace FluidStabilizer.Core.Sim
                 double sign = _eventRng.NextDouble() < 0.5 ? -1.0 : 1.0; // pothole vs bump
                 double height = sign * _cfg.EventHeightM * severity * _eventRng.NextDouble(0.5, 1.5);
                 double halfLen = 0.5 * _cfg.EventLengthM * _eventRng.NextDouble(0.7, 1.6);
-                _events.Add(new Event { Pos = pos, Height = height, HalfLength = Math.Max(0.05, halfLen) });
+
+                // ~45% span both wheels (joints, wide potholes), else one side
+                // (rocks, edge potholes). WheelTrackRoughnessFrac == 0 recovers the
+                // old symmetric single-track road.
+                double u2 = _sideRng.NextDouble();   // always drawn (stream stays event-order stable)
+                int esideVal = _cfg.WheelTrackRoughnessFrac <= 0.0 ? 0
+                             : (u2 < 0.45 ? 0 : (u2 < 0.725 ? 1 : -1));
+
+                _events.Add(new Event { Pos = pos, Height = height, HalfLength = Math.Max(0.05, halfLen), Side = esideVal });
             }
         }
     }

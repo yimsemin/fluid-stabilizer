@@ -111,7 +111,7 @@ namespace FluidStabilizer.Core.Sim
             var root = new DeterministicRandom(seed);
 
             _clock.Reset();
-            _vehicle.Reset();
+            _vehicle.Reset(root.Fork("vehicle"));
             _road.Reset(root.Fork("road"));
             _gimbal.Reset();
             _sensors.Reset(root.Fork("sensors"));
