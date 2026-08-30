@@ -84,7 +84,16 @@
 주행, 같은 길, 처리 방식만 다름.** 각 칸에 넘친 리터가 크게 표시되고, 가장 적게
 넘친 칸에 초록 테두리. 다시 **C** 로 나간다.
 
-③ 칸이 "(offline→Hold)" 면 5번을 먼저.
+③ 칸이 "(offline→Hold)" 면 5번을 먼저. 세 칸이 다 끝나면 아래에 한 줄 판정
+("① 강체가 가장 적게 넘쳤다 …")이 뜬다.
+
+## 6b. 결과 로그 (`Logs/episodes.csv`)
+
+3분할 비교와 헤드리스 평가(메뉴 **FluidStabilizer ▸ Evaluate Recorded Drives** /
+**Evaluate Learned Policy**)는 끝난 에피소드마다 한 줄을 `Logs/episodes.csv` 에
+**덧붙인다** — 운영점(fill·탱크높이·도로·grip)과 결과(넘친 리터·최소 freeboard·
+슬로시에너지·액추에이터 노력/포화)가 한 행. 스프레드시트로 열어 실행들을
+누적 비교하거나 그래프를 그릴 수 있다. `Logs/` 는 git 에 안 올라간다.
 
 ## 7. standalone 앱 빌드
 

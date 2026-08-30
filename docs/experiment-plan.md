@@ -43,7 +43,8 @@
 | 평가 하네스 | ✅ | `Evaluator` + `ScenarioSet`(8개) + 텍스트 리포트. `TraceEvaluator` (녹화 주행 × 베이스라인 × 슬로시 2종, 주행별 리터). `HindsightOptimizer` (feasibility 천장, F5) |
 | 플레이 씬 (수동 주행) | ✅ | `FluidStabilizer.Sim`: `SimulationRunner` · `HumanDriverInput`(키보드+게임패드) · `SimView` · `Hud` · `PlayControls` · `Frames`. `SceneBuilder` → `PlayScene.unity`. 트레이스 녹화/재생(`P`/`L`), `ComparisonRunner`(`C`), `RoadRibbon` — [human-drive.md](human-drive.md) |
 | RL 경로 | 🟡 | C# 쪽 완료+테스트: `FluidStabilizer.Rl` (`ObservationEncoder` 프레임스택, `PrivilegedEncoder` 비대칭 크리틱, `RewardFunction`, `RlEnvironment`, `TrainingServer` TCP). Python 쪽(`python/`) end-to-end 실행됨. **맨땅 PPO 는 학습 못 함** (F1/F4 절벽) — [rl.md](rl.md) |
-| 도메인 랜덤화 + 에피소드 로깅 | ⬜ | config 구조체는 있음, 랜덤화기+로깅 미구현 |
+| 에피소드 로깅 | ✅ (2026-08-30) | `EpisodeLog` (engine-free) → `Logs/episodes.csv` 에 에피소드당 한 줄(운영점 + 결과 지표). `TraceEvaluator`·`Evaluator`·`ComparisonRunner` 배선 |
+| 도메인 랜덤화 | ⬜ (보류) | config 구조체는 있음, 랜덤화기 미구현. 활성 RL 학습 없이는 가치 낮아 보류 |
 | 녹화 주행 (녹화 + 재생) | ✅ | `DriverTrace` — 실제 disturbance 데이터 + 홀드아웃 평가 조건 |
 | feasibility 천장 | ✅ | `HindsightOptimizer` — **게이트 미통과** (F5) |
 

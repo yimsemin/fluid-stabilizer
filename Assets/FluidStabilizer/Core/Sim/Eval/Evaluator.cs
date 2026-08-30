@@ -34,7 +34,8 @@ namespace FluidStabilizer.Core.Sim.Eval
         public static List<AggregateResult> Run(
             IReadOnlyList<Scenario> scenarios,
             IReadOnlyList<(string name, Func<IController> make)> controllers,
-            IReadOnlyList<ulong> seeds)
+            IReadOnlyList<ulong> seeds,
+            EpisodeLog log = null)
         {
             var results = new List<AggregateResult>();
 
@@ -46,9 +47,11 @@ namespace FluidStabilizer.Core.Sim.Eval
 
                 foreach (ulong seed in seeds)
                 {
+                    SimulationConfig cfg = scenario.Config();
                     var loop = new SimulationLoop(
-                        scenario.Config(), make(), scenario.Driver(seed), scenario.Slosh());
+                        cfg, make(), scenario.Driver(seed), scenario.Slosh());
                     EpisodeResult r = loop.RunEpisode(seed);
+                    log?.Add("scenario-eval", cfg, r);
 
                     overflow.Add(r.TotalOverflowVolume);
                     fbSum += r.WorstFreeboard;

@@ -27,8 +27,9 @@ findings F1~F4: 강체(잠금 관절) `Hold` 상대로 **어떤 분석적 반응
 | `RlServerLauncher` / `BcExportRunner` / `PolicyEvalRunner` | `Sim/Editor/` | ✅ `-executeMethod` / 메뉴 진입점 (헤드리스 Unity 호스트) |
 | Python env + PPO | `python/` | 🟡 비대칭 크리틱 CleanRL 스타일 PPO; end-to-end 실행됨, obs/return 정규화까지 올림. **맨땅 PPO 는 여전히 학습 못 함** — 튜닝이 아니라 잔차 RL / 커리큘럼 / 웜스타트가 필요. "첫 실행 결과" 참고 |
 | `bc_pretrain.py` / `serve_policy.py` | `python/` | ✅ BC 사전학습 + 정책 추론 프로세스 (step C/D) |
-| 도메인 랜덤화 | — | ⬜ |
+| 도메인 랜덤화 | — | ⬜ (보류 — 활성 RL 학습 재개 시) |
 | 체크포인트 재개 | `train_ppo.py --resume` | ✅ (2026-08-30, 묶음 3) — `state.pt` 로 이어서 학습. 커리큘럼 자동화는 아직 수동 |
+| 에피소드 로깅 | `EpisodeLog` → `Logs/episodes.csv` | ✅ (2026-08-30) — 평가/비교 러너가 에피소드당 한 줄 append. RL 학습 자체는 아직 미배선 (필요 시 `RlEnvironment` 에서) |
 
 ## 행동 / 관측 / reward
 

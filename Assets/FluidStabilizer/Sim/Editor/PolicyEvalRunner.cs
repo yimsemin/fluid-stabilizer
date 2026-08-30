@@ -56,11 +56,13 @@ namespace FluidStabilizer.SimEditor
             };
             var models = new List<(string, Func<ISloshModel>)> { ("pendulum", () => new PendulumSloshModel()) };
 
-            var rows = TraceEvaluator.Run(traces, controllers, models);
+            List<TraceEvalRow> rows;
+            using (var log = new EpisodeLog(EpisodeLog.DefaultPath, $"policy-eval {DateTime.Now:yyyy-MM-dd HH:mm}"))
+                rows = TraceEvaluator.Run(traces, controllers, models, log);
             string report = TraceEvaluator.FormatReport(rows);
             Directory.CreateDirectory("Logs");
             File.WriteAllText("Logs/policy-eval.txt", report);
-            Debug.Log("[policy-eval] → Logs/policy-eval.txt\n\n" + report);
+            Debug.Log($"[policy-eval] → Logs/policy-eval.txt  (+ {EpisodeLog.DefaultPath})\n\n" + report);
         }
 
         private static List<DriverTrace> LoadTraces()

@@ -57,12 +57,14 @@ namespace FluidStabilizer.SimEditor
 
             Debug.Log($"[trace-eval] {traces.Count} drive(s) × {Baselines.Length} controllers × {models.Count} model(s) …");
 
-            var rows = TraceEvaluator.Run(traces, Baselines, models);
+            List<TraceEvalRow> rows;
+            using (var log = new EpisodeLog(EpisodeLog.DefaultPath, $"trace-eval {DateTime.Now:yyyy-MM-dd HH:mm}"))
+                rows = TraceEvaluator.Run(traces, Baselines, models, log);
             string report = TraceEvaluator.FormatReport(rows);
 
             Directory.CreateDirectory("Logs");
             File.WriteAllText("Logs/trace-eval.txt", report);
-            Debug.Log("[trace-eval] → Logs/trace-eval.txt\n\n" + report);
+            Debug.Log($"[trace-eval] → Logs/trace-eval.txt  (+ {EpisodeLog.DefaultPath})\n\n" + report);
         }
 
         private static List<DriverTrace> LoadTraces()

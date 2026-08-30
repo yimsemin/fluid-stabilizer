@@ -248,8 +248,27 @@ namespace FluidStabilizer.Sim
                 }
                 _accumulator -= dt;
                 steps++;
-                if (!anyAlive) { _finished = true; _accumulator = 0; break; }
+                if (!anyAlive) { _finished = true; _accumulator = 0; LogEpisodes(); break; }
             }
+        }
+
+        // One row per lane, appended to Logs/episodes.csv — the same file the
+        // headless evaluators write, so an in-app comparison run shows up in the
+        // spreadsheet next to the batch runs.
+        private void LogEpisodes()
+        {
+            if (_lanes.Count == 0) return;
+            try
+            {
+                using (var log = new FluidStabilizer.Core.Sim.Eval.EpisodeLog(
+                    FluidStabilizer.Core.Sim.Eval.EpisodeLog.DefaultPath,
+                    $"comparison '{_trace?.Label}' {DateTime.Now:yyyy-MM-dd HH:mm}"))
+                {
+                    foreach (var l in _lanes)
+                        log.Add("comparison", l.Loop.Config, l.Loop.Result());
+                }
+            }
+            catch (Exception e) { Debug.LogWarning("[compare] episode log failed: " + e.Message); }
         }
 
         private void RenderLanes()
@@ -349,12 +368,43 @@ namespace FluidStabilizer.Sim
                 GUILayout.EndArea();
             }
 
+            // verdict banner — the honest one-liner once every lane has finished
+            if (_finished)
+            {
+                var vb = new Rect(0, Screen.height - 26 - 34, Screen.width, 32);
+                SimGui.Box(vb, new Color(0.05f, 0.06f, 0.08f, 0.9f));
+                _hint.alignment = TextAnchor.MiddleCenter;
+                SimGui.ShadowLabel(vb, VerdictText(), _hint);
+            }
+
             // bottom bar
             var bar = new Rect(0, Screen.height - 26, Screen.width, 26);
             SimGui.Box(bar, new Color(0.05f, 0.06f, 0.08f, 0.8f));
             _hint.alignment = TextAnchor.MiddleCenter;
             SimGui.ShadowLabel(bar, $"동일 주행 '{_trace?.Label}' 을 3가지 방식으로   ·   {elapsed:0.0} / {total:0.0} s" +
                 (_finished ? "  — 완료" : "") + "      C: 나가기   R: 다시   T: 슬로모", _hint);
+        }
+
+        // "① 강체가 가장 적게 넘침 (…)". Deliberately plain — this is the takeaway a
+        // viewer should get without reading the per-lane cards.
+        private string VerdictText()
+        {
+            var ranked = _lanes
+                .Select((l, i) => (l, tag: i < 3 ? "①②③"[i].ToString() : "·"))
+                .OrderBy(t => t.l.SpillLitres)
+                .ToList();
+            var win = ranked[0];
+            string wname = SimulationRunner.ShortName(win.l.Choice);
+
+            if (ranked.Count > 1)
+            {
+                double gap = ranked[1].l.SpillLitres - win.l.SpillLitres;
+                string cmp = gap < 0.05
+                    ? "— 레인 간 차이 거의 없음"
+                    : $"— 다음 레인보다 {gap:0.0} L 적게 넘침";
+                return $"{win.tag} {wname} 이 가장 적게 넘쳤다 ({win.l.SpillLitres:0.0} L) {cmp}";
+            }
+            return $"{win.tag} {wname}: {win.l.SpillLitres:0.0} L";
         }
 
         private static void SetComponentEnabled<T>(GameObject go, bool on) where T : Behaviour

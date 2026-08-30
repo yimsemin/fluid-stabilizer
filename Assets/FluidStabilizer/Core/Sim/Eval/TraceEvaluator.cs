@@ -41,7 +41,8 @@ namespace FluidStabilizer.Core.Sim.Eval
         public static List<TraceEvalRow> Run(
             IReadOnlyList<DriverTrace> traces,
             IReadOnlyList<(string name, Func<IController> make)> controllers,
-            IReadOnlyList<(string name, Func<ISloshModel> make)> sloshModels)
+            IReadOnlyList<(string name, Func<ISloshModel> make)> sloshModels,
+            EpisodeLog log = null)
         {
             var rows = new List<TraceEvalRow>();
 
@@ -50,10 +51,12 @@ namespace FluidStabilizer.Core.Sim.Eval
             foreach (var (ctrlName, makeCtrl) in controllers)
             {
                 IController ctrl = makeCtrl();
+                SimulationConfig cfg = trace.ToConfig();
                 var loop = new SimulationLoop(
-                    trace.ToConfig(), ctrl, new RecordedTraceDriver(trace), makeSlosh());
+                    cfg, ctrl, new RecordedTraceDriver(trace), makeSlosh());
                 EpisodeResult r = loop.RunEpisode(trace.Seed);
                 if (ctrl is IDisposable d) d.Dispose();
+                log?.Add("trace-eval", cfg, r);
 
                 rows.Add(new TraceEvalRow
                 {
