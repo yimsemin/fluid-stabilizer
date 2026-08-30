@@ -106,8 +106,10 @@ lock-capable 액션 공간) + step-3 재실행 전까지 보류.** 그 게이트
 - **여전히 먼저 물을 것:** 히스토리를 재작성/폐기하는 것 (force-push, push 된
   커밋의 rebase, 커밋 넘는 `reset --hard`, 브랜치/태그 삭제).
 - **커밋 메시지:** 간결한 요약 줄, 그다음 명백하지 않으면 *왜* 를 설명하는 짧은
-  본문. 모든 커밋을 다음으로 끝냄:
-  `Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>`
+  본문. **AI 생성 표식·co-author 트레일러 금지** — `Co-Authored-By: Claude …`,
+  `🤖 Generated with …` 등을 커밋 메시지에 넣지 않는다. `.githooks/commit-msg`
+  가 하드 게이트로 제거하며, `.claude/settings.json` 이 자동 추가를 끈다
+  (`git config core.hooksPath .githooks` 로 훅 활성화 — 새 클론마다 1회).
 - **생성/로컬 파일 커밋 금지:** `Library/ Temp/ Logs/ UserSettings/ Builds/`,
   `Assets/FluidStabilizer/Scenes/PlayScene.unity` (SceneBuilder 가 재생성),
   `Traces/` (녹화 주행 — 로컬 데이터; 안정되면 curated 홀드아웃 셋을 의도적으로
