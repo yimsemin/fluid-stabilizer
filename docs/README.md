@@ -13,7 +13,8 @@
 | [project-goals.md](project-goals.md) | **무엇을 · 왜 · 헤드라인 결과 · 최종 아키텍처.** 의도와 범위의 유일한 출처. | 소유자 |
 | [experiment-plan.md](experiment-plan.md) | **살아있는 현황 + 다음 단계 지도.** 유일한 진행상황 추적기. | 소유자 |
 | [operating-guide.md](operating-guide.md) | **조작 가이드** (비개발자용) — 설정 패널·운전·서버·비교·빌드 | 소유자 |
-| [vision-check.md](vision-check.md) | 초안 단계별 데모 + 소유자 O/X 체크리스트 | 소유자 |
+| [demo-guide.md](demo-guide.md) | **시연용 참고 문서** — 개요·구조·학습 과정·비교·결과 해석·남은 과제 (비개발자 청중) | 소유자 (시연 시) |
+| [vision-check.md](vision-check.md) | 초안 단계별 O/X 체크리스트 (2026-08-30 초안 종료 — 기록으로 보존) | 소유자 |
 | [findings.md](findings.md) | **실험으로 밝혀진 사실 F1~F6** (숫자·근거) | 소유자 + Claude |
 | [decisions.md](decisions.md) | **설계 결정 로그 D1~D8** (무엇을 정했고 왜) | Claude + 소유자 |
 | [design-review.md](design-review.md) | 아키텍처 결정의 근거 (큰 참고 문서, 잘 안 바뀜) | 주로 Claude |
@@ -23,7 +24,17 @@
 | [frames-units-conventions.md](frames-units-conventions.md) | 좌표계 · 단위 · 타이밍 규약 (고정) | Claude |
 | [setup-status.md](setup-status.md) | 개발 환경 사실 (버전·경로·도구) | Claude |
 
-## 정비 이력 (2026-08-29 한글화)
+## 정비 이력
+
+### 2026-08-30 — 묶음 2c/3 이후 정비
+
+- **`demo-guide.md` 신설** — 시연용(비개발자 청중) 참고 문서.
+- **`vision-check.md`** — 초안 단계 종료 표시, 기록으로 보존 (삭제 안 함, 소유자 관리).
+- 진행상황 숫자 갱신: EditMode 113 → **131 통과**, findings **F1~F6**, decisions **D1~D8**.
+- `experiment-plan.md` "한 문단 현황" 을 F6 결과 + 소유자 결정(정직한 헤드라인
+  수용)으로 재작성. 묶음 2 ✅, 묶음 3 ⏸ (전제 조정 대기).
+
+### 2026-08-29 한글화
 
 - **`plan-next.md` 폐기** — 2026-08-28 시점의 계획(얕은물 모델·운전자·플레이 씬).
   전부 완료됨. `experiment-plan.md` 가 대체.
