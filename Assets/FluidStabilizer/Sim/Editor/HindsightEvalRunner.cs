@@ -26,6 +26,11 @@ namespace FluidStabilizer.SimEditor
     ///     -executeMethod FluidStabilizer.SimEditor.HindsightEvalRunner.Run \
     ///     -hsKnots 8 -hsRestarts 3 -hsIters 80 -hsAuthority 1.0 -hsShallow 1
     ///
+    /// 묶음 3 gate re-run: -hsLockCapable 1 gives the hindsight actor the
+    /// lock-capable hybrid action (D8). The 2c premise sweep overrides the tank /
+    /// road on top of each drive's recorded setup:
+    ///     -hsFill 0.55 -hsTankHeight 0.60 -hsRoadSeverity 0.6 -hsGrip 0.6
+    ///
     /// Writes Logs/hindsight-eval.txt and Logs/hindsight/<drive>.traj.csv
     /// (the optimal trajectories — the input for a step-4 behaviour-cloning warm start).
     /// </summary>
@@ -63,6 +68,7 @@ namespace FluidStabilizer.SimEditor
             Debug.Log($"[hindsight] {traces.Count} drive(s), {opts.KnotCount} knots/axis, " +
                       $"{opts.Restarts}x{opts.IterationsPerRestart} search, models: " +
                       string.Join("+", opts.EvalModels.Select(m => m.name)) +
+                      $", lockCapable={opts.LockCapable}, override={(opts.ConfigOverride != null ? "yes" : "no")}" +
                       " — this takes a few minutes.");
 
             var reports = new List<HindsightDriveReport>();
@@ -121,7 +127,49 @@ namespace FluidStabilizer.SimEditor
             if (withShallow)
                 opts.EvalModels.Add(("shallow", () => new ShallowWaterSloshModel()));
 
+            opts.LockCapable = ArgInt(a, "-hsLockCapable", 0) != 0;
+            opts.ConfigOverride = BuildConfigOverride(a);
+
             return opts;
+        }
+
+        /// <summary>
+        /// The 2c premise sweep (experiment-plan). Each flag overrides one knob on
+        /// top of the drive's recorded setup; absent flags leave that knob alone.
+        /// Same recorded driver inputs — a different tank / road.
+        /// </summary>
+        private static Action<FluidStabilizer.Core.Sim.SimulationConfig> BuildConfigOverride(string[] a)
+        {
+            double? fill = ArgNullableDouble(a, "-hsFill");
+            double? tankH = ArgNullableDouble(a, "-hsTankHeight");
+            double? sev = ArgNullableDouble(a, "-hsRoadSeverity");
+            double? curve = ArgNullableDouble(a, "-hsCurve");
+            double? hills = ArgNullableDouble(a, "-hsHills");
+            double? grip = ArgNullableDouble(a, "-hsGrip");
+            if (fill == null && tankH == null && sev == null && curve == null && hills == null && grip == null)
+                return null;
+
+            return cfg =>
+            {
+                if (fill != null) cfg.Slosh.FillRatio = fill.Value;
+                if (tankH != null) cfg.Slosh.TankHeightZ = tankH.Value;
+                if (sev != null) { cfg.Road.Enabled = true; cfg.Road.Severity = sev.Value; }
+                if (curve != null) cfg.Road.CurvatureAmplitudeRadPerM *= Math.Max(0.0, curve.Value);
+                if (hills != null) cfg.Road.GradeAmplitudeRad *= Math.Max(0.0, hills.Value);
+                if (grip != null)
+                {
+                    double g = Math.Max(0.15, Math.Min(1.5, grip.Value));
+                    cfg.Vehicle.FrictionLimit *= g;
+                    cfg.Vehicle.MaxBrake *= g;
+                    cfg.Vehicle.MaxAccel *= g;
+                }
+            };
+        }
+
+        private static double? ArgNullableDouble(string[] a, string key)
+        {
+            string s = ArgStr(a, key, null);
+            return double.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out double v) ? v : (double?)null;
         }
 
         private static string ArgStr(string[] a, string key, string def)

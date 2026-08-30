@@ -183,6 +183,26 @@ namespace FluidStabilizer.Core.Sim
 
         /// <summary>Rotational inertia the actuator sees for the bare tank cradle (kg·m²), per axis.</summary>
         public double AxisInertia = 55.0;
+
+        // --- lock-capable hybrid action (decision D8, 묶음 3; see LockGate) ---
+        // Only consulted on a control path that builds a LockGate from this config
+        // (residual RL with -rlLockCapable, the hindsight actor with opts.LockCapable).
+        // Default behaviour is unchanged.
+
+        /// <summary>Composed active rate command (rad/s) below which — with the joint
+        /// near zero — the actor mechanically locks instead of running the servo.</summary>
+        public double LockRateThresholdRadPerSec = 0.06;
+
+        /// <summary>Only lock when both joints are within this of zero (rad); keeps the
+        /// actuator's instantaneous snap-to-zero on lock negligible.</summary>
+        public double LockAngleThresholdRad = 0.5 * MathD.Deg2Rad;
+
+        /// <summary>Hysteresis: a locked joint releases only when the rate demand
+        /// exceeds <see cref="LockRateThresholdRadPerSec"/> × this.</summary>
+        public double UnlockRateFactor = 2.5;
+
+        /// <summary>Minimum control ticks a lock persists before it may release — anti-chatter.</summary>
+        public int MinLockDwellTicks = 8;
     }
 
     [Serializable]

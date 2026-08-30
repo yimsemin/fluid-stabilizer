@@ -5,6 +5,54 @@
 
 ---
 
+## D8 — 2026-08-30 — lock-capable 하이브리드 액션 공간 (묶음 3, F5 전제 조정)
+
+finding F5: 완전한 후행지식 짐벌 궤적조차 녹화 주행에서 기계적으로 잠근 탱크(①)를
+못 이긴다. 근본 원인은 *능동* 컨트롤러의 "hold" 가 강체 관절이 아니라 슬로시
+모멘트에 토크 제한되어 처지는 위치 서보라는 것 — 0 을 명령해도 이미 잠근 관절에
+≈ 5~7 L 진다 (`무동작` 25 L vs `잠금` 19 L). F5 가 후보로 지목한 세 전제 조정 중
+하나가 "능동 보정할 때만 아니면 기계적으로 잠글 수 있는 하이브리드 액션 공간".
+
+**결정.** 합성된 관절속도 명령에 데드밴드 + 히스테리시스 게이트(`LockGate`,
+엔진프리 결정론적 상태기계)를 둔다:
+
+- 합성 rate `max(|pitch|,|roll|)` 가 `LockRateThresholdRadPerSec` (기본 0.06)
+  미만이고 두 관절이 `LockAngleThresholdRad` (기본 0.5°) 안이면 →
+  `StabilizerCommand.Hold` (Locked 모드) 발행. 구조가 모멘트를 받고 토크 0,
+  권선 냉각.
+- 일단 잠기면 rate 요구가 `LockRateThreshold × UnlockRateFactor` (기본 2.5×) 를
+  넘어야, 그리고 `MinLockDwellTicks` (기본 8) 이 지나야 능동 모드로 전환 —
+  100 Hz 채터 방지.
+- 잠금은 `|angle| < 0.5°` 일 때만 허용 → 액추에이터의 즉시 0 스냅
+  (`GimbalActuator.LockAxis`) 이 무시할 수준. 하중에 눌려 서보가 0 으로 못
+  돌아오면 그냥 능동 유지.
+
+**적용 범위.** 액션 벡터 차원(2)·wire 포맷·Python 학습기 **변경 없음** — 게이트는
+전부 C# 컨트롤러 쪽. `RlEnvironment(lockCapable: true)` 의 잔차 컨트롤러,
+`HindsightOptimizer`(`opts.LockCapable`)의 hindsight 액터, (묶음 3 뒤) 서빙 시
+`RemotePolicyController` 가 같은 `LockGate` 를 씀. 기본 off — 기존 결정론 가드·
+테스트·초안 결과 불변.
+
+**효과 (의도).** ③ 의 바닥이 처지는 서보(25 L)가 아니라 강체 탱크(19 L, =①) 가
+된다 → **③ ⊇ ①**. "학습이 강체를 이긴다" 가 구조적으로 가능해지고, F1/F4 탐색
+절벽도 완화된다 (0 근처 무작위 행동 = 여전히 잠김 = 페널티 없음). ③ 이 ① 을
+포함하게 되어 두 레인의 구분이 흐려지는 트레이드오프는 받아들인다 — 이게 F5 가
+명시적으로 제안한 조정이고, 능동 스태빌라이저가 "필요없을 때 강체로 있기" 를
+선택하는 것은 실제 로봇으로도 더 현실적.
+
+**리워드 불변.** Locked 일 때 `AppliedTorque = 0` 이라 effort 항이 자동으로 0.
+잠금 보너스는 reward-hacking 표면만 넓혀서 넣지 않음.
+
+세부: `LockGate.cs`, `GimbalConfig` 의 `Lock*` 필드. `-hsLockCapable` /
+`-rlLockCapable` 로 켠다. 게이트 통과 결과는 [findings.md](findings.md) F6, 2c
+스윕은 [experiment-plan.md](experiment-plan.md).
+
+**가드:** `LockCapableActionTests` (8) — 게이트 잠금/해제/히스테리시스/최소 체류,
+큰 각도에서 잠금 거부, lock-capable env 결정론, 잠금 시 액추에이터 토크 0,
+hindsight `무동작` 바닥이 강체 Hold 와 일치, config 오버라이드 전파.
+
+---
+
 ## D7 — 2026-08-30 — 좌우 바퀴 트랙 비대칭 + lumped 슬립 프록시 (묶음 2)
 
 소유자가 초안을 만져본 뒤 두 가지 현실성 갭을 지적: (a) "왼쪽 바퀴에 돌맹이 →

@@ -96,23 +96,37 @@ namespace FluidStabilizer.Core.Sim.Eval
     {
         private readonly GimbalRateTrajectory _traj;
         private readonly double _rateScaleRadPerSec;
+        private readonly LockGate _lockGate;
         private long _seq;
 
-        public HindsightTrajectoryController(GimbalRateTrajectory traj, double rateScaleRadPerSec)
+        public HindsightTrajectoryController(GimbalRateTrajectory traj, double rateScaleRadPerSec,
+            LockGate lockGate = null)
         {
             _traj = traj ?? throw new ArgumentNullException(nameof(traj));
             _rateScaleRadPerSec = rateScaleRadPerSec;
+            _lockGate = lockGate ?? LockGate.Disabled;
         }
 
-        public string Name => "Hindsight (offline-optimal trajectory)";
+        public string Name => _lockGate.Enabled
+            ? "Hindsight (offline-optimal trajectory, lock-capable)"
+            : "Hindsight (offline-optimal trajectory)";
 
-        public void Reset() => _seq = 0;
+        public void Reset()
+        {
+            _seq = 0;
+            _lockGate.Reset();
+        }
 
         public StabilizerCommand ComputeCommand(in SensorBundle sensors)
         {
             _traj.Evaluate(sensors.StampSeconds, out double p, out double r);
-            return StabilizerCommand.Rate(_seq++, sensors.StampSeconds,
-                Clamp1(p) * _rateScaleRadPerSec, Clamp1(r) * _rateScaleRadPerSec);
+            double pRate = Clamp1(p) * _rateScaleRadPerSec;
+            double rRate = Clamp1(r) * _rateScaleRadPerSec;
+
+            if (_lockGate.ShouldLock(pRate, rRate, sensors.Joints.PitchAngle, sensors.Joints.RollAngle))
+                return StabilizerCommand.Hold(_seq++, sensors.StampSeconds);
+
+            return StabilizerCommand.Rate(_seq++, sensors.StampSeconds, pRate, rRate);
         }
 
         private static double Clamp1(double v) => v < -1.0 ? -1.0 : (v > 1.0 ? 1.0 : v);
@@ -169,6 +183,33 @@ namespace FluidStabilizer.Core.Sim.Eval
                 ("pendulum", () => new PendulumSloshModel()),
                 ("shallow", () => new ShallowWaterSloshModel()),
             };
+
+        /// <summary>
+        /// Optional tweak applied to every drive's <see cref="SimulationConfig"/>
+        /// after <c>trace.ToConfig()</c> — the 묶음 2c premise sweep (tank
+        /// freeboard, road severity, grip). The recorded driver inputs are
+        /// unchanged: same drive, a different tank/road, a valid what-if.
+        /// Applied to the Hold floor and every ceiling evaluation alike.
+        /// </summary>
+        public Action<SimulationConfig> ConfigOverride = null;
+
+        /// <summary>
+        /// Give the hindsight actor the lock-capable hybrid action (decision D8):
+        /// while its rate command is inside the dead-band and the joint is near
+        /// zero it emits a mechanically Locked command, so the do-nothing floor is
+        /// the rigid tank (≈ 19 L) rather than a sagging servo (≈ 25 L). This is
+        /// the F5 premise fix under test in 묶음 3.
+        /// </summary>
+        public bool LockCapable = false;
+
+        /// <summary>Fresh config for one drive with <see cref="ConfigOverride"/> applied.</summary>
+        public SimulationConfig MakeConfig(DriverTrace trace)
+        {
+            SimulationConfig c = trace.ToConfig();
+            ConfigOverride?.Invoke(c);
+            c.Validate();
+            return c;
+        }
     }
 
     public struct HindsightOptimization
@@ -224,12 +265,17 @@ namespace FluidStabilizer.Core.Sim.Eval
         /// <summary>Replay <paramref name="trace"/> with the given flat trajectory params under one slosh model.</summary>
         public static EpisodeResult EvaluateTrajectory(
             DriverTrace trace, double[] flatParams, int knotCount,
-            Func<ISloshModel> sloshModel, double rateScaleRadPerSec)
+            Func<ISloshModel> sloshModel, double rateScaleRadPerSec,
+            Action<SimulationConfig> configOverride = null, bool lockCapable = false)
         {
             var traj = GimbalRateTrajectory.FromFlat(flatParams, knotCount, trace.DurationSeconds);
+            SimulationConfig cfg = trace.ToConfig();
+            configOverride?.Invoke(cfg);
+            cfg.Validate();
+            LockGate gate = lockCapable ? new LockGate(cfg.Gimbal) : LockGate.Disabled;
             var loop = new SimulationLoop(
-                trace.ToConfig(),
-                new HindsightTrajectoryController(traj, rateScaleRadPerSec),
+                cfg,
+                new HindsightTrajectoryController(traj, rateScaleRadPerSec, gate),
                 new RecordedTraceDriver(trace),
                 sloshModel());
             return loop.RunEpisode(trace.Seed);
@@ -241,13 +287,14 @@ namespace FluidStabilizer.Core.Sim.Eval
             if (opts.KnotCount < 1) throw new ArgumentException("KnotCount must be >= 1");
 
             double duration = trace.DurationSeconds;
-            double rateScale = trace.ToConfig().Gimbal.MaxRateRadPerSec * opts.RateAuthority;
+            double rateScale = opts.MakeConfig(trace).Gimbal.MaxRateRadPerSec * opts.RateAuthority;
             int d = GimbalRateTrajectory.ParamCount(opts.KnotCount);
             int evals = 0;
 
             double Cost(double[] p)
             {
-                EpisodeResult r = EvaluateTrajectory(trace, p, opts.KnotCount, opts.OptimizeModel, rateScale);
+                EpisodeResult r = EvaluateTrajectory(trace, p, opts.KnotCount, opts.OptimizeModel, rateScale,
+                    opts.ConfigOverride, opts.LockCapable);
                 evals++;
                 return r.TotalOverflowVolume * 1000.0
                        + opts.EffortCostWeightLitresPerRadPerSec * r.MeanAbsActionRate;
@@ -313,13 +360,14 @@ namespace FluidStabilizer.Core.Sim.Eval
         public static HindsightDriveReport Run(DriverTrace trace, HindsightOptions opts)
         {
             HindsightOptimization opt = Optimize(trace, opts);
+            SimulationConfig effCfg = opts.MakeConfig(trace);
 
             var report = new HindsightDriveReport
             {
                 Trace = trace.Label,
                 DurationSeconds = trace.DurationSeconds,
-                FillRatio = trace.FillRatio,
-                RoadEnabled = trace.RoadEnabled,
+                FillRatio = effCfg.Slosh.FillRatio,
+                RoadEnabled = effCfg.Road.Enabled,
                 OptimizeModel = opts.OptimizeModelName,
                 KnotCount = opt.KnotCount,
                 Evaluations = opt.Evaluations,
@@ -332,11 +380,13 @@ namespace FluidStabilizer.Core.Sim.Eval
             foreach (var (name, make) in opts.EvalModels)
             {
                 var holdLoop = new SimulationLoop(
-                    trace.ToConfig(), new LockedHoldController(), new RecordedTraceDriver(trace), make());
+                    opts.MakeConfig(trace), new LockedHoldController(), new RecordedTraceDriver(trace), make());
                 EpisodeResult hold = holdLoop.RunEpisode(trace.Seed);
 
-                EpisodeResult none = EvaluateTrajectory(trace, zero, opt.KnotCount, make, opt.RateScaleRadPerSec);
-                EpisodeResult ceil = EvaluateTrajectory(trace, opt.BestParams, opt.KnotCount, make, opt.RateScaleRadPerSec);
+                EpisodeResult none = EvaluateTrajectory(trace, zero, opt.KnotCount, make, opt.RateScaleRadPerSec,
+                    opts.ConfigOverride, opts.LockCapable);
+                EpisodeResult ceil = EvaluateTrajectory(trace, opt.BestParams, opt.KnotCount, make, opt.RateScaleRadPerSec,
+                    opts.ConfigOverride, opts.LockCapable);
 
                 report.Rows.Add(new HindsightModelRow
                 {
@@ -431,6 +481,9 @@ namespace FluidStabilizer.Core.Sim.Eval
             sb.AppendLine($"generated {DateTime.UtcNow:yyyy-MM-dd HH:mm} UTC");
             sb.AppendLine($"search: {opts.KnotCount} knots/axis, {opts.Restarts} restarts x {opts.IterationsPerRestart} iters, "
                           + $"rate authority {opts.RateAuthority:P0}, optimised on '{opts.OptimizeModelName}'");
+            sb.AppendLine($"action: {(opts.LockCapable ? "lock-capable hybrid (D8) — do-nothing floor = rigid tank" : "joint-rate only — do-nothing floor = sagging servo")}");
+            if (opts.ConfigOverride != null)
+                sb.AppendLine("premise: config override active (2c sweep — see run flags)");
             sb.AppendLine();
 
             foreach (var r in reports)

@@ -53,6 +53,12 @@ namespace FluidStabilizer.Rl
         /// <param name="residualRateScaleRadPerSec">
         /// What a policy output of ±1 maps to in residual mode. Default =
         /// 0.35·<see cref="GimbalConfig.MaxRateRadPerSec"/>.</param>
+        /// <param name="lockCapable">
+        /// Lock-capable hybrid action (decision D8): while the composed rate
+        /// command is inside a small dead-band and the joint sits near zero, the
+        /// actor emits a mechanically <b>Locked</b> command instead of a sagging
+        /// servo hold — so its floor is the rigid tank (≈ 19 L), not the
+        /// zero-command servo (≈ 25 L). Closes the F5 structural handicap.</param>
         public RlEnvironment(
             SimulationConfig cfg,
             Func<ulong, IDriverInput> driverFactory,
@@ -61,7 +67,8 @@ namespace FluidStabilizer.Rl
             int frameStackLength = 6,
             double actionRateScaleRadPerSec = double.NaN,
             Func<IController> baselineFactory = null,
-            double residualRateScaleRadPerSec = double.NaN)
+            double residualRateScaleRadPerSec = double.NaN,
+            bool lockCapable = false)
         {
             cfg.Validate();
             _cfg = cfg;
@@ -76,7 +83,8 @@ namespace FluidStabilizer.Rl
                 ? (double.IsNaN(actionRateScaleRadPerSec) ? maxRate : actionRateScaleRadPerSec)
                 : (double.IsNaN(residualRateScaleRadPerSec) ? 0.35 * maxRate : residualRateScaleRadPerSec);
 
-            _actor = new ResidualActionController(scale, maxRate, baseline);
+            LockGate gate = lockCapable ? new LockGate(cfg.Gimbal) : LockGate.Disabled;
+            _actor = new ResidualActionController(scale, maxRate, baseline, gate);
             _controlDecimation = cfg.ControlDecimation;
         }
 
@@ -182,20 +190,29 @@ namespace FluidStabilizer.Rl
             private readonly double _rateScale;   // what a policy ±1 maps to (rad/s)
             private readonly double _maxRate;     // hard clamp on the composed rate
             private readonly IController _baseline; // null = plain policy
+            private readonly LockGate _lockGate;   // D8 hybrid action; LockGate.Disabled = off
 
             private double _pitch, _roll;
             private long _seq;
 
-            public ResidualActionController(double rateScale, double maxRate, IController baseline)
+            public ResidualActionController(double rateScale, double maxRate, IController baseline, LockGate lockGate = null)
             {
                 _rateScale = rateScale;
                 _maxRate = maxRate;
                 _baseline = baseline;
+                _lockGate = lockGate ?? LockGate.Disabled;
             }
 
-            public string Name => _baseline == null
-                ? "RL policy (joint-rate)"
-                : "RL residual on " + _baseline.Name;
+            public string Name
+            {
+                get
+                {
+                    string s = _baseline == null
+                        ? "RL policy (joint-rate)"
+                        : "RL residual on " + _baseline.Name;
+                    return _lockGate.Enabled ? s + " (lock-capable)" : s;
+                }
+            }
 
             public SensorBundle LastBundle { get; private set; }
 
@@ -204,6 +221,7 @@ namespace FluidStabilizer.Rl
                 _pitch = _roll = 0.0;
                 _seq = 0;
                 LastBundle = default;
+                _lockGate.Reset();
                 _baseline?.Reset();
             }
 
@@ -226,6 +244,10 @@ namespace FluidStabilizer.Rl
 
                 double p = Clamp(baseP + _pitch * _rateScale, _maxRate);
                 double r = Clamp(baseR + _roll * _rateScale, _maxRate);
+
+                if (_lockGate.ShouldLock(p, r, sensors.Joints.PitchAngle, sensors.Joints.RollAngle))
+                    return StabilizerCommand.Hold(_seq++, sensors.StampSeconds);
+
                 return StabilizerCommand.Rate(_seq++, sensors.StampSeconds, p, r);
             }
 

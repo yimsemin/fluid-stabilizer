@@ -48,6 +48,11 @@ namespace FluidStabilizer.SimEditor
             string baseline = ArgStr(args, "-rlBaseline", "none");
             double residualFrac = ArgDouble(args, "-rlResidualFrac", 0.35);
 
+            // Lock-capable hybrid action (decision D8): the policy's floor becomes
+            // the mechanically locked tank, not a sagging servo. Defaults on
+            // whenever there is a baseline; -rlLockCapable 0 forces it off.
+            bool lockCapable = ArgInt(args, "-rlLockCapable", baseline != "none" ? 1 : 0) != 0;
+
             // Train on the owner's recorded drives instead of a synthetic driver
             // (project-goals ③). -rlTrace all | <substring>. Traces must share a
             // setup (fill/road) — the first match's config is used.
@@ -101,12 +106,14 @@ namespace FluidStabilizer.SimEditor
                     : residualFrac * cfg.Gimbal.MaxRateRadPerSec;
 
                 return new RlEnvironment(cfg, drv, sl, RewardWeights.Default(), stack,
-                    baselineFactory: baseFactory, residualRateScaleRadPerSec: residualScale);
+                    baselineFactory: baseFactory, residualRateScaleRadPerSec: residualScale,
+                    lockCapable: lockCapable);
             }
 
             string driverDesc = traces.Count > 0 ? $"traces({traces.Count})" : driver;
             Debug.Log($"[rl] launching TrainingServer :{port} fill={fill} driver={driverDesc} slosh={slosh} " +
-                      $"road={road} episode={seconds}s stack={stack} baseline={baseline} residualFrac={residualFrac}");
+                      $"road={road} episode={seconds}s stack={stack} baseline={baseline} residualFrac={residualFrac} " +
+                      $"lockCapable={lockCapable}");
             new TrainingServer(MakeEnv).Serve(port);
         }
 
