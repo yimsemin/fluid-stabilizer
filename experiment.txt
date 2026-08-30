@@ -6,11 +6,11 @@
 
 # --- the tank ---
 fillRatio:       0.62    # 0..1. 0.62 on a 0.6 m tank = 0.23 m freeboard
-tankHeightZ:     0.6     # rim height above the floor, m
+tankHeightZ:     0.5     # rim height above the floor, m
 
 # --- the road ---
 road:            on      # on / off
-roadSeverity:    1.0     # 0 smooth .. 1 nominal .. >1 rough
+roadSeverity:    1.1     # 0 smooth .. 1 nominal .. >1 rough
 
 # --- the driver (synthetic runs only; a replayed trace uses its own inputs) ---
 driver:          highway  # highway / aggressive / scripted
