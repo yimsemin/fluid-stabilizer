@@ -64,8 +64,8 @@ namespace FluidStabilizer.SimEditor
                 }
                 else
                 {
-                    cfg = new SimulationConfig { EpisodeSeconds = seconds };
-                    cfg.Slosh.FillRatio = fill;
+                    cfg = profile.ToConfig(seconds);   // fill / road / curve / hills / grip from experiment.txt
+                    cfg.Slosh.FillRatio = fill;        // -rlFill still overrides
                     if (road == "mild") { cfg.Road.Enabled = true; cfg.Road.Severity = 0.6; }
                     else if (road == "rough") { cfg.Road.Enabled = true; cfg.Road.Severity = 1.4; cfg.Road.EventsPerKm = 18.0; }
                 }
