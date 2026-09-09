@@ -107,8 +107,8 @@ SHA, 라이브러리 버전을 handshake 에 보낸다.
   약하다.
 - `Assumptions` 는 누락 필드마다 반복 Capture 해서 비효율적이다 (정확성 문제는
   아님).
-- 2026-09-09~10 Unity 배치 실행이 Unity 자체 진단 로그 5 개를 갱신했다
-  (`Logs/Editor.log`, `Editor-prev.log`, `AssetImportWorkerHW0.log`,
-  `…-prev.log`, `upm.log`). 원본은 복구되지 않았다. **완전 보존이라고 보고하면
-  안 된다.** 나머지 183 개(주행·체크포인트·실험 결과 로그·`experiment.txt`)는
-  작업 전 해시와 동일하다.
+- 2026-09-09~10 Unity 배치 실행이 Unity 자체 진단 로그 5 개를 갱신했고
+  (`Logs/Editor.log`, `Editor-prev.log`, `AssetImportWorkerHW0.log`, `upm.log`),
+  그중 `AssetImportWorkerHW0-prev.log` 는 로테이션으로 **사라졌다**. 원본은
+  복구되지 않았다. **완전 보존이라고 보고하면 안 된다.** 나머지 183 개(주행·
+  체크포인트·실험 결과 로그·`experiment.txt`)는 작업 전 해시와 동일하다.
