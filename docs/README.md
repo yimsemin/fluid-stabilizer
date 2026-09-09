@@ -15,7 +15,7 @@
 | [operating-guide.md](operating-guide.md) | **조작 가이드** (비개발자용) — 설정 패널·운전·서버·비교·빌드 | 소유자 |
 | [demo-guide.md](demo-guide.md) | **시연용 참고 문서** — 개요·구조·학습 과정·비교·결과 해석·남은 과제 (비개발자 청중) | 소유자 (시연 시) |
 | [vision-check.md](vision-check.md) | 초안 단계별 O/X 체크리스트 (2026-08-30 초안 종료 — 기록으로 보존) | 소유자 |
-| [findings.md](findings.md) | **실험으로 밝혀진 사실 F1~F6** (숫자·근거) | 소유자 + Claude |
+| [findings.md](findings.md) | **실험으로 밝혀진 사실 F1~F8** (숫자·근거) | 소유자 + Claude |
 | [decisions.md](decisions.md) | **설계 결정 로그 D1~D8** (무엇을 정했고 왜) | Claude + 소유자 |
 | [design-review.md](design-review.md) | 아키텍처 결정의 근거 (큰 참고 문서, 잘 안 바뀜) | 주로 Claude |
 | [reproducibility.md](reproducibility.md) | **재현성 · 데이터 셋 분리 · 실행 기록 규칙** (trace v2, `datasets.tsv`, provenance, 정책 실행 상태) | Claude + 소유자 |
@@ -27,7 +27,13 @@
 
 ## 정비 이력
 
-### 2026-09-10 — 재현성 정비
+### 2026-09-10 — 재현성 정비 + F7·F8
+
+- **F8 추가** — 운전 축을 훑는 `DrivingPremiseSweepRunner` 로 **프로젝트 최초의
+  게이트 PASS** (매끄러운 노면의 지속 코너링). 동시에 규칙기반 ②는 그 이득을
+  못 가져간다는 것도 측정. `demo-guide.md` 에 시연 절차, 키 **5** = ④ 천장 레인.
+- 헤드라인은 유지: 소유자의 실제 녹화 주행에서는 ① 강체가 이긴다.
+
 
 - **`reproducibility.md` 신설** — 주행 파일 형식·데이터 셋 분리·실행 기록·정책
   실행 상태를 한 곳에. `reproducibility-handoff.md`(중단 세션 인계문서)를 흡수·폐기.

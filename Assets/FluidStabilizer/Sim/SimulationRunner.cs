@@ -1,6 +1,8 @@
 using System;
 using FluidStabilizer.Contracts;
 using FluidStabilizer.Core.Sim;
+using FluidStabilizer.Core.Sim.Drivers;
+using FluidStabilizer.Core.Sim.Eval;
 using FluidStabilizer.Core.Sim.SloshModels;
 using FluidStabilizer.Controller;
 using FluidStabilizer.Rl;
@@ -15,6 +17,7 @@ namespace FluidStabilizer.Sim
         SpecificForceAlignmentPlusI,
         PrivilegedFeedforward,  // cheats (true slosh-free tilt) — for comparison only
         LearnedPolicy,          // ③ — the RL policy, served by python/serve_policy.py over TCP
+        HindsightCeiling,       // ④ — offline optimum replayed; needs <trace>.traj.csv beside the trace
     }
 
     public enum SloshModelChoice
@@ -84,10 +87,14 @@ namespace FluidStabilizer.Sim
         {
             if (_built is IDisposable d) { try { d.Dispose(); } catch { } }
 
-            _built = choice == StabilizerChoice.LearnedPolicy
-                ? new RemotePolicyController(PolicyHost, PolicyPort, Mathf.Max(1, PolicyFrameStack),
-                    (ReplayTrace?.ToConfig() ?? Loop?.Config ?? new SimulationConfig()).Gimbal.MaxRateRadPerSec, log: s => Debug.Log(s))
-                : MakeController(choice);
+            if (choice == StabilizerChoice.LearnedPolicy)
+                _built = new RemotePolicyController(PolicyHost, PolicyPort, Mathf.Max(1, PolicyFrameStack),
+                    (ReplayTrace?.ToConfig() ?? Loop?.Config ?? new SimulationConfig()).Gimbal.MaxRateRadPerSec,
+                    log: s => Debug.Log(s));
+            else if (choice == StabilizerChoice.HindsightCeiling)
+                _built = MakeHindsightCeiling(ReplayTrace) ?? new HoldController();
+            else
+                _built = MakeController(choice);
             return _built;
         }
 
@@ -186,6 +193,42 @@ namespace FluidStabilizer.Sim
             _ => new HoldController(),
         };
 
+        /// <summary>
+        /// ④ replays the offline optimum stored next to the drive it was computed
+        /// for (<c>&lt;drive&gt;.traj.csv</c>, written by the demo/ceiling runners).
+        /// Returns null — and says why — when there is no trajectory for this
+        /// drive, because replaying someone else's optimum would be meaningless.
+        /// </summary>
+        public static IController MakeHindsightCeiling(DriverTrace trace)
+        {
+            string path = TrajectoryPathFor(trace);
+            if (path == null)
+            {
+                Debug.LogWarning("[④] no trajectory for this drive — the hindsight ceiling only exists " +
+                                 "for a drive it was optimised on. Falling back to Rigid (Hold).");
+                return null;
+            }
+            using (var r = new System.IO.StreamReader(path))
+            {
+                var rows = BcDatasetExporter.LoadTrajectory(r)
+                    .ConvertAll(x => (x.T, x.PitchRate, x.RollRate));
+                Debug.Log($"[④] hindsight ceiling ← {path} ({rows.Count} rows)");
+                return new TrajectoryPlaybackController(rows);
+            }
+        }
+
+        /// <summary>&lt;drive&gt;.trace.csv → &lt;drive&gt;.traj.csv, or null when absent.</summary>
+        public static string TrajectoryPathFor(DriverTrace trace)
+        {
+            if (string.IsNullOrEmpty(trace?.SourcePath)) return null;
+            string path = trace.SourcePath;
+            const string ext = ".trace.csv";
+            if (path.EndsWith(ext, StringComparison.OrdinalIgnoreCase))
+                path = path.Substring(0, path.Length - ext.Length);
+            path += ".traj.csv";
+            return System.IO.File.Exists(path) ? path : null;
+        }
+
         public static ISloshModel MakeSlosh(SloshModelChoice c) => c switch
         {
             SloshModelChoice.ShallowWater => new ShallowWaterSloshModel(),
@@ -200,6 +243,7 @@ namespace FluidStabilizer.Sim
             StabilizerChoice.SpecificForceAlignmentPlusI => "Rule: PID",
             StabilizerChoice.PrivilegedFeedforward => "Privileged feed-forward",
             StabilizerChoice.LearnedPolicy => "Learned policy (③)",
+            StabilizerChoice.HindsightCeiling => "Hindsight ceiling (④)",
             _ => c.ToString(),
         };
 

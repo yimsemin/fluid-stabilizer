@@ -58,8 +58,23 @@ F5/F6 는 "이 조건에서 못 이긴다" 는 주장인데, trace 가 탱크 �
 3. **F5 표의 절대 수치는 재현되지 않는다.** 6 주행 전부 v1 이라 약 85 개 설정이
    `unknown-at-recording` 이고, 그 사이 D7 물리가 들어왔다. 원래 수치는 보존한다.
 
-**게이트 재판정: 여전히 FAIL** — 잔차 RL 계속 보류. 소유자의 2026-08-30 결정은
-바뀌지 않는다. 다음 실험을 정당화하려면 §F7 §5 의 미확인 항목이 먼저 필요하다.
+**게이트 재판정: 여전히 FAIL** (녹화 주행에서) — 소유자의 2026-08-30 결정은
+바뀌지 않는다.
+
+## 2026-09-10 — 전제 조정: 처음으로 게이트를 통과한 운영점 (findings F8)
+
+2c 스윕이 한 번도 못 바꾼 축(**운전 자체**)을 합성 주행으로 훑었다
+(`DrivingPremiseSweepRunner`). **매끄러운 노면의 지속 코너링에서 게이트가
+처음으로 PASS** — 두 슬로시 모델 모두 (진자 7.9→5.1 L, 얕은물 24.9→7.9 L).
+노면을 0.3× 만 켜도 이득이 사라진다: 진짜 전제는 기동 강도가 아니라 **노면
+광대역성**이다.
+
+그런데 **규칙기반 ②는 그 이득을 못 가져간다** (25 L — 강체보다 3 배 나쁘고
+토크 94~100 % 포화). 천장 5 L 와 최선의 인과 컨트롤러 25 L 사이 **20 L 간극**
+= 이 프로젝트에서 처음 측정된 "학습이 메울 여지".
+
+**다음 걸음 (소유자 판단 대기):** 작은 잔차 RL 을 **이 조건에서** 시도할 근거가
+생겼다. 녹화 주행에서가 아니다. 헤드라인은 그대로 유지된다.
 
 ## 지금까지 만든 것
 
@@ -86,7 +101,7 @@ F5/F6 는 "이 조건에서 못 이긴다" 는 주장인데, trace 가 탱크 �
 **어셈블리** ([Assets/FluidStabilizer/README.md](../Assets/FluidStabilizer/README.md)):
 `Contracts` / `Core` / `Controller` / `Rl` (모두 엔진프리) · `Sim` / `Sim.Editor` (Unity) · `Tests.EditMode`.
 
-**검증:** EditMode 테스트 **143 통과 / 0 실패 / 11 스킵** (스킵 = `[Explicit]` 진단).
+**검증:** EditMode 테스트 **144 통과 / 0 실패 / 13 스킵** (스킵 = `[Explicit]` 진단).
 ```
 "/Applications/Unity/Hub/Editor/6000.5.10f1/Unity.app/Contents/MacOS/Unity" -batchmode -nographics -projectPath . -runTests -testPlatform EditMode -testResults Logs/editmode-results.xml -logFile -
 ```

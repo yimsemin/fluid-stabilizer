@@ -22,17 +22,17 @@ namespace FluidStabilizer.Tests
         // One long steady turn: sustained lateral specific force, roll axis only.
         // A constant tilt into the turn is reachable under a rate-limited gimbal
         // (ramp, then hold), so an improving trajectory exists by construction.
-        private static DriverTrace SteadyTurn(double fill, double seconds, double steer)
+        private static DriverTrace SteadyTurn(double fill, double seconds, double steer, ulong seed = 4242UL)
         {
             var cfg = new SimulationConfig { EpisodeSeconds = seconds };
             cfg.Slosh.FillRatio = fill;
             cfg.Road.Enabled = false;
             var trace = new DriverTrace { Label = $"steady-turn-{steer:0.00}" };
-            trace.CaptureConfig(cfg, 4242UL, "pendulum", "Hold");
+            trace.CaptureConfig(cfg, seed, "pendulum", "Hold");
             var driver = new ConstantDriver(new DriverControls { Throttle = 0.35, Brake = 0.0, Steer = steer });
             var loop = new SimulationLoop(cfg, new HoldControllerLocal(),
                 new RecordingDriver(driver, trace), new PendulumSloshModel());
-            loop.RunEpisode(4242UL);
+            loop.RunEpisode(seed);
             return trace;
         }
 
@@ -166,6 +166,104 @@ namespace FluidStabilizer.Tests
             TestContext.WriteLine($"[shallow] ES={found:F3} L  evals={o.Evaluations}  " +
                                   $"search={sw.Elapsed.TotalMinutes:F1} min  " +
                                   $"recovered={(hold - found) / (hold - hand):P0}");
+        }
+
+        // Does the F7 steady-turn win survive a longer drive? The driving-premise
+        // sweep saw it vanish at 25 s, which would make it a short-drive artifact
+        // rather than an operating point worth demonstrating.
+        // The driving-premise sweep found NO win in the same steady-turn regime the
+        // F7 diagnostic won 91% in. Isolate which knob explains it: the recording
+        // seed (the D7 slip proxy is seeded), the steer magnitude, or the budget.
+        /// <summary>
+        /// The demo condition (findings F8): a sustained corner on a smooth road is
+        /// the one operating point found so far where the feasibility ceiling beats
+        /// the rigid tank under BOTH slosh models. docs/demo-guide.md and
+        /// DemoDriveRunner both rest on this; if it stops being true, they are wrong.
+        /// </summary>
+        [Test]
+        public void DemoCondition_CeilingBeatsRigid_UnderBothSloshModels()
+        {
+            var t = SteadyTurn(0.62, 25.0, 0.45, 9000UL);
+
+            var opts = new HindsightOptions
+            {
+                KnotCount = 8, Restarts = 3, IterationsPerRestart = 80, LockCapable = true,
+                EvalModels = new System.Collections.Generic.List<(string, Func<ISloshModel>)>
+                {
+                    ("pendulum", () => new PendulumSloshModel()),
+                    ("shallow", () => new ShallowWaterSloshModel()),
+                },
+            };
+            var report = HindsightOptimizer.Run(t, opts);
+
+            // measured 2026-09-10: pendulum 7.91 → 5.10 L, shallow 24.90 → 7.87 L
+            Assert.AreEqual(2, report.Rows.Count, "expected both slosh models");
+            foreach (var row in report.Rows)
+            {
+                double gain = row.HoldSpillLitres - row.CeilingSpillLitres;
+                Assert.Greater(gain, 0.5,
+                    $"{row.SloshModel}: ceiling {row.CeilingSpillLitres:F2} L no longer beats " +
+                    $"Hold {row.HoldSpillLitres:F2} L by the practical margin");
+                Assert.Greater(gain / row.HoldSpillLitres, 0.25,
+                    $"{row.SloshModel}: ceiling gain fell below the 25% bar");
+            }
+        }
+
+        [Test, Explicit("diagnostic — why does the sweep disagree with F7?")]
+        public void PrintSteadyTurnWin_AcrossSeedsAndSteer()
+        {
+            TestContext.WriteLine("seed  steer   hold[L]  servo@0[L]   ES(8k)[L]   ES(6k)[L]   gain(8k)");
+            foreach (ulong seed in new ulong[] { 4242, 9000, 9001, 9002, 9003 })
+            foreach (double steer in new[] { 0.45, 0.6, 0.75 })
+            {
+                var t = SteadyTurn(0.62, 25.0, steer, seed);
+                double hold = HoldSpill(t);
+                double rateScale = t.ToConfig().Gimbal.MaxRateRadPerSec;
+                double zero = Spill(t, new double[16], 8, rateScale);
+                double es8 = EsSpill(t, 8, 2, 50);
+                double es6 = EsSpill(t, 6, 2, 50);
+                TestContext.WriteLine(
+                    $"{seed,5} {steer,6:F2} {hold,9:F3} {zero,11:F3} {es8,11:F3} {es6,11:F3} " +
+                    $"{(hold > 1e-9 ? (hold - es8) / hold : 0),10:P0}");
+            }
+        }
+
+        private static double EsSpill(DriverTrace t, int knots, int restarts, int iters)
+        {
+            var o = HindsightOptimizer.Optimize(t, new HindsightOptions
+                { KnotCount = knots, Restarts = restarts, IterationsPerRestart = iters });
+            return HindsightOptimizer.EvaluateTrajectory(
+                t, o.BestParams, knots, () => new PendulumSloshModel(), o.RateScaleRadPerSec)
+                .TotalOverflowVolume * 1000.0;
+        }
+
+        [Test, Explicit("diagnostic — is the steady-turn win duration-limited?")]
+        public void PrintSteadyTurnWinVsDuration()
+        {
+            foreach (double seconds in new[] { 8.0, 14.0, 20.0, 25.0, 35.0 })
+            {
+                var t = SteadyTurn(0.62, seconds, 0.6);
+                double hold = HoldSpill(t);
+                double rateScale = t.ToConfig().Gimbal.MaxRateRadPerSec;
+                double zero = Spill(t, new double[16], 8, rateScale);   // sagging servo
+                double bestHand = double.MaxValue; double bestV = 0, bestF = 0;
+                for (int i = -8; i <= 8; i++)
+                foreach (double frac in new[] { 0.15, 0.3, 0.5 })
+                {
+                    double v = i / 8.0;
+                    double sp = Spill(t, TiltThenHold(8, v, frac), 8, rateScale);
+                    if (sp < bestHand) { bestHand = sp; bestV = v; bestF = frac; }
+                }
+                var o = HindsightOptimizer.Optimize(t,
+                    new HindsightOptions { KnotCount = 8, Restarts = 2, IterationsPerRestart = 50 });
+                double es = HindsightOptimizer.EvaluateTrajectory(
+                    t, o.BestParams, 8, () => new PendulumSloshModel(), o.RateScaleRadPerSec)
+                    .TotalOverflowVolume * 1000.0;
+                TestContext.WriteLine(
+                    $"{seconds,5:F0} s  hold={hold,8:F3}  servo@0={zero,8:F3}  hand={bestHand,8:F3} " +
+                    $"(roll={bestV:F2},ramp={bestF})  ES={es,8:F3}  gain vs hold={hold - es,7:F3} L " +
+                    $"({(hold > 1e-9 ? (hold - es) / hold : 0):P0})");
+            }
         }
 
         [Test, Explicit("diagnostic — prints the single-axis recovery numbers")]

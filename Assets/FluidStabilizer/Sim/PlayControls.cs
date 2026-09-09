@@ -47,6 +47,9 @@ namespace FluidStabilizer.Sim
             if (kb.digit2Key.wasPressedThisFrame) SetActive(StabilizerChoice.SpecificForceAlignmentPlusI);
             if (kb.digit3Key.wasPressedThisFrame) SetActive(StabilizerChoice.PrivilegedFeedforward);
             if (kb.digit4Key.wasPressedThisFrame) SetActive(StabilizerChoice.LearnedPolicy); // needs python/serve_policy.py
+            // ④ the feasibility ceiling, replayed. Only meaningful while replaying a
+            // drive that has a <drive>.traj.csv beside it (findings F8, demo-guide).
+            if (kb.digit5Key.wasPressedThisFrame) SetActive(StabilizerChoice.HindsightCeiling);
 
             if (kb.spaceKey.wasPressedThisFrame) // toggle stabilizer on/off
             {
