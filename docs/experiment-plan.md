@@ -25,6 +25,27 @@
 [`ExperimentProfile`](../Assets/FluidStabilizer/Core/Sim/ExperimentProfile.cs))
 에 있어서 나중에 싸게 바꿀 수 있다.
 
+## 2026-09-10 — 재현성 정비 (F5/F6 재검증 전제)
+
+F5/F6 는 "이 조건에서 못 이긴다" 는 주장인데, trace 가 탱크 높이·접지력·도로
+곡률/경사를 저장하지 않아 **그 조건을 다시 만들 수 없었다.** 결론을 재검증하기
+전에 이걸 먼저 고쳤다. 규칙 전체는 [reproducibility.md](reproducibility.md).
+
+- trace v2 = 유효 설정 전체 + MVID 기록. v1 은 계속 읽되 채운 값은 `Assumptions`
+  로 분리 (추정치를 녹화 사실로 승격시키지 않음).
+- `datasets.tsv` = train/validation/final 명시 분리. hindsight 산출물 유무로
+  학습 셋을 정하지 않는다.
+- `Logs/episodes-v2.csv` = 실행별 유효 설정·해시·정책 식별·fallback 기록.
+- Hold fallback / 미확인 정책 실행을 정상 AI 성능에서 제외 (판정 배너 + HUD
+  하이라이트 둘 다).
+- `RlEnvironment` 가 Reset 마다 해당 주행의 설정·길이를 적용 (첫 주행 일괄
+  적용 · 최단 길이 자르기 제거).
+
+**여기서 드러난 사실 하나:** 기존 6 주행은 BC 와 2c 조건 스윕에 반복 사용됐다.
+**홀드아웃이 아니다.** 나머지 9 주행은 용도 기록이 없어 배정하지 않았다.
+`final` split 은 비어 있고, 채우려면 **새 주행 녹화**가 필요하다. F1~F6 의
+관측 숫자는 그대로 둔다 — 라벨이 틀렸던 것이지 측정이 틀린 게 아니다.
+
 ## 지금까지 만든 것
 
 (phase-1 범위는 [design-review.md](design-review.md) §20 기준. 상세 근거는
@@ -43,14 +64,14 @@
 | RL 경로 | 🟡 | C# 쪽 완료+테스트: `FluidStabilizer.Rl` (`ObservationEncoder`, `PrivilegedEncoder`, `RewardFunction`, `RlEnvironment` +잔차 +lock-capable, `TrainingServer` TCP). Python: 비대칭 크리틱 PPO + BC 웜스타트 + `serve_policy.py` + `--resume` 체크포인트 재개. **맨땅 PPO 는 학습 못 함** (F1/F4 절벽); **긴 잔차 RL 은 F6 게이트 때문에 보류** — [rl.md](rl.md) |
 | 에피소드 로깅 | ✅ (2026-08-30) | `EpisodeLog` (engine-free) → `Logs/episodes.csv` 에 에피소드당 한 줄(운영점 + 결과 지표). `TraceEvaluator`·`Evaluator`·`ComparisonRunner` 배선 |
 | 도메인 랜덤화 | ⬜ (보류) | config 구조체는 있음, 랜덤화기 미구현. 활성 RL 학습 없이는 가치 낮아 보류 |
-| 녹화 주행 (녹화 + 재생) | ✅ | `DriverTrace` — 실제 disturbance 데이터 + 홀드아웃 평가 조건 |
+| 녹화 주행 (녹화 + 재생) | ✅ | `DriverTrace` v2 — 실제 disturbance 데이터 + 유효 설정 전체 기록 ([reproducibility.md](reproducibility.md)) |
 | feasibility 천장 | ✅ | `HindsightOptimizer` — **게이트 미통과** (F5), lock-capable + 11 운영점 재실행도 미통과 (F6). `SweepRunner` |
 | 3분할 비교 + 판정 | ✅ | `ComparisonRunner` (`C`) — 같은 녹화 주행 ①②③ 나란히, 레인별 리터, 완료 시 한 줄 판정 |
 
 **어셈블리** ([Assets/FluidStabilizer/README.md](../Assets/FluidStabilizer/README.md)):
 `Contracts` / `Core` / `Controller` / `Rl` (모두 엔진프리) · `Sim` / `Sim.Editor` (Unity) · `Tests.EditMode`.
 
-**검증:** EditMode 테스트 **131 통과 / 0 실패 / 8 스킵** (스킵 = `[Explicit]` 진단).
+**검증:** EditMode 테스트 **140 통과 / 0 실패 / 8 스킵** (스킵 = `[Explicit]` 진단).
 ```
 "/Applications/Unity/Hub/Editor/6000.5.10f1/Unity.app/Contents/MacOS/Unity" -batchmode -nographics -projectPath . -runTests -testPlatform EditMode -testResults Logs/editmode-results.xml -logFile -
 ```

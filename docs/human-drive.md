@@ -62,21 +62,25 @@
 ## 주행 녹화하기 (3-way 비교용)
 
 **P** 누르고, 운전하고, **P** 다시. 주행이 작은 텍스트 파일로 저장됨:
-**`<project>/Traces/drive-<timestamp>.trace.csv`** (Editor) — 설정(seed, fill,
-도로, 슬로시 모델) 헤더 + 물리 스텝당 `throttle,brake,steer` 행 하나. 전체
-시뮬레이션이 seed 로 결정론적이라 이 파일이 그 주행의 완전하고 재현 가능한 정의.
+**`<project>/Traces/drive-<timestamp>-<uuid>.trace.csv`** (Editor) — **유효
+`SimulationConfig` 전체** 헤더 (탱크·접지·도로 곡률/경사·센서 포함) + 물리
+스텝당 `throttle,brake,steer` 행 하나. 전체 시뮬레이션이 seed 로 결정론적이라
+이 파일이 그 주행의 완전하고 재현 가능한 정의. 형식·레거시 처리는
+[reproducibility.md](reproducibility.md).
 
 **L** 로 최신 것 재생. 재생 중에는 운전 *안 함* — 녹화된 입력이 재생 — 그래서
 **0~4** 를 눌러 스태빌라이저를 전환하고 *같은* 주행이 강체 / 규칙기반 / 학습
 정책으로 *같은* 도로에서 처리되는 걸 볼 수 있음. 그게 헤드라인 비교.
 
 *다른* 주행 여러 개 녹화 (차분한 통근, brisk 고속도로, **G** 켠 거친 도로 주행).
-일부는 학습 disturbance 데이터, 일부는 평가 셋으로 홀드아웃. 스태빌라이저를
+어느 주행이 학습용이고 어느 게 평가용인지는 녹화가 아니라 루트 `datasets.tsv`
+가 정한다 — 지금은 `train` 6 개뿐이고 `final` 은 비어 있다
+([reproducibility.md](reproducibility.md)). 스태빌라이저를
 *판별*하려는 주행은 **도로 on (`G`)** 유지하고 탱크를 꽤 채워 — 약 55% fill
 아래면 진자 모델의 파도가 rim 에 도달 못 해서 아무것도 안 넘침.
 
-**배치 수치:** 메뉴 ▸ *FluidStabilizer ▸ Evaluate Recorded Drives* 가 `Traces/`
-의 모든 트레이스를 분석적 베이스라인으로 재생하고 주행별 리터 표를
+**배치 수치:** 메뉴 ▸ *FluidStabilizer ▸ Evaluate Recorded Drives* 가
+`datasets.tsv` 가 배정한 트레이스를 분석적 베이스라인으로 재생하고 주행별 리터 표를
 `Logs/trace-eval.txt` 에 씀.
 
 ## 스태빌라이저 나란히 비교하기 (C)

@@ -18,6 +18,7 @@
 | [findings.md](findings.md) | **실험으로 밝혀진 사실 F1~F6** (숫자·근거) | 소유자 + Claude |
 | [decisions.md](decisions.md) | **설계 결정 로그 D1~D8** (무엇을 정했고 왜) | Claude + 소유자 |
 | [design-review.md](design-review.md) | 아키텍처 결정의 근거 (큰 참고 문서, 잘 안 바뀜) | 주로 Claude |
+| [reproducibility.md](reproducibility.md) | **재현성 · 데이터 셋 분리 · 실행 기록 규칙** (trace v2, `datasets.tsv`, provenance, 정책 실행 상태) | Claude + 소유자 |
 | [rl.md](rl.md) | RL 경로 세부 (브릿지·학습기·정책 서빙) | Claude |
 | [road-model.md](road-model.md) | 도로 모델 (D6) 세부 | Claude |
 | [human-drive.md](human-drive.md) | 수동 주행 플레이 씬 세부 | Claude |
@@ -25,6 +26,16 @@
 | [setup-status.md](setup-status.md) | 개발 환경 사실 (버전·경로·도구) | Claude |
 
 ## 정비 이력
+
+### 2026-09-10 — 재현성 정비
+
+- **`reproducibility.md` 신설** — 주행 파일 형식·데이터 셋 분리·실행 기록·정책
+  실행 상태를 한 곳에. `reproducibility-handoff.md`(중단 세션 인계문서)를 흡수·폐기.
+- **용어 정정:** 기존 6 주행을 "홀드아웃" 이라 부르던 서술을 고쳤다. BC 데이터셋과
+  2c 조건 스윕에 반복 사용됐으므로 홀드아웃이 아니다. **F1~F6 의 관측 숫자는
+  그대로 두었다** — 라벨이 틀렸던 것이지 측정이 틀린 게 아니다.
+- `rl.md` 의 "hindsight 파일 유무로 학습 셋 결정 / 첫 주행 설정 일괄 적용 /
+  가장 짧은 주행 길이로 자르기" 서술을 실제 코드로 교체.
 
 ### 2026-08-30 — 묶음 2c/3 이후 정비
 

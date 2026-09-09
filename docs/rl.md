@@ -91,10 +91,12 @@ python serve_policy.py --checkpoint runs/bc-run/actor.pt --port 5601
 `-rlPort/-rlStack` 빼고 전부 이제 **`experiment.txt` 를 기본값으로** 하고,
 플래그가 실행별로 override.
 
-**트레이스 기반 학습 (step C0):** `-rlTrace all` 은 `Logs/hindsight/*.traj.csv`
-가 있는 녹화 주행(BC 셋 — 6 주행)으로 학습; `-rlTrace <substr>` 는 파일명으로
-필터. 에피소드당 seed 로 주행 하나; config = 첫 주행의 fill/도로, 에피소드
-길이 = 가장 짧은 주행.
+**트레이스 기반 학습 (step C0):** 학습에 쓰는 주행은 루트 `datasets.tsv` 의
+`train` split 이 정한다 — **hindsight 산출물 유무로 결정하지 않는다.**
+`-traceSplit` 로 split, `-rlTrace <substr>` 로 파일명 필터.
+**Reset 마다** 해당 주행의 설정·seed·슬로시 모델·전체 길이를 적용한다 (예전의
+"첫 주행 설정 일괄 적용 + 가장 짧은 주행 길이로 자르기" 는 제거됐다).
+규칙 전체는 [reproducibility.md](reproducibility.md).
 
 **BC 웜스타트 (step C):** `FluidStabilizer ▸ Export BC Dataset` (또는
 `-executeMethod …BcExportRunner.Run`)가 각 주행을 실제 obs 파이프라인으로 재생하며
@@ -180,7 +182,8 @@ log-std 가 붕괴. 맨땅 on-policy 학습기는 여기서 예측 정책을 발
 못 이기면, RL 전에 전제를 조정.
 
 **2026-08-29 갱신 — 천장을 만들고 돌렸고(`HindsightOptimizer`), 게이트 미통과.
-finding F5 참고.** 홀드아웃 6 주행에서 hindsight-최적 짐벌-rate 궤적이 잠근
+finding F5 참고.** 녹화 6 주행(BC·반복 조건 탐색에 쓴 `train` 셋 — 홀드아웃이
+아니다, [reproducibility.md](reproducibility.md))에서 hindsight-최적 짐벌-rate 궤적이 잠근
 탱크보다 2~6 L *더* 스필 (진자 ROM; 얕은물에서 훨씬 나쁨). 0 을 명령하는
 액추에이터 서보 자체가 이미 기계적으로 잠근 관절에 ≈ 5~7 L 진다. **잔차 RL 은
 전제 조정(freeboard, 도로 강도, 또는 잔차 베이스라인이 25 L 처지는 서보가 아니라
