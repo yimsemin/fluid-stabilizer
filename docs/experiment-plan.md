@@ -46,6 +46,21 @@ F5/F6 는 "이 조건에서 못 이긴다" 는 주장인데, trace 가 탱크 �
 `final` split 은 비어 있고, 채우려면 **새 주행 녹화**가 필요하다. F1~F6 의
 관측 숫자는 그대로 둔다 — 라벨이 틀렸던 것이지 측정이 틀린 게 아니다.
 
+## 2026-09-10 — F5/F6 재검증 (findings F7)
+
+재현성 정비 위에서 게이트를 다시 확인했다. 세 가지가 나왔다:
+
+1. **탐색기는 정상이다.** 실제 액추에이터 한계를 포함한 단일축 진단에서 알려진
+   개선을 진자 101~102 %, 얕은물 81 % 회수. F6 는 탐색 실패가 아니다.
+   상시 가드: `HindsightRecoveryTests`.
+2. **지는 건 전제다.** 같은 짐벌이 정상 선회에서는 스필을 91 % 줄인다.
+   광대역 도로 외란이 F5/F6 를 만든다.
+3. **F5 표의 절대 수치는 재현되지 않는다.** 6 주행 전부 v1 이라 약 85 개 설정이
+   `unknown-at-recording` 이고, 그 사이 D7 물리가 들어왔다. 원래 수치는 보존한다.
+
+**게이트 재판정: 여전히 FAIL** — 잔차 RL 계속 보류. 소유자의 2026-08-30 결정은
+바뀌지 않는다. 다음 실험을 정당화하려면 §F7 §5 의 미확인 항목이 먼저 필요하다.
+
 ## 지금까지 만든 것
 
 (phase-1 범위는 [design-review.md](design-review.md) §20 기준. 상세 근거는
@@ -71,7 +86,7 @@ F5/F6 는 "이 조건에서 못 이긴다" 는 주장인데, trace 가 탱크 �
 **어셈블리** ([Assets/FluidStabilizer/README.md](../Assets/FluidStabilizer/README.md)):
 `Contracts` / `Core` / `Controller` / `Rl` (모두 엔진프리) · `Sim` / `Sim.Editor` (Unity) · `Tests.EditMode`.
 
-**검증:** EditMode 테스트 **140 통과 / 0 실패 / 8 스킵** (스킵 = `[Explicit]` 진단).
+**검증:** EditMode 테스트 **143 통과 / 0 실패 / 11 스킵** (스킵 = `[Explicit]` 진단).
 ```
 "/Applications/Unity/Hub/Editor/6000.5.10f1/Unity.app/Contents/MacOS/Unity" -batchmode -nographics -projectPath . -runTests -testPlatform EditMode -testResults Logs/editmode-results.xml -logFile -
 ```
