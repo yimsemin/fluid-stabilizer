@@ -35,10 +35,10 @@ namespace FluidStabilizer.Tests
         public void ProducesOneRowPerCombination_AndIsDeterministic()
         {
             var traces = new List<DriverTrace> { Rec(1, 0.62), Rec(2, 0.72) };
-            var controllers = new List<(string, Func<IController>)>
+            var controllers = new List<(string, Func<SimulationConfig, IController>)>
             {
-                ("Rigid (Hold)", () => new HoldController()),
-                ("PID", () => new PidController()),
+                ("Rigid (Hold)", _ => new HoldController()),
+                ("PID", _ => new PidController()),
             };
             var models = new List<(string, Func<ISloshModel>)> { ("pendulum", () => new PendulumSloshModel()) };
 
@@ -64,9 +64,9 @@ namespace FluidStabilizer.Tests
         public void EachRow_MatchesAStandaloneReplayOfThatCombination()
         {
             var trace = Rec(5, 0.7);
-            var controllers = new List<(string, Func<IController>)>
+            var controllers = new List<(string, Func<SimulationConfig, IController>)>
             {
-                ("Rigid (Hold)", () => new HoldController()),
+                ("Rigid (Hold)", _ => new HoldController()),
             };
             var models = new List<(string, Func<ISloshModel>)> { ("pendulum", () => new PendulumSloshModel()) };
 

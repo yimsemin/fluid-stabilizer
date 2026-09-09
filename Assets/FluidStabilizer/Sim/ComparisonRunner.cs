@@ -336,7 +336,7 @@ namespace FluidStabilizer.Sim
             EnsureStyles();
 
             int n = _lanes.Count;
-            double best = _lanes.Min(l => l.SpillLitres);
+            var bestLanes = BestLanes();
             double elapsed = _lanes[0].Loop.SimTime;
             double total = _trace != null ? _trace.DurationSeconds : 0.0;
             float stripH = Screen.height / (float)n;
@@ -344,7 +344,7 @@ namespace FluidStabilizer.Sim
             for (int i = 0; i < n; i++)
             {
                 Lane l = _lanes[i];
-                bool isBest = l.SpillLitres <= best + 1e-6;
+                bool isBest = bestLanes.Contains(l.Choice);
                 bool offline = l.Controller is RemotePolicyController rp && rp.ExecutionStatus != "policy-ok";
 
                 // thin divider between strips
@@ -388,6 +388,24 @@ namespace FluidStabilizer.Sim
 
         // "① 강체가 가장 적게 넘침 (…)". Deliberately plain — this is the takeaway a
         // viewer should get without reading the per-lane cards.
+        private static bool IsComparable(Lane l) =>
+            !(l.Controller is IPolicyExecutionStatus p) || p.ExecutionStatus == "policy-ok";
+
+        /// <summary>
+        /// Lanes eligible for the green "winner" highlight: least spill among the
+        /// lanes whose controller actually ran. A lane that fell back to Hold (no
+        /// policy server) or ran an unverified policy is excluded — otherwise the
+        /// fallback lane wins *as the AI*, the exact confusion <see cref="VerdictText"/>
+        /// refuses to make. Empty when no lane is comparable.
+        /// </summary>
+        public List<StabilizerChoice> BestLanes()
+        {
+            var comparable = _lanes.Where(IsComparable).ToList();
+            if (comparable.Count == 0) return new List<StabilizerChoice>();
+            double best = comparable.Min(l => l.SpillLitres);
+            return comparable.Where(l => l.SpillLitres <= best + 1e-6).Select(l => l.Choice).ToList();
+        }
+
         public string VerdictText()
         {
             var invalid = _lanes.Where(l => l.Controller is IPolicyExecutionStatus p && p.ExecutionStatus != "policy-ok").ToList();

@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using FluidStabilizer.Contracts;
 using FluidStabilizer.Controller;
+using FluidStabilizer.Core.Sim;
 using FluidStabilizer.Core.Sim.Drivers;
 using FluidStabilizer.Core.Sim.Eval;
 using FluidStabilizer.Core.Sim.SloshModels;
@@ -29,12 +30,12 @@ namespace FluidStabilizer.SimEditor
     /// </summary>
     public static class TraceEvalRunner
     {
-        private static readonly (string, Func<IController>)[] Baselines =
+        private static readonly (string, Func<SimulationConfig, IController>)[] Baselines =
         {
-            ("Rigid (Hold)", () => new HoldController()),
-            ("SpecificForceAlignment", () => new SpecificForceAlignmentController()),
-            ("PID", () => new PidController()),
-            ("PrivilegedFeedforward", () => new PrivilegedFullStateController()),
+            ("Rigid (Hold)", _ => new HoldController()),
+            ("SpecificForceAlignment", _ => new SpecificForceAlignmentController()),
+            ("PID", _ => new PidController()),
+            ("PrivilegedFeedforward", _ => new PrivilegedFullStateController()),
         };
 
         [MenuItem("FluidStabilizer/Evaluate Recorded Drives")]

@@ -42,7 +42,7 @@ namespace FluidStabilizer.Core.Sim.Eval
 
         public static List<TraceEvalRow> Run(
             IReadOnlyList<DriverTrace> traces,
-            IReadOnlyList<(string name, Func<IController> make)> controllers,
+            IReadOnlyList<(string name, Func<SimulationConfig, IController> make)> controllers,
             IReadOnlyList<(string name, Func<ISloshModel> make)> sloshModels,
             EpisodeLog log = null)
         {
@@ -53,8 +53,10 @@ namespace FluidStabilizer.Core.Sim.Eval
             foreach (var (sloshName, makeSlosh) in sloshModels ?? new[] { (trace.SloshModel, (Func<ISloshModel>)trace.MakeSloshModel) })
             foreach (var (ctrlName, makeCtrl) in controllers)
             {
-                IController ctrl = makeCtrl();
                 SimulationConfig cfg = trace.ToConfig();
+                // Built from this drive's effective config, not defaults: a controller
+                // that scales by Gimbal.MaxRateRadPerSec must see the recorded value.
+                IController ctrl = makeCtrl(cfg);
                 var loop = new SimulationLoop(
                     cfg, ctrl, new RecordedTraceDriver(trace), makeSlosh());
                 EpisodeResult r = loop.RunEpisode(trace.Seed);

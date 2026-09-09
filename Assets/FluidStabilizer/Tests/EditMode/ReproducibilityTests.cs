@@ -66,7 +66,7 @@ namespace FluidStabilizer.Tests
                 cmp.Lanes = new[] { StabilizerChoice.Off };
                 cmp.StartComparison(trace, false);
                 Assert.AreEqual(original.TotalOverflowVolume * 1000, cmp.RunToEndHeadless()[StabilizerChoice.Off]);
-                var rows = TraceEvaluator.Run(new[] { trace }, new[] { ("Hold", (Func<IController>)(() => new HoldController())) }, null);
+                var rows = TraceEvaluator.Run(new[] { trace }, new[] { ("Hold", (Func<SimulationConfig, IController>)(_ => new HoldController())) }, null);
                 Assert.AreEqual(original.TotalOverflowVolume * 1000, rows[0].SpillLitres);
                 Assert.AreEqual(original.SloshEnergyIntegral, rows[0].SloshEnergyIntegral);
                 Assert.AreEqual(trace.SloshModel, rows[0].SloshModel);

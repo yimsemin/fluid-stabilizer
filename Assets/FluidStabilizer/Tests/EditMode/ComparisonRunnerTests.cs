@@ -96,6 +96,13 @@ namespace FluidStabilizer.Tests
 
                 Assert.AreEqual(spill[StabilizerChoice.Off], spill[StabilizerChoice.LearnedPolicy], 1e-9,
                     "no policy server → the learned lane must behave exactly like the locked Hold");
+
+                // The fallback lane ties the rigid lane on spill, so a naive "lowest
+                // spill wins" highlight would mark it as a winning AI. It must not be.
+                var best = cmp.BestLanes();
+                CollectionAssert.DoesNotContain(best, StabilizerChoice.LearnedPolicy,
+                    "a Hold-fallback lane must never be highlighted as the best AI lane");
+                CollectionAssert.Contains(best, StabilizerChoice.Off);
             }
             finally
             {

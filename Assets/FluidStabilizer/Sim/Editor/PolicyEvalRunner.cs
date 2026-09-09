@@ -46,10 +46,13 @@ namespace FluidStabilizer.SimEditor
                 return;
             }
 
-            double rateScale = new SimulationConfig().Gimbal.MaxRateRadPerSec;
-            Func<IController> hold = () => new HoldController();
-            Func<IController> policy = () => new RemotePolicyController(host, port, stack, rateScale, log: s => Debug.Log(s));
-            var controllers = new List<(string, Func<IController>)>
+            // rateScale comes from the drive being replayed, not from defaults —
+            // a trace recorded with a non-default gimbal rate would otherwise be
+            // served commands scaled to the wrong ceiling.
+            Func<SimulationConfig, IController> hold = _ => new HoldController();
+            Func<SimulationConfig, IController> policy = cfg => new RemotePolicyController(
+                host, port, stack, cfg.Gimbal.MaxRateRadPerSec, log: s => Debug.Log(s));
+            var controllers = new List<(string, Func<SimulationConfig, IController>)>
             {
                 ("Rigid (Hold)", hold),
                 ("Learned policy", policy),
