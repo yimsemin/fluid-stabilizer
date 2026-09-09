@@ -145,6 +145,42 @@ namespace FluidStabilizer.Tests
             Assert.Throws<InvalidDataException>(() => TraceDataset.Load("datasets.tsv", "Traces", "final"));
         }
 
+        // The demo the owner runs by hand depends on a file convention, not on
+        // physics: <drive>.trace.csv next to <drive>.traj.csv, found by
+        // SimulationRunner. If this breaks, lane ④ silently falls back to Hold and
+        // the demo shows nothing (findings F8, docs/demo-guide.md).
+        [Test]
+        public void HindsightCeilingLane_LoadsTheTrajectoryStoredBesideTheDrive()
+        {
+            string dir = Path.Combine(Path.GetTempPath(), "demo-" + Guid.NewGuid());
+            Directory.CreateDirectory(dir);
+            try
+            {
+                var trace = Record(0, out _);
+                string tracePath = Path.Combine(dir, "demo-corner.trace.csv");
+                trace.SaveToFile(tracePath);
+                var loaded = DriverTrace.LoadFromFile(tracePath);
+
+                Assert.IsNull(SimulationRunner.TrajectoryPathFor(loaded),
+                    "no trajectory beside the drive yet — must not resolve one");
+                Assert.IsNull(SimulationRunner.MakeHindsightCeiling(loaded),
+                    "without a trajectory the ceiling lane must decline, not improvise");
+
+                string trajPath = Path.Combine(dir, "demo-corner.traj.csv");
+                File.WriteAllText(trajPath, string.Join("\n", new[]
+                {
+                    "# fluid-stabilizer-hindsight-trajectory/v1",
+                    "t,pitchRate,rollRate",
+                    "0,0.1,-0.2", "0.01,0.1,-0.2", "0.02,0,-0.3",
+                }));
+
+                Assert.AreEqual(trajPath, SimulationRunner.TrajectoryPathFor(loaded));
+                IController ceiling = SimulationRunner.MakeHindsightCeiling(loaded);
+                Assert.IsInstanceOf<TrajectoryPlaybackController>(ceiling);
+            }
+            finally { Directory.Delete(dir, true); }
+        }
+
         [Test]
         public void TraceFileSave_RefusesToOverwrite()
         {
