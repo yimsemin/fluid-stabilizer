@@ -96,6 +96,55 @@ namespace FluidStabilizer.Tests
             Assert.Throws<InvalidDataException>(() => TraceDataset.ValidateUnique(new[] { a, b }));
         }
 
+        // The manifest is the only thing standing between "train" and "final".
+        // Every way it can silently lie must fail loudly instead.
+        [Test]
+        public void Manifest_FailsOnTamperedSource_EmptySplit_AndSeenFinal()
+        {
+            string dir = Path.Combine(Path.GetTempPath(), "repro-" + Guid.NewGuid());
+            Directory.CreateDirectory(dir);
+            try
+            {
+                var t = Record(0, out _);
+                string file = Path.Combine(dir, "drive-a.trace.csv");
+                t.SaveToFile(file);
+                string sha = ConfigSnapshot.FileHash(file);
+                string manifest = Path.Combine(dir, "m.tsv");
+
+                void Write(string body) { File.Delete(manifest); File.WriteAllText(manifest, "split\tfile\tsourceSha256\thistory\n" + body); }
+
+                Write($"train\tdrive-a.trace.csv\t{sha}\tbc\n");
+                Assert.AreEqual(1, TraceDataset.Load(manifest, dir, "train").Count);
+
+                // a split nobody assigned drives to must not silently evaluate on nothing
+                Assert.Throws<InvalidDataException>(() => TraceDataset.Load(manifest, dir, "final"));
+
+                // a drive with a known history must not be laundered into the final set
+                Write($"final\tdrive-a.trace.csv\t{sha}\tbc-and-repeated-condition-search\n");
+                Assert.Throws<InvalidDataException>(() => TraceDataset.Load(manifest, dir, "final"));
+
+                // the recorded drive changed underneath the manifest
+                Write($"train\tdrive-a.trace.csv\t{new string('0', 64)}\tbc\n");
+                Assert.Throws<InvalidDataException>(() => TraceDataset.Load(manifest, dir, "train"));
+
+                Write("train\tsub/drive-a.trace.csv\t" + sha + "\tbc\n");
+                Assert.Throws<InvalidDataException>(() => TraceDataset.Load(manifest, dir, "train"));
+            }
+            finally { Directory.Delete(dir, true); }
+        }
+
+        [Test]
+        public void ShippedManifest_LoadsAndAssignsNoFinalDrives()
+        {
+            if (!File.Exists("datasets.tsv") || !Directory.Exists("Traces"))
+                Assert.Ignore("no local Traces/ — recorded drives are not committed");
+            var train = TraceDataset.Load("datasets.tsv", "Traces", "train");
+            Assert.IsNotEmpty(train);
+            CollectionAssert.AllItemsAreUnique(train.Select(t => t.InputSha256).ToList());
+            // documented in docs/reproducibility.md: a real holdout does not exist yet
+            Assert.Throws<InvalidDataException>(() => TraceDataset.Load("datasets.tsv", "Traces", "final"));
+        }
+
         [Test]
         public void TraceFileSave_RefusesToOverwrite()
         {
