@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Linq;
+using System.Text;
 using FluidStabilizer.Contracts;
 using FluidStabilizer.Core.Sim.SloshModels;
 
@@ -12,7 +14,7 @@ namespace FluidStabilizer.Core.Sim.Drivers
     /// produced at every physics step of one drive, plus the setup needed to
     /// reproduce that drive (seed, step size, fill level, road, slosh model).
     /// Replaying it through <see cref="RecordedTraceDriver"/> over the same config
-    /// reproduces the episode bit-for-bit.
+    /// reproduces the episode under the same code; legacy missing settings remain assumptions.
     ///
     /// This is the "recorded human drive" of design-review §17 / project-goals ③:
     /// the real disturbance data for training <em>and</em> the held-out evaluation
@@ -22,7 +24,49 @@ namespace FluidStabilizer.Core.Sim.Drivers
     /// </summary>
     public sealed class DriverTrace
     {
-        public const string FormatId = "fluid-stabilizer-driver-trace/v1";
+        public const string FormatId = "fluid-stabilizer-driver-trace/v2";
+        public readonly SortedDictionary<string, string> RecordedConfig = new SortedDictionary<string, string>(StringComparer.Ordinal);
+        public string RecordedCode = "unknown";
+        public string RecordedController = "unknown";
+        public string SourcePath = "";
+        public string SourceSha256 = "";
+        public string DatasetSplit = "unassigned";
+        public string DatasetManifestSha256 = "";
+        public string DatasetHistory = "";
+
+        public void CaptureConfig(SimulationConfig config, ulong seed, string sloshModel, string controller = "unknown")
+        {
+            RecordedConfig.Clear();
+            foreach (var kv in ConfigSnapshot.Capture(config)) RecordedConfig.Add(kv.Key, kv.Value);
+            Seed = seed;
+            StepSeconds = config.PhysicsStepSeconds;
+            FillRatio = config.Slosh.FillRatio;
+            RoadEnabled = config.Road.Enabled;
+            RoadSeverity = config.Road.Severity;
+            SloshModel = sloshModel;
+            RecordedController = controller;
+            RecordedCode = Eval.RunProvenance.CodeIdentity;
+        }
+
+        public string Assumptions => string.Join(";", ConfigSnapshot.Capture(new SimulationConfig()).Keys
+            .Where(k => k != "EpisodeSeconds" && !RecordedConfig.ContainsKey(k)
+                && k != "PhysicsRateHz" && k != "Slosh.FillRatio" && k != "Road.Enabled" && k != "Road.Severity")
+            .Select(k => "unknown-at-recording:" + k + "=" + ConfigSnapshot.Capture(ToConfig())[k]));
+
+        // Input identity deliberately excludes filename, label, seed and physical config.
+        // Copying/renaming a drive or changing its road cannot create a new holdout.
+        public string InputSha256
+        {
+            get
+            {
+                var b = new StringBuilder(StepSeconds.ToString("R", CultureInfo.InvariantCulture));
+                foreach (var c in Samples)
+                    b.Append('\n').Append(c.Throttle.ToString("R", CultureInfo.InvariantCulture)).Append(',')
+                        .Append(c.Brake.ToString("R", CultureInfo.InvariantCulture)).Append(',')
+                        .Append(c.Steer.ToString("R", CultureInfo.InvariantCulture));
+                return ConfigSnapshot.Hash(b.ToString());
+            }
+        }
 
         /// <summary>Human-readable name, e.g. "citycommute-3" or "hardbrake-lowfill".</summary>
         public string Label = "unnamed";
@@ -56,14 +100,14 @@ namespace FluidStabilizer.Core.Sim.Drivers
         /// </summary>
         public SimulationConfig ToConfig()
         {
-            var c = new SimulationConfig
-            {
-                PhysicsRateHz = 1.0 / StepSeconds,
-                EpisodeSeconds = DurationSeconds
-            };
-            c.Slosh.FillRatio = FillRatio;
-            c.Road.Enabled = RoadEnabled;
-            c.Road.Severity = RoadSeverity;
+            var c = ConfigSnapshot.Restore(RecordedConfig);
+            // Legacy header values are known; remaining defaults are assumptions, never persisted as facts.
+            if (!RecordedConfig.ContainsKey("PhysicsRateHz")) c.PhysicsRateHz = 1.0 / StepSeconds;
+            if (!RecordedConfig.ContainsKey("Slosh.FillRatio")) c.Slosh.FillRatio = FillRatio;
+            if (!RecordedConfig.ContainsKey("Road.Enabled")) c.Road.Enabled = RoadEnabled;
+            if (!RecordedConfig.ContainsKey("Road.Severity")) c.Road.Severity = RoadSeverity;
+            c.EpisodeSeconds = DurationSeconds;
+            c.Validate();
             return c;
         }
 
@@ -86,6 +130,9 @@ namespace FluidStabilizer.Core.Sim.Drivers
             w.WriteLine("# roadEnabled: " + (RoadEnabled ? "1" : "0"));
             w.WriteLine("# roadSeverity: " + RoadSeverity.ToString("R", ic));
             w.WriteLine("# sloshModel: " + SloshModel);
+            w.WriteLine("# recordedCode: " + RecordedCode);
+            w.WriteLine("# recordedController: " + RecordedController);
+            foreach (var kv in RecordedConfig) w.WriteLine("# config." + kv.Key + ": " + kv.Value);
             w.WriteLine("# samples: " + Samples.Count.ToString(ic));
             w.WriteLine("throttle,brake,steer");
             foreach (var c in Samples)
@@ -123,8 +170,15 @@ namespace FluidStabilizer.Core.Sim.Drivers
             if (c < 0) return;
             string key = line.Substring(1, c - 1).Trim();
             string val = line.Substring(c + 1).Trim();
+            if (key.StartsWith("config.", StringComparison.Ordinal))
+            {
+                t.RecordedConfig.Add(key.Substring(7), val);
+                return;
+            }
             switch (key)
             {
+                case "recordedCode": t.RecordedCode = val; break;
+                case "recordedController": t.RecordedController = val; break;
                 case "label": t.Label = val; break;
                 case "seed": t.Seed = ulong.Parse(val, ic); break;
                 case "stepSeconds": t.StepSeconds = double.Parse(val, ic); break;
@@ -137,12 +191,17 @@ namespace FluidStabilizer.Core.Sim.Drivers
 
         public void SaveToFile(string path)
         {
-            using (var w = new StreamWriter(path, false)) Save(w);
+            using (var f = new FileStream(path, FileMode.CreateNew, FileAccess.Write))
+            using (var w = new StreamWriter(f)) Save(w);
         }
 
         public static DriverTrace LoadFromFile(string path)
         {
-            using (var r = new StreamReader(path)) return Load(r);
+            using var r = new StreamReader(path);
+            var trace = Load(r);
+            trace.SourcePath = Path.GetFullPath(path);
+            trace.SourceSha256 = ConfigSnapshot.FileHash(path);
+            return trace;
         }
     }
 

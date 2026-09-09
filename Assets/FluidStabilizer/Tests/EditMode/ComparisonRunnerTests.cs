@@ -91,6 +91,8 @@ namespace FluidStabilizer.Tests
 
                 cmp.StartComparison(trace, withRigs: false);
                 var spill = cmp.RunToEndHeadless();
+                StringAssert.Contains("AI 성능 비교 제외", cmp.VerdictText());
+                StringAssert.Contains("hold-fallback", cmp.VerdictText());
 
                 Assert.AreEqual(spill[StabilizerChoice.Off], spill[StabilizerChoice.LearnedPolicy], 1e-9,
                     "no policy server → the learned lane must behave exactly like the locked Hold");

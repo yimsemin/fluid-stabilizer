@@ -12,7 +12,7 @@ no sampling.
     # then in Unity pick the "Learned policy" stabilizer (host 127.0.0.1 port 5601)
 
 Wire format (little-endian, ``[u32 len][payload]`` frames): on connect the server
-sends ``[u32 magic=0x504F4C59][u32 version=1][i32 obsSize][i32 actSize]``. Then
+sends ``[u32 magic=0x504F4C59][u32 version=2][i32 obsSize][i32 actSize]``. Then
 per request the client sends ``[u8 op][...]``:
   op 0 = reset   -> ``[u8 1]``           (no server-side episode state for an MLP)
   op 1 = infer   -> ``[f32 act*actSize]``  payload = ``[f32 obs*obsSize]``
@@ -21,6 +21,9 @@ per request the client sends ``[u8 op][...]``:
 from __future__ import annotations
 
 import argparse
+import hashlib
+import io
+from pathlib import Path
 import socket
 import struct
 import threading
@@ -31,11 +34,13 @@ import torch
 from bc_pretrain import build_actor
 
 MAGIC = 0x504F4C59
-VERSION = 1
+VERSION = 2
 
 
 def load_policy(path: str):
-    ck = torch.load(path, map_location="cpu", weights_only=False)
+    # Hash the exact bytes loaded, avoiding a path/hash race with checkpoint replacement.
+    checkpoint_bytes = Path(path).read_bytes()
+    ck = torch.load(io.BytesIO(checkpoint_bytes), map_location="cpu", weights_only=False)
     obs_dim, act_dim = int(ck["obs_dim"]), int(ck["act_dim"])
     hidden = ck["actor_mean"]["0.weight"].shape[0]
     net = build_actor(obs_dim, act_dim, hidden)
@@ -55,6 +60,11 @@ def load_policy(path: str):
         a = net(o)[0].numpy()
         return np.clip(a, -1.0, 1.0).astype("<f4")
 
+    act.policy_identity = (
+        f"checkpoint-sha256={hashlib.sha256(checkpoint_bytes).hexdigest()};"
+        f"checkpoint={Path(path).name};server-sha256={hashlib.sha256(Path(__file__).read_bytes()).hexdigest()};"
+        f"torch={torch.__version__};numpy={np.__version__};action=absolute-joint-rate;deterministic=mean"
+    )
     return act, obs_dim, act_dim
 
 
@@ -83,6 +93,7 @@ def _send_frame(sock, payload):
 def serve_client(conn, act, obs_dim, act_dim):
     _send_frame_head = struct.pack("<IIii", MAGIC, VERSION, obs_dim, act_dim)
     conn.sendall(_send_frame_head)  # 16-byte handshake, not length-prefixed
+    _send_frame(conn, act.policy_identity.encode("utf-8"))
 
     while True:
         frame = _recv_frame(conn)

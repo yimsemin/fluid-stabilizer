@@ -236,6 +236,11 @@ namespace FluidStabilizer.Core.Sim.Eval
 
     public sealed class HindsightDriveReport
     {
+        public string Evidence;
+        public string ConfigSha256;
+        public string InputSha256;
+        public SimulationConfig EffectiveConfig;
+        public bool LockCapable;
         public string Trace;
         public double DurationSeconds;
         public double FillRatio;
@@ -365,6 +370,11 @@ namespace FluidStabilizer.Core.Sim.Eval
             var report = new HindsightDriveReport
             {
                 Trace = trace.Label,
+                EffectiveConfig = effCfg,
+                Evidence = RunProvenance.Describe(trace, effCfg, opts.OptimizeModelName),
+                ConfigSha256 = ConfigSnapshot.Hash(ConfigSnapshot.Encode(effCfg)),
+                InputSha256 = trace.InputSha256,
+                LockCapable = opts.LockCapable,
                 DurationSeconds = trace.DurationSeconds,
                 FillRatio = effCfg.Slosh.FillRatio,
                 RoadEnabled = effCfg.Road.Enabled,
@@ -478,6 +488,7 @@ namespace FluidStabilizer.Core.Sim.Eval
         {
             var sb = new StringBuilder();
             sb.AppendLine("fluid-stabilizer — feasibility ceiling (offline hindsight trajectory optimisation)");
+            foreach (var r in reports) sb.AppendLine(r.Evidence);
             sb.AppendLine($"generated {DateTime.UtcNow:yyyy-MM-dd HH:mm} UTC");
             sb.AppendLine($"search: {opts.KnotCount} knots/axis, {opts.Restarts} restarts x {opts.IterationsPerRestart} iters, "
                           + $"rate authority {opts.RateAuthority:P0}, optimised on '{opts.OptimizeModelName}'");
@@ -511,11 +522,16 @@ namespace FluidStabilizer.Core.Sim.Eval
         {
             var ic = CultureInfo.InvariantCulture;
             var traj = GimbalRateTrajectory.FromFlat(report.BestParams, report.KnotCount, report.DurationSeconds);
-            var cfg = new SimulationConfig();
+            var cfg = report.EffectiveConfig ?? new SimulationConfig();
             double dtControl = cfg.PhysicsStepSeconds * cfg.ControlDecimation;
 
             w.WriteLine("# fluid-stabilizer-hindsight-trajectory/v1");
             w.WriteLine("# trace: " + report.Trace);
+            w.WriteLine("# inputSha256: " + report.InputSha256);
+            w.WriteLine("# configSha256: " + report.ConfigSha256);
+            w.WriteLine("# optimizeModel: " + report.OptimizeModel);
+            w.WriteLine("# lockCapable: " + report.LockCapable);
+            foreach (string line in (report.Evidence ?? "").Split('\n')) w.WriteLine("# " + line);
             w.WriteLine("# durationSeconds: " + report.DurationSeconds.ToString("R", ic));
             w.WriteLine("# rateScaleRadPerSec: " + report.RateScaleRadPerSec.ToString("R", ic));
             w.WriteLine("# knotCount: " + report.KnotCount.ToString(ic));

@@ -52,10 +52,9 @@ namespace FluidStabilizer.SimEditor
                 return;
             }
 
-            var models = new List<(string, Func<ISloshModel>)> { ("pendulum", () => new PendulumSloshModel()) };
-            if (withShallowWater) models.Add(("shallow", () => new ShallowWaterSloshModel()));
+            List<(string, Func<ISloshModel>)> models = withShallowWater ? TraceEvaluator.BothSloshModels() : null;
 
-            Debug.Log($"[trace-eval] {traces.Count} drive(s) × {Baselines.Length} controllers × {models.Count} model(s) …");
+            Debug.Log($"[trace-eval] {traces.Count} drive(s) × {Baselines.Length} controllers × {models?.Count ?? 1} model(s) …");
 
             List<TraceEvalRow> rows;
             using (var log = new EpisodeLog(EpisodeLog.DefaultPath, $"trace-eval {DateTime.Now:yyyy-MM-dd HH:mm}"))
@@ -63,17 +62,11 @@ namespace FluidStabilizer.SimEditor
             string report = TraceEvaluator.FormatReport(rows);
 
             Directory.CreateDirectory("Logs");
-            File.WriteAllText("Logs/trace-eval.txt", report);
-            Debug.Log($"[trace-eval] → Logs/trace-eval.txt  (+ {EpisodeLog.DefaultPath})\n\n" + report);
+            string output = RunProvenance.NewPath("Logs/trace-eval.txt");
+            File.WriteAllText(output, report);
+            Debug.Log($"[trace-eval] → {output}  (+ {EpisodeLog.DefaultPath})\n\n" + report);
         }
 
-        private static List<DriverTrace> LoadTraces()
-        {
-            if (!Directory.Exists(TraceStore.Dir)) return new List<DriverTrace>();
-            return Directory.GetFiles(TraceStore.Dir, "*" + TraceStore.Extension)
-                .OrderBy(p => p)
-                .Select(DriverTrace.LoadFromFile)
-                .ToList();
-        }
+        private static List<DriverTrace> LoadTraces() => TraceStore.LoadDataset();
     }
 }

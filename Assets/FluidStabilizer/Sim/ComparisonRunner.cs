@@ -104,6 +104,7 @@ namespace FluidStabilizer.Sim
         {
             Stop();
             _trace = trace;
+            if (!string.IsNullOrEmpty(trace.Assumptions)) Debug.LogWarning("[compare] legacy assumptions: " + trace.Assumptions);
             _finished = false;
             _accumulator = 0;
 
@@ -265,7 +266,7 @@ namespace FluidStabilizer.Sim
                     $"comparison '{_trace?.Label}' {DateTime.Now:yyyy-MM-dd HH:mm}"))
                 {
                     foreach (var l in _lanes)
-                        log.Add("comparison", l.Loop.Config, l.Loop.Result());
+                        log.Add("comparison", l.Loop.Config, l.Loop.Result(), _trace, l.Controller);
                 }
             }
             catch (Exception e) { Debug.LogWarning("[compare] episode log failed: " + e.Message); }
@@ -344,7 +345,7 @@ namespace FluidStabilizer.Sim
             {
                 Lane l = _lanes[i];
                 bool isBest = l.SpillLitres <= best + 1e-6;
-                bool offline = l.Controller is RemotePolicyController rp && !rp.Connected;
+                bool offline = l.Controller is RemotePolicyController rp && rp.ExecutionStatus != "policy-ok";
 
                 // thin divider between strips
                 if (i > 0) SimGui.Box(new Rect(0, i * stripH - 1, Screen.width, 2), new Color(0, 0, 0, 0.6f));
@@ -356,7 +357,7 @@ namespace FluidStabilizer.Sim
                 string tag = i < 3 ? "①②③"[i].ToString() + " " : "";
 
                 GUILayout.BeginArea(new Rect(card.x + 12, card.y + 8, card.width - 24, card.height - 16));
-                GUILayout.Label(tag + SimulationRunner.ShortName(l.Choice) + (offline ? "  (offline→Hold)" : ""), _title);
+                GUILayout.Label(tag + SimulationRunner.ShortName(l.Choice) + (offline ? "  [" + ((RemotePolicyController)l.Controller).ExecutionStatus + "]" : ""), _title);
                 GUILayout.Space(2);
                 var prevC = _big.normal.textColor;
                 _big.normal.textColor = isBest ? new Color(0.5f, 1f, 0.55f)
@@ -387,8 +388,13 @@ namespace FluidStabilizer.Sim
 
         // "① 강체가 가장 적게 넘침 (…)". Deliberately plain — this is the takeaway a
         // viewer should get without reading the per-lane cards.
-        private string VerdictText()
+        public string VerdictText()
         {
+            var invalid = _lanes.Where(l => l.Controller is IPolicyExecutionStatus p && p.ExecutionStatus != "policy-ok").ToList();
+            if (invalid.Count > 0)
+                return "AI 성능 비교 제외: " + string.Join(", ", invalid.Select(l => ((IPolicyExecutionStatus)l.Controller).ExecutionStatus))
+                    + " — 표시된 스필에는 Hold fallback 또는 미확인 정책 실행이 포함될 수 있음";
+
             var ranked = _lanes
                 .Select((l, i) => (l, tag: i < 3 ? "①②③"[i].ToString() : "·"))
                 .OrderBy(t => t.l.SpillLitres)

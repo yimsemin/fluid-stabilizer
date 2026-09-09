@@ -25,7 +25,7 @@ namespace FluidStabilizer.Tests
             public int Port { get; }
             public volatile int InferCount;
 
-            public FakePolicyServer(int obsSize, float[] reply)
+            public FakePolicyServer(int obsSize, float[] reply, int disconnectAfter = int.MaxValue, bool legacy = false)
             {
                 _reply = reply;
                 _listener = new TcpListener(IPAddress.Loopback, 0);
@@ -42,10 +42,11 @@ namespace FluidStabilizer.Tests
 
                         var hs = new byte[16];
                         Le(hs, 0, RemotePolicyController.Magic);
-                        Le(hs, 4, RemotePolicyController.Version);
+                        Le(hs, 4, legacy ? 1u : RemotePolicyController.Version);
                         Le(hs, 8, obsSize);
                         Le(hs, 12, reply.Length);
                         s.Write(hs, 0, 16);
+                        if (!legacy) WriteFrame(s, System.Text.Encoding.UTF8.GetBytes("checkpoint-sha256=" + new string('a', 64) + ";action=absolute-joint-rate"));
 
                         while (true)
                         {
@@ -59,6 +60,7 @@ namespace FluidStabilizer.Tests
                             if (op == 0) { WriteFrame(s, new byte[] { 1 }); continue; }
                             if (op == 1)
                             {
+                                if (InferCount >= disconnectAfter) return;
                                 InferCount++;
                                 var payload = new byte[reply.Length * 4];
                                 for (int i = 0; i < reply.Length; i++)
@@ -126,6 +128,8 @@ namespace FluidStabilizer.Tests
 
             for (int i = 0; i < 20; i++) ctl.ComputeCommand(Bundle(0.02 + i * 0.01));
             Assert.GreaterOrEqual(server.InferCount, 21);
+            Assert.AreEqual("policy-ok", ctl.ExecutionStatus);
+            Assert.AreEqual(0, ctl.FallbackTicks);
             ctl.Dispose();
         }
 
@@ -141,7 +145,44 @@ namespace FluidStabilizer.Tests
             var cmd = ctl.ComputeCommand(Bundle(0.01));
             Assert.AreEqual(StabilizerCommandMode.Locked, cmd.Mode, "no policy → the locked-Hold floor");
             Assert.DoesNotThrow(() => ctl.ComputeCommand(Bundle(0.02)));
+            Assert.AreEqual("hold-fallback", ctl.ExecutionStatus);
+            Assert.AreEqual(2, ctl.FallbackTicks);
+            Assert.IsNotEmpty(ctl.FallbackReason);
             ctl.Dispose();
+        }
+
+        [Test]
+        public void MidEpisodeDisconnect_IsStickyMixedExecution()
+        {
+            using var server = new FakePolicyServer(ObservationEncoder.SingleFrameSize * 6, new[] { 0.2f, 0f }, disconnectAfter: 1);
+            using var ctl = new RemotePolicyController("127.0.0.1", server.Port, timeoutMs: 100);
+            ctl.Reset();
+            ctl.ComputeCommand(Bundle(0.01));
+            ctl.ComputeCommand(Bundle(0.02));
+            Assert.AreEqual(1, ctl.PolicyTicks);
+            Assert.AreEqual(1, ctl.FallbackTicks);
+            Assert.AreEqual("mixed-policy-and-hold", ctl.ExecutionStatus);
+            StringAssert.Contains(new string('a', 64), ctl.PolicyIdentity);
+        }
+
+        [Test]
+        public void LegacyServer_RemainsUsableButPolicyIdentityIsUnverified()
+        {
+            using var server = new FakePolicyServer(ObservationEncoder.SingleFrameSize * 6, new[] { 0f, 0f }, legacy: true);
+            using var ctl = new RemotePolicyController("127.0.0.1", server.Port);
+            ctl.Reset(); ctl.ComputeCommand(Bundle(0.01));
+            Assert.AreEqual("policy-unverified", ctl.ExecutionStatus);
+            Assert.AreEqual(0, ctl.FallbackTicks);
+        }
+
+        [Test]
+        public void NonFiniteAction_FallsBackAndIsNotAnAiResult()
+        {
+            using var server = new FakePolicyServer(ObservationEncoder.SingleFrameSize * 6, new[] { float.NaN, 0f });
+            using var ctl = new RemotePolicyController("127.0.0.1", server.Port);
+            ctl.Reset();
+            Assert.AreEqual(StabilizerCommandMode.Locked, ctl.ComputeCommand(Bundle(0.01)).Mode);
+            Assert.AreEqual("hold-fallback", ctl.ExecutionStatus);
         }
 
         [Test]

@@ -25,10 +25,10 @@ namespace FluidStabilizer.Rl
     /// <c>[u8 op=1][f32 obs × obsSize]</c> and reads <c>[f32 act × actSize]</c>.
     /// <c>op=0</c> = reset (clears any server-side episode state), <c>op=2</c> = close.</para>
     /// </summary>
-    public sealed class RemotePolicyController : IController, IDisposable
+    public sealed class RemotePolicyController : IController, IDisposable, IPolicyExecutionStatus
     {
         public const uint Magic = 0x504F4C59; // "POLY"
-        public const uint Version = 1;
+        public const uint Version = 2;
 
         private const byte OpReset = 0;
         private const byte OpInfer = 1;
@@ -64,6 +64,23 @@ namespace FluidStabilizer.Rl
         }
 
         public bool Connected => _connected;
+        public string PolicyIdentity { get; private set; } = "unknown";
+        public long PolicyTicks { get; private set; }
+        public long FallbackTicks { get; private set; }
+        public string FallbackReason { get; private set; } = "";
+        private bool _identityVerified, _identityChanged;
+        public string ExecutionStatus => FallbackTicks > 0
+            ? (PolicyTicks > 0 ? "mixed-policy-and-hold" : "hold-fallback")
+            : PolicyTicks == 0 ? "not-executed"
+            : !_identityVerified || _identityChanged ? "policy-unverified" : "policy-ok";
+        public string PolicySettings => $"endpoint={_host}:{_port};stack={_frameStack};rateScale={_rateScale.ToString("R", System.Globalization.CultureInfo.InvariantCulture)};action=absolute-joint-rate";
+
+        private StabilizerCommand Fallback(in SensorBundle sensors)
+        {
+            FallbackTicks++;
+            _lastAp = _lastAr = 0;
+            return StabilizerCommand.Hold(_seq++, sensors.StampSeconds);
+        }
 
         public string Name => _connected
             ? $"Learned policy @{_host}:{_port}"
@@ -71,6 +88,11 @@ namespace FluidStabilizer.Rl
 
         public void Reset()
         {
+            PolicyTicks = FallbackTicks = 0;
+            FallbackReason = "";
+            PolicyIdentity = "unknown";
+            _identityVerified = _identityChanged = false;
+            _warned = false;
             _encoder = new ObservationEncoder(_frameStack);
             _lastAp = _lastAr = 0.0;
             _seq = 0;
@@ -78,16 +100,7 @@ namespace FluidStabilizer.Rl
             _retryAtSeq = 0;
 
             TryConnect();
-            if (_connected)
-            {
-                try
-                {
-                    BridgeIo.WriteFrame(_stream, new[] { OpReset });
-                    byte[] ack = BridgeIo.ReadFrame(_stream);
-                    if (ack == null) Drop("reset: server closed");
-                }
-                catch (Exception e) { Drop("reset: " + e.Message); }
-            }
+
         }
 
         public StabilizerCommand ComputeCommand(in SensorBundle sensors)
@@ -102,7 +115,7 @@ namespace FluidStabilizer.Rl
                     TryConnect();
                     _retryAtSeq = _seq + 200;
                 }
-                if (!_connected) return StabilizerCommand.Hold(_seq++, sensors.StampSeconds);
+                if (!_connected) return Fallback(sensors);
             }
 
             try
@@ -113,10 +126,13 @@ namespace FluidStabilizer.Rl
 
                 BridgeIo.WriteFrame(_stream, BridgeIo.PackFloats(obs, OpInfer));
                 byte[] resp = BridgeIo.ReadFrame(_stream);
-                if (resp == null || resp.Length < _actSize * 4) { Drop("infer: short/closed response"); }
+                if (resp == null || resp.Length != _actSize * 4) { Drop("infer: short/closed response"); }
                 else
                 {
                     float[] act = BridgeIo.UnpackFloats(resp, 0, _actSize);
+                    if (Array.Exists(act, x => float.IsNaN(x) || float.IsInfinity(x)))
+                        throw new InvalidOperationException("non-finite policy action");
+                    PolicyTicks++;
                     _lastAp = Clamp1(act[0]);
                     _lastAr = _actSize > 1 ? Clamp1(act[1]) : 0.0;
                     return StabilizerCommand.Rate(_seq++, sensors.StampSeconds,
@@ -125,7 +141,7 @@ namespace FluidStabilizer.Rl
             }
             catch (Exception e) { Drop("infer: " + e.Message); }
 
-            return StabilizerCommand.Hold(_seq++, sensors.StampSeconds);
+            return Fallback(sensors);
         }
 
         private void TryConnect()
@@ -148,17 +164,37 @@ namespace FluidStabilizer.Rl
                 if (!BridgeIo.ReadExact(_stream, hs, 16)) throw new InvalidOperationException("no handshake");
                 uint magic = BridgeIo.GetU32(hs, 0);
                 uint version = BridgeIo.GetU32(hs, 4);
-                if (magic != Magic || version != Version)
+                if (magic != Magic || (version != 1 && version != Version))
                     throw new InvalidOperationException($"bad handshake magic={magic:X} version={version}");
                 _obsSize = BridgeIo.GetI32(hs, 8);
                 _actSize = BridgeIo.GetI32(hs, 12);
 
+                if (_obsSize != ObservationEncoder.SingleFrameSize * _frameStack || _actSize != 2)
+                    throw new InvalidOperationException("policy observation/action shape mismatch");
+                string identity = "unknown (legacy protocol v1)";
+                if (version == 2)
+                {
+                    byte[] meta = BridgeIo.ReadFrame(_stream);
+                    if (meta == null) throw new InvalidOperationException("missing policy identity");
+                    identity = System.Text.Encoding.UTF8.GetString(meta);
+                    if (!System.Text.RegularExpressions.Regex.IsMatch(identity, @"^checkpoint-sha256=[0-9a-f]{64};"))
+                        throw new InvalidOperationException("invalid policy identity");
+                }
+                if (PolicyIdentity != "unknown" && PolicyIdentity != identity) _identityChanged = true;
+                if (PolicyIdentity == "unknown") PolicyIdentity = identity;
+                else if (!PolicyIdentity.Contains(identity)) PolicyIdentity += " | " + identity;
+                _identityVerified = version == 2;
+                BridgeIo.WriteFrame(_stream, new[] { OpReset });
+                byte[] ack = BridgeIo.ReadFrame(_stream);
+                if (ack == null || ack.Length != 1 || ack[0] != 1)
+                    throw new InvalidOperationException("invalid reset acknowledgement");
                 _connected = true;
                 _log($"[policy] connected to {_host}:{_port} (obs={_obsSize} act={_actSize})");
             }
             catch (Exception e)
             {
                 _connected = false;
+                FallbackReason = "connect/reset: " + e.Message;
                 if (!_warned) { _warned = true; _log($"[policy] {_host}:{_port} unavailable ({e.Message}) — using locked Hold."); }
                 Cleanup();
             }
@@ -167,6 +203,8 @@ namespace FluidStabilizer.Rl
         private void Drop(string why)
         {
             _connected = false;
+            FallbackReason = why;
+            _retryAtSeq = _seq + 200;
             if (!_warned) { _warned = true; _log($"[policy] connection lost ({why}) — using locked Hold."); }
             Cleanup();
         }
@@ -184,6 +222,7 @@ namespace FluidStabilizer.Rl
             if (_connected && _stream != null)
                 try { BridgeIo.WriteFrame(_stream, new[] { OpClose }); } catch { }
             Cleanup();
+            _connected = false;
         }
 
         private static double Clamp1(double v) => v < -1.0 ? -1.0 : (v > 1.0 ? 1.0 : v);

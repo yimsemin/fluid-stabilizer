@@ -67,20 +67,15 @@ namespace FluidStabilizer.Sim
 
         public void StartRecording()
         {
-            var trace = new DriverTrace
-            {
-                Label = "drive-" + DateTime.Now.ToString("yyyyMMdd-HHmmss"),
-                Seed = Runner.Seed,
-                StepSeconds = Runner.Loop?.Config.PhysicsStepSeconds ?? (1.0 / 600.0),
-                FillRatio = Runner.FillRatio,
-                RoadEnabled = Runner.Road,
-                RoadSeverity = Runner.RoadSeverity,
-                SloshModel = Runner.SloshModel == SloshModelChoice.ShallowWater ? "shallow" : "pendulum"
-            };
-
+            var trace = new DriverTrace { Label = "drive-" + DateTime.Now.ToString("yyyyMMdd-HHmmss-fff") + "-" + Guid.NewGuid().ToString("N").Substring(0, 8) };
             _recorder = new RecordingDriver(new HumanDriverInput(), trace);
+            Runner.ReplayTrace = null;
             Runner.DriverOverride = _recorder;
-            Runner.BuildLoop();               // restarts the episode with the recording driver
+            Runner.BuildLoop();
+            // Capture the built loop, after profile application, before its first physics step.
+            trace.CaptureConfig(Runner.Loop.Config, Runner.ActiveSeed,
+                Runner.ActiveSloshModel == SloshModelChoice.ShallowWater ? "shallow" : "pendulum",
+                Runner.ActiveStabilizer.ToString());
             CurrentMode = Mode.Recording;
             _statusNote = "";
 
@@ -123,26 +118,20 @@ namespace FluidStabilizer.Sim
         {
             DriverTrace trace = DriverTrace.LoadFromFile(path);
 
-            // Match the recorded setup so replay reproduces the drive.
-            Runner.Seed = trace.Seed;
-            Runner.FillRatio = trace.FillRatio;
-            Runner.Road = trace.RoadEnabled;
-            Runner.RoadSeverity = (float)trace.RoadSeverity;
-            Runner.SloshModel = trace.SloshModel == "shallow"
-                ? SloshModelChoice.ShallowWater
-                : SloshModelChoice.PendulumRom;
-
             _replayTrace = trace;
-            Runner.DriverOverride = new RecordedTraceDriver(trace);
+            Runner.ReplayTrace = trace;
+            Runner.DriverOverride = null;
             Runner.BuildLoop();
             CurrentMode = Mode.Replaying;
-            _statusNote = "";
+            _statusNote = string.IsNullOrEmpty(trace.Assumptions) ? "" : "Legacy replay: missing settings assumed; see Console";
+            if (_statusNote.Length > 0) Debug.LogWarning("[trace] " + trace.Assumptions);
             Debug.Log($"[trace] ▶ REPLAY '{trace.Label}' ({trace.Count} steps, {trace.DurationSeconds:F1} s) — try 0-3 to switch stabilizer; L to drive again.");
         }
 
         public void BackToLive()
         {
             Runner.DriverOverride = null;
+            Runner.ReplayTrace = null;
             _replayTrace = null;
             Runner.BuildLoop();
             CurrentMode = Mode.Live;

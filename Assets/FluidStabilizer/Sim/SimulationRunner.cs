@@ -59,6 +59,8 @@ namespace FluidStabilizer.Sim
 
         /// <summary>Tooling/test hook: drive with this instead of keyboard/gamepad. Set before BuildLoop.</summary>
         public IDriverInput DriverOverride;
+        public FluidStabilizer.Core.Sim.Drivers.DriverTrace ReplayTrace;
+        public ulong ActiveSeed { get; private set; }
 
         public SimulationLoop Loop { get; private set; }
         public HumanDriverInput Driver { get; private set; }
@@ -84,7 +86,7 @@ namespace FluidStabilizer.Sim
 
             _built = choice == StabilizerChoice.LearnedPolicy
                 ? new RemotePolicyController(PolicyHost, PolicyPort, Mathf.Max(1, PolicyFrameStack),
-                    new SimulationConfig().Gimbal.MaxRateRadPerSec, log: s => Debug.Log(s))
+                    (ReplayTrace?.ToConfig() ?? Loop?.Config ?? new SimulationConfig()).Gimbal.MaxRateRadPerSec, log: s => Debug.Log(s))
                 : MakeController(choice);
             return _built;
         }
@@ -111,10 +113,16 @@ namespace FluidStabilizer.Sim
         {
             // Follow experiment.txt in the actual play scene; leave direct
             // BuildLoop() callers (tooling, tests) on their explicit values.
-            ActiveProfile = (UseExperimentProfile && Application.isPlaying) ? ExperimentProfileStore.Load() : null;
+            ActiveProfile = (ReplayTrace == null && UseExperimentProfile && Application.isPlaying) ? ExperimentProfileStore.Load() : null;
 
             SimulationConfig cfg;
-            if (ActiveProfile != null)
+            if (ReplayTrace != null)
+            {
+                cfg = ReplayTrace.ToConfig();
+                Seed = ReplayTrace.Seed;
+                SloshModel = ReplayTrace.SloshModel == "shallow" ? SloshModelChoice.ShallowWater : SloshModelChoice.PendulumRom;
+            }
+            else if (ActiveProfile != null)
             {
                 cfg = ActiveProfile.ToConfig(0.0);   // 0 = endless
                 ApplyProfile(ActiveProfile);         // sync the read-only Inspector fields
@@ -130,8 +138,9 @@ namespace FluidStabilizer.Sim
 
             Driver = new HumanDriverInput();
             Loop = new SimulationLoop(cfg, BuildController(Stabilizer),
-                DriverOverride ?? Driver, MakeSlosh(SloshModel));
-            Loop.BeginEpisode(Seed);
+                ReplayTrace != null ? new FluidStabilizer.Core.Sim.Drivers.RecordedTraceDriver(ReplayTrace) : DriverOverride ?? Driver, MakeSlosh(SloshModel));
+            ActiveSeed = ReplayTrace?.Seed ?? Seed;
+            Loop.BeginEpisode(ActiveSeed);
             ActiveStabilizer = Stabilizer;
             ActiveSloshModel = SloshModel;
             _accumulator = 0;
@@ -140,7 +149,8 @@ namespace FluidStabilizer.Sim
         public void ResetEpisode()
         {
             Loop.SetController(BuildController(ActiveStabilizer));
-            Loop.BeginEpisode(Seed);
+            ActiveSeed = ReplayTrace?.Seed ?? Seed;
+            Loop.BeginEpisode(ActiveSeed);
             _accumulator = 0;
         }
 

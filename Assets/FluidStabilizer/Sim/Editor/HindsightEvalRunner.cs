@@ -71,6 +71,8 @@ namespace FluidStabilizer.SimEditor
                       $", lockCapable={opts.LockCapable}, override={(opts.ConfigOverride != null ? "yes" : "no")}" +
                       " — this takes a few minutes.");
 
+            string outputDir = RunProvenance.NewPath("Logs/hindsight");
+            Directory.CreateDirectory(outputDir);
             var reports = new List<HindsightDriveReport>();
             foreach (DriverTrace trace in traces)
             {
@@ -83,30 +85,23 @@ namespace FluidStabilizer.SimEditor
                 Debug.Log($"[hindsight] {trace.Label}: {r.Evaluations} evals in {sw.Elapsed.TotalSeconds:F0}s, " +
                           $"best Hold-ceiling = {bestDelta:F2} L");
 
-                WriteTrajectory(r);
+                WriteTrajectory(r, outputDir);
             }
 
             string report = HindsightOptimizer.FormatReport(reports, opts);
             Directory.CreateDirectory("Logs");
-            File.WriteAllText("Logs/hindsight-eval.txt", report);
-            Debug.Log("[hindsight] → Logs/hindsight-eval.txt\n\n" + report);
+            string output = Path.Combine(outputDir, "report.txt");
+            File.WriteAllText(output, report);
+            Debug.Log("[hindsight] → " + output + "\n\n" + report);
         }
 
-        private static void WriteTrajectory(HindsightDriveReport r)
+        private static void WriteTrajectory(HindsightDriveReport r, string outputDir)
         {
-            Directory.CreateDirectory("Logs/hindsight");
-            using (var w = new StreamWriter(Path.Combine("Logs/hindsight", r.Trace + ".traj.csv"), false))
+            using (var w = new StreamWriter(Path.Combine(outputDir, r.Trace + ".traj.csv"), false))
                 HindsightOptimizer.WriteTrajectoryCsv(w, r);
         }
 
-        private static List<DriverTrace> LoadTraces()
-        {
-            if (!Directory.Exists(TraceStore.Dir)) return new List<DriverTrace>();
-            return Directory.GetFiles(TraceStore.Dir, "*" + TraceStore.Extension)
-                .OrderBy(p => p)
-                .Select(DriverTrace.LoadFromFile)
-                .ToList();
-        }
+        private static List<DriverTrace> LoadTraces() => TraceStore.LoadDataset("train");
 
         private static HindsightOptions FromArgsOrDefaults()
         {

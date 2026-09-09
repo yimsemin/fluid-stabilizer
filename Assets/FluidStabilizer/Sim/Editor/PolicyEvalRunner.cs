@@ -42,7 +42,7 @@ namespace FluidStabilizer.SimEditor
             var traces = LoadTraces();
             if (traces.Count == 0)
             {
-                Debug.LogWarning($"[policy-eval] no traces with a Logs/hindsight/*.traj.csv in {TraceStore.Dir}.");
+                Debug.LogWarning($"[policy-eval] no assigned traces in {TraceStore.Dir}.");
                 return;
             }
 
@@ -54,26 +54,19 @@ namespace FluidStabilizer.SimEditor
                 ("Rigid (Hold)", hold),
                 ("Learned policy", policy),
             };
-            var models = new List<(string, Func<ISloshModel>)> { ("pendulum", () => new PendulumSloshModel()) };
+            List<(string, Func<ISloshModel>)> models = null;
 
             List<TraceEvalRow> rows;
             using (var log = new EpisodeLog(EpisodeLog.DefaultPath, $"policy-eval {DateTime.Now:yyyy-MM-dd HH:mm}"))
                 rows = TraceEvaluator.Run(traces, controllers, models, log);
             string report = TraceEvaluator.FormatReport(rows);
             Directory.CreateDirectory("Logs");
-            File.WriteAllText("Logs/policy-eval.txt", report);
-            Debug.Log($"[policy-eval] → Logs/policy-eval.txt  (+ {EpisodeLog.DefaultPath})\n\n" + report);
+            string output = RunProvenance.NewPath("Logs/policy-eval.txt");
+            File.WriteAllText(output, report);
+            Debug.Log($"[policy-eval] → {output}  (+ {EpisodeLog.DefaultPath})\n\n" + report);
         }
 
-        private static List<DriverTrace> LoadTraces()
-        {
-            if (!Directory.Exists(TraceStore.Dir)) return new List<DriverTrace>();
-            return Directory.GetFiles(TraceStore.Dir, "*" + TraceStore.Extension)
-                .OrderBy(p => p)
-                .Select(DriverTrace.LoadFromFile)
-                .Where(t => File.Exists(Path.Combine("Logs/hindsight", t.Label + ".traj.csv")))
-                .ToList();
-        }
+        private static List<DriverTrace> LoadTraces() => TraceStore.LoadDataset();
 
         private static string ArgStr(string[] a, string key, string def)
         {

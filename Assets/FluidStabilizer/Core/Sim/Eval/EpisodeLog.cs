@@ -1,6 +1,8 @@
 using System;
 using System.Globalization;
 using System.IO;
+using FluidStabilizer.Contracts;
+using FluidStabilizer.Core.Sim.Drivers;
 
 namespace FluidStabilizer.Core.Sim.Eval
 {
@@ -20,7 +22,7 @@ namespace FluidStabilizer.Core.Sim.Eval
     /// </summary>
     public sealed class EpisodeLog : IDisposable
     {
-        public const string DefaultPath = "Logs/episodes.csv";
+        public const string DefaultPath = "Logs/episodes-v2.csv";
 
         private static readonly string[] Columns =
         {
@@ -29,6 +31,9 @@ namespace FluidStabilizer.Core.Sim.Eval
             "fillRatio", "tankHeightZ", "roadEnabled", "roadSeverity", "frictionLimit",
             "spillLitres", "worstFreeboardM", "sloshEnergyIntegral",
             "meanEffortRadPerS", "torqueSatFrac", "angleLimitFrac", "physicsSteps",
+            "episodeId", "codeIdentity", "tracePath", "traceSha256", "inputSha256", "split", "manifestSha256", "history",
+            "recordedCode", "recordedController", "assumptions", "effectiveConfig",
+            "requestedController", "policyIdentity", "executionStatus", "policyTicks", "fallbackTicks", "fallbackReason", "policySettings",
         };
 
         private readonly TextWriter _w;
@@ -53,15 +58,22 @@ namespace FluidStabilizer.Core.Sim.Eval
             string dir = Path.GetDirectoryName(path);
             if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
             bool fresh = !File.Exists(path) || new FileInfo(path).Length == 0;
+            if (!fresh)
+            {
+                using var existing = new StreamReader(path);
+                if (existing.ReadLine() != string.Join(",", Columns))
+                    throw new InvalidDataException("Episode log schema differs; choose a new path: " + path);
+            }
             var w = new StreamWriter(path, append: true);
             if (fresh) w.WriteLine(string.Join(",", Columns));
             return w;
         }
 
         /// <summary>Append one episode. <paramref name="cfg"/> supplies the operating-point columns.</summary>
-        public void Add(string source, SimulationConfig cfg, in EpisodeResult r)
+        public void Add(string source, SimulationConfig cfg, in EpisodeResult r, DriverTrace trace = null, IController controller = null)
         {
             var ic = CultureInfo.InvariantCulture;
+            var policy = controller as IPolicyExecutionStatus;
             _w.WriteLine(string.Join(",", new[]
             {
                 DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ", ic),
@@ -84,6 +96,14 @@ namespace FluidStabilizer.Core.Sim.Eval
                 r.TorqueSaturationFraction.ToString("0.#####", ic),
                 r.AngleLimitFraction.ToString("0.#####", ic),
                 r.PhysicsSteps.ToString(ic),
+                Guid.NewGuid().ToString("N"), Sanitize(RunProvenance.CodeIdentity),
+                Sanitize(trace?.SourcePath), trace?.SourceSha256 ?? "", trace?.InputSha256 ?? "",
+                trace?.DatasetSplit ?? "synthetic", trace?.DatasetManifestSha256 ?? "", Sanitize(trace?.DatasetHistory),
+                Sanitize(trace?.RecordedCode), Sanitize(trace?.RecordedController), Sanitize(trace?.Assumptions),
+                cfg == null ? "" : Sanitize(ConfigSnapshot.Encode(cfg)), Sanitize(controller?.GetType().FullName ?? r.ControllerName),
+                Sanitize(policy?.PolicyIdentity), policy?.ExecutionStatus ?? (source == "rl-training" ? "external-training-unverified" : "analytic"),
+                (policy?.PolicyTicks ?? 0).ToString(ic), (policy?.FallbackTicks ?? 0).ToString(ic),
+                Sanitize(policy?.FallbackReason), Sanitize(policy?.PolicySettings),
             }));
         }
 

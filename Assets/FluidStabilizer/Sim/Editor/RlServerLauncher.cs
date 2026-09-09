@@ -31,7 +31,6 @@ namespace FluidStabilizer.SimEditor
 
             // Defaults come from the shared experiment.txt; -rl* flags still override per-run.
             var profile = FluidStabilizer.Sim.ExperimentProfileStore.Load();
-            string profRoad = profile.RoadEnabled ? (profile.RoadSeverity >= 1.2 ? "rough" : "mild") : "none";
 
             int port = ArgInt(args, "-rlPort", 5555);
             double fill = ArgDouble(args, "-rlFill", profile.FillRatio);
@@ -41,7 +40,7 @@ namespace FluidStabilizer.SimEditor
             string slosh = ArgStr(args, "-rlSlosh", profile.SloshModel);
             double briskness = ArgDouble(args, "-rlBriskness", profile.DriverIntensity);
             double aggression = ArgDouble(args, "-rlAggression", profile.DriverIntensity);
-            string road = ArgStr(args, "-rlRoad", profRoad);
+            string road = ArgStr(args, "-rlRoad", null);
 
             // Residual mode: the policy learns a correction on top of a baseline
             // (docs/experiment-plan.md step 4 — the F1/F4-cliff fix).
@@ -55,41 +54,28 @@ namespace FluidStabilizer.SimEditor
 
             // Train on the owner's recorded drives instead of a synthetic driver
             // (project-goals ③). -rlTrace all | <substring>. Traces must share a
-            // setup (fill/road) — the first match's config is used.
+            // setup per episode, including recorded seed and full duration.
             string traceSel = ArgStr(args, "-rlTrace", null);
             List<DriverTrace> traces = LoadTraces(traceSel);
 
             RlEnvironment MakeEnv()
             {
-                SimulationConfig cfg;
-                if (traces.Count > 0)
+                // Trace episodes resolve config/model/seed/duration together at Reset.
+                // Synthetic flags are rejected for trace replay instead of silently ignored.
+                if (traces.Count > 0 && new[] { "-rlFill", "-rlSeconds", "-rlSlosh", "-rlRoad", "-rlDriver", "-rlBriskness", "-rlAggression" }.Any(k => args.Contains(k)))
+                    throw new ArgumentException("Trace replay cannot be combined with synthetic environment overrides.");
+                SimulationConfig cfg = profile.ToConfig(seconds);
+                cfg.Slosh.FillRatio = fill;
+                if (road == "none") cfg.Road.Enabled = false;
+                else if (road == "mild") { cfg.Road.Enabled = true; cfg.Road.Severity = 0.6; }
+                else if (road == "rough") { cfg.Road.Enabled = true; cfg.Road.Severity = 1.4; }
+                else if (road != null) throw new ArgumentException("Unknown -rlRoad: " + road);
+                Func<ulong, IDriverInput> drv = driver switch
                 {
-                    cfg = traces[0].ToConfig();
-                    cfg.EpisodeSeconds = traces.Min(t => t.DurationSeconds); // no frozen tail on the shorter drives
-                }
-                else
-                {
-                    cfg = profile.ToConfig(seconds);   // fill / road / curve / hills / grip from experiment.txt
-                    cfg.Slosh.FillRatio = fill;        // -rlFill still overrides
-                    if (road == "mild") { cfg.Road.Enabled = true; cfg.Road.Severity = 0.6; }
-                    else if (road == "rough") { cfg.Road.Enabled = true; cfg.Road.Severity = 1.4; cfg.Road.EventsPerKm = 18.0; }
-                }
-
-                Func<ulong, IDriverInput> drv;
-                if (traces.Count > 0)
-                {
-                    var picked = traces;
-                    drv = s => new RecordedTraceDriver(picked[(int)(s % (ulong)picked.Count)]);
-                }
-                else
-                {
-                    switch (driver)
-                    {
-                        case "aggressive": drv = s => new RandomManeuverDriver(s, aggression); break;
-                        case "scripted": drv = _ => new ScriptedManeuverDriver(); break;
-                        default: drv = s => new HighwayDriver(s, briskness); break;
-                    }
-                }
+                    "aggressive" => s => new RandomManeuverDriver(s, aggression),
+                    "scripted" => _ => new ScriptedManeuverDriver(),
+                    _ => s => new HighwayDriver(s, briskness),
+                };
                 Func<ISloshModel> sl = slosh == "shallow"
                     ? () => new ShallowWaterSloshModel()
                     : (Func<ISloshModel>)(() => new PendulumSloshModel());
@@ -105,9 +91,28 @@ namespace FluidStabilizer.SimEditor
                     ? double.NaN
                     : residualFrac * cfg.Gimbal.MaxRateRadPerSec;
 
-                return new RlEnvironment(cfg, drv, sl, RewardWeights.Default(), stack,
+                var env = new RlEnvironment(cfg, drv, sl, RewardWeights.Default(), stack,
                     baselineFactory: baseFactory, residualRateScaleRadPerSec: residualScale,
-                    lockCapable: lockCapable);
+                    lockCapable: lockCapable,
+                    traceSelector: traces.Count == 0 ? null : (Func<ulong, DriverTrace>)(s => traces[(int)(s % (ulong)traces.Count)]));
+                env.EpisodeStarted = e =>
+                {
+                    string path = FluidStabilizer.Core.Sim.Eval.RunProvenance.NewPath("Logs/rl-episode.txt");
+                    string evidence = e.ActiveTrace != null
+                        ? FluidStabilizer.Core.Sim.Eval.RunProvenance.Describe(e.ActiveTrace, e.EffectiveConfig, e.ActiveTrace.SloshModel)
+                        : "code=" + FluidStabilizer.Core.Sim.Eval.RunProvenance.CodeIdentity + "\neffectiveConfig=" + ConfigSnapshot.Encode(e.EffectiveConfig);
+                    System.IO.File.WriteAllText(path, evidence + "\neffectiveSeed=" + e.EffectiveSeed
+                        + "\npolicy=external-training-actions (checkpoint identity unavailable)"
+                        + "\nactor=" + e.ActorName + "\nstack=" + stack + "\nresidualFraction=" + residualFrac
+                        + "\nlockCapable=" + lockCapable);
+                };
+                env.EpisodeFinished = e =>
+                {
+                    using var log = new FluidStabilizer.Core.Sim.Eval.EpisodeLog(
+                        FluidStabilizer.Core.Sim.Eval.EpisodeLog.DefaultPath, "rl-training");
+                    log.Add("rl-training", e.EffectiveConfig, e.Summary(), e.ActiveTrace);
+                };
+                return env;
             }
 
             string driverDesc = traces.Count > 0 ? $"traces({traces.Count})" : driver;
@@ -117,36 +122,13 @@ namespace FluidStabilizer.SimEditor
             new TrainingServer(MakeEnv).Serve(port);
         }
 
-        // -rlTrace all      → every trace that has a Logs/hindsight/<label>.traj.csv
-        //                     (i.e. exactly the behaviour-cloning set — keeps C1 and C3 consistent)
-        // -rlTrace <substr> → traces whose filename contains <substr>
+        // Membership is fixed by datasets.tsv; selector only narrows the train split.
         private static List<DriverTrace> LoadTraces(string selector)
         {
             if (string.IsNullOrEmpty(selector)) return new List<DriverTrace>();
-            string dir = FluidStabilizer.Sim.TraceStore.Dir;
-            if (!System.IO.Directory.Exists(dir)) return new List<DriverTrace>();
-
-            IEnumerable<string> files = System.IO.Directory
-                .GetFiles(dir, "*" + FluidStabilizer.Sim.TraceStore.Extension)
-                .OrderBy(p => p);
-            if (selector != "all")
-                files = files.Where(p => System.IO.Path.GetFileName(p).Contains(selector));
-
-            var traces = files.Select(DriverTrace.LoadFromFile).ToList();
-
-            if (selector == "all")
-                traces = traces.Where(t =>
-                    System.IO.File.Exists(System.IO.Path.Combine("Logs/hindsight", t.Label + ".traj.csv"))).ToList();
-
-            if (traces.Count > 1)
-            {
-                DriverTrace a = traces[0];
-                var odd = traces.Where(t =>
-                    System.Math.Abs(t.FillRatio - a.FillRatio) > 1e-6 || t.RoadEnabled != a.RoadEnabled).ToList();
-                if (odd.Count > 0)
-                    Debug.LogWarning($"[rl] -rlTrace: {odd.Count} trace(s) have a different fill/road than "
-                                     + $"'{a.Label}' — the whole batch runs under {a.Label}'s config.");
-            }
+            var traces = FluidStabilizer.Sim.TraceStore.LoadDataset("train");
+            if (selector != "all") traces = traces.Where(t => System.IO.Path.GetFileName(t.SourcePath).Contains(selector)).ToList();
+            if (traces.Count == 0) throw new ArgumentException("No assigned training traces match: " + selector);
             return traces;
         }
 

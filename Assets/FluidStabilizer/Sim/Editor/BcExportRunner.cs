@@ -32,12 +32,12 @@ namespace FluidStabilizer.SimEditor
         {
             string[] a = Environment.GetCommandLineArgs();
             int stack = ArgInt(a, "-bcStack", 6);
-            string sloshName = ArgStr(a, "-bcSlosh", "pendulum");
+            string sloshName = ArgStr(a, "-bcSlosh", null);
             Func<FluidStabilizer.Contracts.ISloshModel> slosh = sloshName == "shallow"
                 ? () => new ShallowWaterSloshModel()
                 : (Func<FluidStabilizer.Contracts.ISloshModel>)(() => new PendulumSloshModel());
 
-            const string trajDir = "Logs/hindsight";
+            string trajDir = ArgStr(a, "-bcTrajDir", "Logs/hindsight");
             if (!Directory.Exists(trajDir))
             {
                 Debug.LogWarning($"[bc] no {trajDir} — run FluidStabilizer ▸ Feasibility Ceiling (Hindsight) first.");
@@ -51,20 +51,37 @@ namespace FluidStabilizer.SimEditor
 
             var all = new List<BcDatasetExporter.Sample>();
             var used = new List<string>();
+            var evidence = new System.Text.StringBuilder();
             double scale = 0;
             int obsSize = 0;
 
-            foreach (string tracePath in Directory.GetFiles(TraceStore.Dir, "*" + TraceStore.Extension).OrderBy(p => p))
+            foreach (DriverTrace trace in TraceStore.LoadDataset("train"))
             {
-                DriverTrace trace = DriverTrace.LoadFromFile(tracePath);
                 string trajPath = Path.Combine(trajDir, trace.Label + ".traj.csv");
-                if (!File.Exists(trajPath)) continue;
+                if (!File.Exists(trajPath)) throw new FileNotFoundException("Missing trajectory for assigned training drive", trajPath);
 
+                var headers = File.ReadLines(trajPath).Where(l => l.StartsWith("# ") && l.Contains(":"))
+                    .Select(l => l.Substring(2).Split(new[] { ':' }, 2)).ToDictionary(v => v[0].Trim(), v => v[1].Trim());
+                string model = sloshName ?? trace.SloshModel;
+                if (headers.TryGetValue("configSha256", out string configHash))
+                {
+                    if (configHash != FluidStabilizer.Core.Sim.ConfigSnapshot.Hash(FluidStabilizer.Core.Sim.ConfigSnapshot.Encode(trace.ToConfig()))
+                        || !headers.TryGetValue("inputSha256", out string inputHash) || inputHash != trace.InputSha256
+                        || !headers.TryGetValue("optimizeModel", out string optimizeModel) || optimizeModel != model)
+                        throw new InvalidDataException("Trajectory config/input/model mismatch: " + trajPath);
+                    if (headers.TryGetValue("lockCapable", out string locked) && locked != "False")
+                        throw new InvalidDataException("BC absolute-rate export does not reproduce lock-capable trajectories: " + trajPath);
+                }
+                else if (ArgInt(a, "-bcAllowLegacyTrajectory", 0) != 1)
+                    throw new InvalidDataException("Legacy trajectory settings unknown; explicitly pass -bcAllowLegacyTrajectory 1 for exploratory use only.");
+                evidence.AppendLine(FluidStabilizer.Core.Sim.Eval.RunProvenance.Describe(trace, trace.ToConfig(), model));
+                evidence.AppendLine("trajectory=" + trajPath + ";sha256=" + FluidStabilizer.Core.Sim.ConfigSnapshot.FileHash(trajPath)
+                    + ";legacy-assumption=" + !headers.ContainsKey("configSha256"));
                 List<BcDatasetExporter.TrajRow> traj;
                 using (var r = new StreamReader(trajPath)) traj = BcDatasetExporter.LoadTrajectory(r);
                 if (traj.Count == 0) continue;
 
-                var samples = BcDatasetExporter.FromDrive(trace, traj, slosh, stack);
+                var samples = BcDatasetExporter.FromDrive(trace, traj, sloshName == null ? trace.MakeSloshModel : slosh, stack);
                 if (samples.Count == 0) continue;
 
                 all.AddRange(samples);
@@ -81,10 +98,12 @@ namespace FluidStabilizer.SimEditor
             }
 
             Directory.CreateDirectory("Logs/bc");
-            using (var w = new StreamWriter("Logs/bc/dataset.csv", false))
+            string output = FluidStabilizer.Core.Sim.Eval.RunProvenance.NewPath("Logs/bc/dataset.csv");
+            using (var w = new StreamWriter(output, false))
                 BcDatasetExporter.Write(w, all, obsSize, stack, scale, used);
 
-            Debug.Log($"[bc] {all.Count} rows from {used.Count} drive(s) → Logs/bc/dataset.csv");
+            File.WriteAllText(output + ".metadata.txt", evidence.ToString() + "\nstack=" + stack);
+            Debug.Log($"[bc] {all.Count} rows from {used.Count} drive(s) → {output}");
         }
 
         private static string ArgStr(string[] a, string key, string def)

@@ -155,19 +155,12 @@ namespace FluidStabilizer.SimEditor
 
             sb.Insert(0, string.Join("\n", summary) + "\n\n\n");
             Directory.CreateDirectory("Logs");
-            File.WriteAllText("Logs/sweep-2c.txt", sb.ToString());
-            Debug.Log("[sweep] → Logs/sweep-2c.txt\n\n" + string.Join("\n", summary));
+            string output = RunProvenance.NewPath("Logs/sweep-2c.txt");
+            File.WriteAllText(output, sb.ToString());
+            Debug.Log($"[sweep] → {output}\n\n" + string.Join("\n", summary));
         }
 
-        private static List<DriverTrace> LoadCeilingTraces()
-        {
-            if (!Directory.Exists(TraceStore.Dir)) return new List<DriverTrace>();
-            return Directory.GetFiles(TraceStore.Dir, "*" + TraceStore.Extension)
-                .OrderBy(p => p)
-                .Select(DriverTrace.LoadFromFile)
-                .Where(t => File.Exists(Path.Combine("Logs/hindsight", t.Label + ".traj.csv")))
-                .ToList();
-        }
+        private static List<DriverTrace> LoadCeilingTraces() => TraceStore.LoadDataset("train");
 
         private static string Trim(string s, int n) => s.Length <= n ? s : s.Substring(0, n);
 

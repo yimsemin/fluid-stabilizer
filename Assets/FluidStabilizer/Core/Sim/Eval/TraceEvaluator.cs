@@ -1,5 +1,4 @@
 using System;
-using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -12,6 +11,9 @@ namespace FluidStabilizer.Core.Sim.Eval
     public struct TraceEvalRow
     {
         public string Trace;
+        public string Evidence;
+        public string ExecutionStatus;
+        public bool ValidComparison => ExecutionStatus == "analytic" || ExecutionStatus == "policy-ok";
         public string Controller;
         public string SloshModel;
         public double DurationSeconds;
@@ -44,10 +46,11 @@ namespace FluidStabilizer.Core.Sim.Eval
             IReadOnlyList<(string name, Func<ISloshModel> make)> sloshModels,
             EpisodeLog log = null)
         {
+            TraceDataset.ValidateUnique(traces);
             var rows = new List<TraceEvalRow>();
 
             foreach (var trace in traces)
-            foreach (var (sloshName, makeSlosh) in sloshModels)
+            foreach (var (sloshName, makeSlosh) in sloshModels ?? new[] { (trace.SloshModel, (Func<ISloshModel>)trace.MakeSloshModel) })
             foreach (var (ctrlName, makeCtrl) in controllers)
             {
                 IController ctrl = makeCtrl();
@@ -55,12 +58,13 @@ namespace FluidStabilizer.Core.Sim.Eval
                 var loop = new SimulationLoop(
                     cfg, ctrl, new RecordedTraceDriver(trace), makeSlosh());
                 EpisodeResult r = loop.RunEpisode(trace.Seed);
-                if (ctrl is IDisposable d) d.Dispose();
-                log?.Add("trace-eval", cfg, r);
+                log?.Add("trace-eval", cfg, r, trace, ctrl);
 
                 rows.Add(new TraceEvalRow
                 {
                     Trace = trace.Label,
+                    Evidence = RunProvenance.Describe(trace, cfg, sloshName, ctrl),
+                    ExecutionStatus = (ctrl as IPolicyExecutionStatus)?.ExecutionStatus ?? "analytic",
                     Controller = ctrlName,
                     SloshModel = sloshName,
                     DurationSeconds = r.DurationSeconds,
@@ -70,6 +74,7 @@ namespace FluidStabilizer.Core.Sim.Eval
                     MeanEffort = r.MeanAbsActionRate,
                     TorqueSatFraction = r.TorqueSaturationFraction,
                 });
+                if (ctrl is IDisposable d) d.Dispose();
             }
 
             return rows;
@@ -84,6 +89,7 @@ namespace FluidStabilizer.Core.Sim.Eval
 
             foreach (var byTrace in rows.GroupBy(r => r.Trace))
             {
+                foreach (var row in byTrace) sb.AppendLine(row.Evidence);
                 double dur = byTrace.First().DurationSeconds;
                 sb.AppendLine($"### {byTrace.Key}   ({dur:F1} s)");
 
@@ -95,14 +101,15 @@ namespace FluidStabilizer.Core.Sim.Eval
                     foreach (var r in byModel.OrderBy(r => r.SpillLitres))
                         sb.AppendLine(string.Format(
                             "  {0,-28}  {1,8:F3}  {2,10:F4}  {3,8:F2}  {4,7:F3}  {5,8:P0}",
-                            Trim(r.Controller, 28), r.SpillLitres, r.WorstFreeboard,
+                            Trim(r.Controller, 28) + " [" + r.ExecutionStatus + "]", r.SpillLitres, r.WorstFreeboard,
                             r.SloshEnergyIntegral, r.MeanEffort, r.TorqueSatFraction));
                     sb.AppendLine();
                 }
             }
 
             // A compact "did the stabilizer beat rigid?" summary, pendulum model.
-            var pend = rows.Where(r => r.SloshModel == "pendulum").ToList();
+            sb.AppendLine("AI comparison excludes hold-fallback, mixed-policy-and-hold, policy-unverified and not-executed rows.");
+            var pend = rows.Where(r => r.SloshModel == "pendulum" && r.ValidComparison).ToList();
             if (pend.Count > 0)
             {
                 var ctrls = pend.Select(r => r.Controller).Distinct().ToList(); // first-seen order
@@ -114,7 +121,7 @@ namespace FluidStabilizer.Core.Sim.Eval
                     var lookup = byTrace.ToDictionary(r => r.Controller, r => r.SpillLitres);
                     sb.AppendLine("  " + string.Format("{0,-24}", Trim(byTrace.Key, 24)) + "  " +
                         string.Join("  ", ctrls.Select(c =>
-                            string.Format("{0,12:F2}", lookup.TryGetValue(c, out var v) ? v : 0.0))));
+                            lookup.TryGetValue(c, out var v) ? string.Format("{0,12:F2}", v) : "    excluded")));
                 }
                 sb.AppendLine();
             }

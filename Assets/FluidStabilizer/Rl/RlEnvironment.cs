@@ -1,3 +1,4 @@
+using FluidStabilizer.Core.Sim.Drivers;
 using System;
 using FluidStabilizer.Contracts;
 using FluidStabilizer.Core.Sim;
@@ -28,13 +29,23 @@ namespace FluidStabilizer.Rl
     /// </summary>
     public sealed class RlEnvironment
     {
-        private readonly SimulationConfig _cfg;
+        private SimulationConfig _cfg;
         private readonly Func<ulong, IDriverInput> _driverFactory;
         private readonly Func<ISloshModel> _sloshFactory;
         private readonly ObservationEncoder _encoder;
         private readonly RewardFunction _reward;
-        private readonly ResidualActionController _actor;
-        private readonly int _controlDecimation;
+        private ResidualActionController _actor;
+        private readonly Func<ulong, DriverTrace> _traceSelector;
+        private readonly Func<IController> _baselineFactory;
+        private readonly double _scaleFraction;
+        private readonly bool _lockCapable;
+        public DriverTrace ActiveTrace { get; private set; }
+        public SimulationConfig EffectiveConfig => _cfg;
+        public ulong EffectiveSeed { get; private set; }
+        public Action<RlEnvironment> EpisodeStarted;
+        public Action<RlEnvironment> EpisodeFinished;
+        private bool _reported;
+        private int _controlDecimation;
 
         private SimulationLoop _loop;
         private double _lastActionPitch, _lastActionRoll;
@@ -68,8 +79,12 @@ namespace FluidStabilizer.Rl
             double actionRateScaleRadPerSec = double.NaN,
             Func<IController> baselineFactory = null,
             double residualRateScaleRadPerSec = double.NaN,
-            bool lockCapable = false)
+            bool lockCapable = false,
+            Func<ulong, DriverTrace> traceSelector = null)
         {
+            _traceSelector = traceSelector;
+            _baselineFactory = baselineFactory;
+            _lockCapable = lockCapable;
             cfg.Validate();
             _cfg = cfg;
             _driverFactory = driverFactory ?? throw new ArgumentNullException(nameof(driverFactory));
@@ -83,6 +98,7 @@ namespace FluidStabilizer.Rl
                 ? (double.IsNaN(actionRateScaleRadPerSec) ? maxRate : actionRateScaleRadPerSec)
                 : (double.IsNaN(residualRateScaleRadPerSec) ? 0.35 * maxRate : residualRateScaleRadPerSec);
 
+            _scaleFraction = scale / maxRate;
             LockGate gate = lockCapable ? new LockGate(cfg.Gimbal) : LockGate.Disabled;
             _actor = new ResidualActionController(scale, maxRate, baseline, gate);
             _controlDecimation = cfg.ControlDecimation;
@@ -101,11 +117,25 @@ namespace FluidStabilizer.Rl
 
         public float[] Reset(ulong seed)
         {
-            _loop = new SimulationLoop(_cfg, _actor, _driverFactory(seed), _sloshFactory());
+            ActiveTrace = _traceSelector?.Invoke(seed);
+            EffectiveSeed = ActiveTrace?.Seed ?? seed;
+            if (ActiveTrace != null)
+            {
+                _cfg = ActiveTrace.ToConfig();
+                _controlDecimation = _cfg.ControlDecimation;
+                _actor = new ResidualActionController(_scaleFraction * _cfg.Gimbal.MaxRateRadPerSec,
+                    _cfg.Gimbal.MaxRateRadPerSec, _baselineFactory?.Invoke(),
+                    _lockCapable ? new LockGate(_cfg.Gimbal) : LockGate.Disabled);
+            }
+            _loop = new SimulationLoop(_cfg, _actor,
+                ActiveTrace != null ? new RecordedTraceDriver(ActiveTrace) : _driverFactory(seed),
+                ActiveTrace != null ? ActiveTrace.MakeSloshModel() : _sloshFactory());
             _actor.Reset();
             _encoder.Reset();
             _reward.Reset();
-            _loop.BeginEpisode(seed);
+            _loop.BeginEpisode(EffectiveSeed);
+            _reported = false;
+            EpisodeStarted?.Invoke(this);
 
             _lastActionPitch = _lastActionRoll = 0.0;
             _lastCumulativeOverflow = 0.0;
@@ -156,6 +186,11 @@ namespace FluidStabilizer.Rl
             _lastActionPitch = ap;
             _lastActionRoll = ar;
 
+            if (!_reported && (terminated || _loop.EpisodeComplete))
+            {
+                _reported = true;
+                EpisodeFinished?.Invoke(this);
+            }
             return new RlStepResult
             {
                 Observation = obs,
