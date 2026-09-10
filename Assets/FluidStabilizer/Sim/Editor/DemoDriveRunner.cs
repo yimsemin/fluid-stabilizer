@@ -96,6 +96,18 @@ namespace FluidStabilizer.SimEditor
                     LoadTraj(trajPath))),
             };
 
+            // ③ only when a policy server is actually up — an absent server would
+            // otherwise be scored as a "learned policy" that is really Hold
+            // (docs/reproducibility.md, policy execution status).
+            if (ArgInt(Environment.GetCommandLineArgs(), "-demoPolicy", 0) != 0)
+            {
+                int policyPort = ArgInt(Environment.GetCommandLineArgs(), "-demoPolicyPort", 5601);
+                int stack = ArgInt(Environment.GetCommandLineArgs(), "-demoPolicyStack", 6);
+                controllers.Add(("③ Learned policy", c => new FluidStabilizer.Rl.RemotePolicyController(
+                    "127.0.0.1", policyPort, stack, c.Gimbal.MaxRateRadPerSec,
+                    log: m => Debug.Log(m), gimbal: c.Gimbal)));
+            }
+
             List<TraceEvalRow> rows;
             using (var log = new EpisodeLog(EpisodeLog.DefaultPath, $"demo-drive {DateTime.Now:yyyy-MM-dd HH:mm}"))
                 rows = TraceEvaluator.Run(new[] { trace }, controllers, TraceEvaluator.BothSloshModels(), log);
@@ -106,6 +118,12 @@ namespace FluidStabilizer.SimEditor
             File.WriteAllText(output, report);
 
             Debug.Log($"[demo-drive] → {path}\n[demo-drive] baselines → {output}\n\n" + report);
+        }
+
+        private static int ArgInt(string[] a, string key, int def)
+        {
+            int i = Array.IndexOf(a, key);
+            return i >= 0 && i + 1 < a.Length && int.TryParse(a[i + 1], out int v) ? v : def;
         }
 
         private static List<(double, double, double)> LoadTraj(string path)

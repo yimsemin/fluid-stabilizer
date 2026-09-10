@@ -74,6 +74,12 @@ namespace FluidStabilizer.SimEditor
                 {
                     "aggressive" => s => new RandomManeuverDriver(s, aggression),
                     "scripted" => _ => new ScriptedManeuverDriver(),
+                    // The F8 operating point: a sustained corner, the one condition
+                    // where the ceiling beats the rigid tank under both slosh models.
+                    // Steer varies with the seed exactly as in DrivingPremiseSweepRunner
+                    // so episodes are not all the same sample.
+                    "steady" => s => new ConstantDriver(new DriverControls
+                        { Throttle = 0.35, Brake = 0.0, Steer = 0.45 + 0.10 * (s % 4) }),
                     _ => s => new HighwayDriver(s, briskness),
                 };
                 Func<ISloshModel> sl = slosh == "shallow"

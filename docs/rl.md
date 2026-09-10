@@ -86,7 +86,7 @@ python serve_policy.py --checkpoint runs/bc-run/actor.pt --port 5601
 같은 서버 프로세스 상대로 `train_ppo.py` 를 재실행 가능. `-rl*` 시나리오
 플래그를 바꿀 때만 서버 재시작.
 
-**런처 플래그:** `-rlPort -rlFill -rlSeconds -rlStack -rlDriver {highway|aggressive|scripted}
+**런처 플래그:** `-rlPort -rlFill -rlSeconds -rlStack -rlDriver {highway|aggressive|scripted|steady}
 -rlSlosh {pendulum|shallow} -rlRoad {none|mild|rough} -rlBriskness -rlAggression`.
 `-rlPort/-rlStack` 빼고 전부 이제 **`experiment.txt` 를 기본값으로** 하고,
 플래그가 실행별로 override.

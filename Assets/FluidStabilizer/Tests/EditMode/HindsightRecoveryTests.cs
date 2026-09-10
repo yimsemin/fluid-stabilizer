@@ -5,6 +5,7 @@ using FluidStabilizer.Core.Sim;
 using FluidStabilizer.Core.Sim.Drivers;
 using FluidStabilizer.Core.Sim.Eval;
 using FluidStabilizer.Core.Sim.SloshModels;
+using FluidStabilizer.Rl;
 
 namespace FluidStabilizer.Tests
 {
@@ -206,6 +207,47 @@ namespace FluidStabilizer.Tests
                     $"Hold {row.HoldSpillLitres:F2} L by the practical margin");
                 Assert.Greater(gain / row.HoldSpillLitres, 0.25,
                     $"{row.SloshModel}: ceiling gain fell below the 25% bar");
+            }
+        }
+
+        // Maps the cliff: amplitude, and whether frequency matters at all.
+        [Test, Explicit("diagnostic — does a wobbling residual break the lock floor?")]
+        public void PrintResidualFloor_VsActionWobble()
+        {
+            var t = SteadyTurn(0.62, 25.0, 0.45, 9000UL);
+            SimulationConfig cfg = t.ToConfig();
+            TestContext.WriteLine($"rigid (mechanically locked) = {HoldSpill(t):F3} L");
+
+            foreach (double hz in new[] { 0.0, 0.2, 1.0, 5.0, 20.0 })
+            foreach (double amp in new[] { 0.05, 0.3, 1.0 })
+            {
+                var composer = new ActionComposer(
+                    0.08 * cfg.Gimbal.MaxRateRadPerSec, cfg.Gimbal.MaxRateRadPerSec,
+                    new HoldControllerLocal(), new LockGate(cfg.Gimbal));
+                var driver = new RecordedTraceDriver(t);
+                var loop = new SimulationLoop(cfg, new WobblingResidual(composer, amp, hz),
+                    driver, new PendulumSloshModel());
+                var r = loop.RunEpisode(t.Seed);
+                TestContext.WriteLine(
+                    $"  {hz,5:F1} Hz  amp={amp,4:F2} → spill {r.TotalOverflowVolume * 1000.0,8:F3} L  " +
+                    $"effort {r.MeanAbsActionRate:F3}  torqueSat {r.TorqueSaturationFraction:P0}");
+            }
+        }
+
+        /// <summary>Feeds a sinusoidal residual into a composer, standing in for a
+        /// policy whose output is not constant.</summary>
+        private sealed class WobblingResidual : IController
+        {
+            private readonly ActionComposer _c;
+            private readonly double _amp, _hz;
+            public WobblingResidual(ActionComposer c, double amp, double hz) { _c = c; _amp = amp; _hz = hz; }
+            public string Name => "wobble";
+            public void Reset() => _c.Reset();
+            public StabilizerCommand ComputeCommand(in SensorBundle s)
+            {
+                double a = _hz <= 0 ? _amp : _amp * Math.Sin(2.0 * Math.PI * _hz * s.StampSeconds);
+                _c.SetAction(a, a);
+                return _c.ComputeCommand(s);
             }
         }
 
