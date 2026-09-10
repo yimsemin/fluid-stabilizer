@@ -39,6 +39,7 @@ namespace FluidStabilizer.Rl
         private readonly Func<IController> _baselineFactory;
         private readonly double _scaleFraction;
         private readonly bool _lockCapable;
+        private readonly string _lockMode;
         public DriverTrace ActiveTrace { get; private set; }
         public SimulationConfig EffectiveConfig => _cfg;
         public ulong EffectiveSeed { get; private set; }
@@ -81,11 +82,13 @@ namespace FluidStabilizer.Rl
             double residualRateScaleRadPerSec = double.NaN,
             bool lockCapable = false,
             Func<ulong, DriverTrace> traceSelector = null,
-            string baselineId = null)
+            string baselineId = null,
+            string lockMode = "deadband")
         {
             _traceSelector = traceSelector;
             _baselineFactory = baselineFactory;
             _lockCapable = lockCapable;
+            _lockMode = lockMode;
             cfg.Validate();
             _cfg = cfg;
             _driverFactory = driverFactory ?? throw new ArgumentNullException(nameof(driverFactory));
@@ -113,10 +116,11 @@ namespace FluidStabilizer.Rl
                 ActionScaleRadPerSec = scale,
                 MaxRateRadPerSec = maxRate,
                 LockCapable = lockCapable,
+                LockMode = lockCapable ? lockMode : "none",
                 FrameStack = Math.Max(1, frameStackLength),
                 ObsVersion = PolicyContract.CurrentObsVersion,
             };
-            _actor = new ActionComposer(scale, maxRate, baseline, gate);
+            _actor = new ActionComposer(scale, maxRate, baseline, gate, Contract.IsExplicitLock);
             _controlDecimation = cfg.ControlDecimation;
         }
 
@@ -128,7 +132,7 @@ namespace FluidStabilizer.Rl
 
         public int ObservationSize => _encoder.StackedSize;
         public int PrivilegedObservationSize => PrivilegedEncoder.Size;
-        public int ActionSize => 2;
+        public int ActionSize => Contract.ActionSize;
 
         /// <summary>
         /// What this environment means by an action. A checkpoint trained here must
@@ -154,7 +158,8 @@ namespace FluidStabilizer.Rl
                 _controlDecimation = _cfg.ControlDecimation;
                 _actor = new ActionComposer(_scaleFraction * _cfg.Gimbal.MaxRateRadPerSec,
                     _cfg.Gimbal.MaxRateRadPerSec, _baselineFactory?.Invoke(),
-                    _lockCapable ? new LockGate(_cfg.Gimbal) : LockGate.Disabled);
+                    _lockCapable ? new LockGate(_cfg.Gimbal) : LockGate.Disabled,
+                    Contract.IsExplicitLock);
             }
             _loop = new SimulationLoop(_cfg, _actor,
                 ActiveTrace != null ? new RecordedTraceDriver(ActiveTrace) : _driverFactory(seed),
@@ -170,16 +175,23 @@ namespace FluidStabilizer.Rl
             _lastCumulativeOverflow = 0.0;
 
             // The bundle primed at t = 0; no control tick has run yet.
-            return _encoder.Observe(_loop.LatestSensorBundle, 0.0, 0.0);
+            return _encoder.Observe(_loop.LatestSensorBundle, 0.0, 0.0, _actor.IsLocked);
         }
 
-        public RlStepResult Step(float actionPitch, float actionRoll)
+        public RlStepResult Step(float actionPitch, float actionRoll) => Step(actionPitch, actionRoll, 0f);
+
+        /// <param name="actionLock">
+        /// Explicit-lock contracts only (findings F9): &gt; 0 requests the mechanical
+        /// lock for this control tick. Ignored under a dead-band contract.</param>
+        public RlStepResult Step(float actionPitch, float actionRoll, float actionLock)
         {
             if (_loop == null) throw new InvalidOperationException("Reset() before Step().");
 
             double ap = Clamp1(actionPitch);
             double ar = Clamp1(actionRoll);
-            _actor.SetAction(ap, ar);
+            double al = Clamp1(actionLock);
+            bool lockedBefore = _actor.IsLocked;
+            _actor.SetAction(ap, ar, al);
 
             double minFreeboard = double.PositiveInfinity;
             for (int i = 0; i < _controlDecimation && _loop.StepPhysics(); i++)
@@ -201,7 +213,11 @@ namespace FluidStabilizer.Rl
                 OverflowVolumeThisStep = overflowThisStep,
                 MinFreeboard = minFreeboard,
                 SloshKineticEnergy = slosh.SloshKineticEnergy,
-                ActionRateL1 = Math.Abs(ap - _lastActionPitch) + Math.Abs(ar - _lastActionRoll),
+                // A lock/unlock toggle costs the same as a full-scale action change:
+                // engaging and releasing the mechanism is a real physical event, not
+                // a free switch, so the policy should not chatter it.
+                ActionRateL1 = Math.Abs(ap - _lastActionPitch) + Math.Abs(ar - _lastActionRoll)
+                               + (_actor.IsLocked != lockedBefore ? 1.0 : 0.0),
                 NormalizedTorqueEffort = (Math.Abs(g.Pitch.AppliedTorque) + Math.Abs(g.Roll.AppliedTorque)) / peakTorque,
                 PitchAngleFraction = Math.Abs(g.Pitch.Angle) / maxAngle,
                 RollAngleFraction = Math.Abs(g.Roll.Angle) / maxAngle,
@@ -217,7 +233,7 @@ namespace FluidStabilizer.Rl
             // action with the state one control tick older than deployment did, so a
             // policy trained on it saw a differently-aligned observation than the one
             // it is served (docs/rl.md "행동 계약").
-            float[] obs = _encoder.Observe(_loop.LatestSensorBundle, ap, ar);
+            float[] obs = _encoder.Observe(_loop.LatestSensorBundle, ap, ar, _actor.IsLocked);
             _lastActionPitch = ap;
             _lastActionRoll = ar;
 

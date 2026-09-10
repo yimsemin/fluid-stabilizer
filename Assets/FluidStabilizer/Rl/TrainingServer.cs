@@ -105,7 +105,9 @@ namespace FluidStabilizer.Rl
                     {
                         float a0 = GetF32(req, 1);
                         float a1 = GetF32(req, 5);
-                        RlStepResult r = env.Step(a0, a1);
+                        // Explicit-lock contracts send a third action (findings F9).
+                        float a2 = env.ActionSize > 2 ? GetF32(req, 9) : 0f;
+                        RlStepResult r = env.Step(a0, a1, a2);
                         WriteFrame(stream, PackStep(r));
                         break;
                     }

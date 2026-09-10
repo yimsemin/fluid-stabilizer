@@ -30,7 +30,8 @@ namespace FluidStabilizer.Rl
             return new ActionComposer(
                 c.ActionScaleRadPerSec, gimbal.MaxRateRadPerSec,
                 PolicyContract.MakeBaseline(c.Baseline),
-                c.LockCapable ? new LockGate(gimbal) : LockGate.Disabled);
+                c.LockCapable ? new LockGate(gimbal) : LockGate.Disabled,
+                c.IsExplicitLock);
         }
     }
 
@@ -51,16 +52,19 @@ namespace FluidStabilizer.Rl
         private readonly double _maxRate;     // hard clamp on the composed rate
         private readonly IController _baseline; // null = plain policy
         private readonly LockGate _lockGate;   // D8 hybrid action; LockGate.Disabled = off
+        private readonly bool _explicitLock;   // the policy requests the lock itself (F9)
 
-        private double _pitch, _roll;
+        private double _pitch, _roll, _lockRequest;
         private long _seq;
 
-        public ActionComposer(double rateScale, double maxRate, IController baseline, LockGate lockGate = null)
+        public ActionComposer(double rateScale, double maxRate, IController baseline,
+            LockGate lockGate = null, bool explicitLock = false)
         {
             _rateScale = rateScale;
             _maxRate = maxRate;
             _baseline = baseline;
             _lockGate = lockGate ?? LockGate.Disabled;
+            _explicitLock = explicitLock;
         }
 
         public string Name
@@ -70,7 +74,8 @@ namespace FluidStabilizer.Rl
                 string s = _baseline == null
                     ? "RL policy (joint-rate)"
                     : "RL residual on " + _baseline.Name;
-                return _lockGate.Enabled ? s + " (lock-capable)" : s;
+                if (!_lockGate.Enabled) return s;
+                return s + (_explicitLock ? " (lock: policy-chosen)" : " (lock: dead-band)");
             }
         }
 
@@ -81,18 +86,28 @@ namespace FluidStabilizer.Rl
 
         public void Reset()
         {
-            _pitch = _roll = 0.0;
+            _pitch = _roll = _lockRequest = 0.0;
             _seq = 0;
             LastBundle = default;
             _lockGate.Reset();
             _baseline?.Reset();
         }
 
-        public void SetAction(double normPitch, double normRoll)
+        /// <summary>
+        /// The pending action. <paramref name="lockRequest"/> is only read in
+        /// explicit-lock mode (findings F9): &gt; 0 asks for the mechanical lock,
+        /// ≤ 0 asks for the active servo. In dead-band mode it is ignored and the
+        /// gate infers the lock from the composed rate.
+        /// </summary>
+        public void SetAction(double normPitch, double normRoll, double lockRequest = 0.0)
         {
             _pitch = normPitch;
             _roll = normRoll;
+            _lockRequest = lockRequest;
         }
+
+        /// <summary>True while the joint is mechanically locked (fed to the observation).</summary>
+        public bool IsLocked => _lockGate.IsLocked;
 
         public StabilizerCommand ComputeCommand(in SensorBundle sensors)
         {
@@ -108,7 +123,14 @@ namespace FluidStabilizer.Rl
             double p = Clamp(baseP + _pitch * _rateScale, _maxRate);
             double r = Clamp(baseR + _roll * _rateScale, _maxRate);
 
-            if (_lockGate.ShouldLock(p, r, sensors.Joints.PitchAngle, sensors.Joints.RollAngle))
+            // Explicit mode: the policy states the intent and only the physical
+            // constraints remain (findings F9). Dead-band mode: the gate infers it.
+            bool locked = _explicitLock
+                ? _lockGate.ShouldLockExplicit(_lockRequest > 0.0,
+                    sensors.Joints.PitchAngle, sensors.Joints.RollAngle)
+                : _lockGate.ShouldLock(p, r, sensors.Joints.PitchAngle, sensors.Joints.RollAngle);
+
+            if (locked)
                 return StabilizerCommand.Hold(_seq++, sensors.StampSeconds);
 
             return StabilizerCommand.Rate(_seq++, sensors.StampSeconds, p, r);

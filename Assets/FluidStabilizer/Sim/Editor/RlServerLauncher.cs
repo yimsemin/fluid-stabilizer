@@ -52,6 +52,11 @@ namespace FluidStabilizer.SimEditor
             // whenever there is a baseline; -rlLockCapable 0 forces it off.
             bool lockCapable = ArgInt(args, "-rlLockCapable", baseline != "none" ? 1 : 0) != 0;
 
+            // How the lock is decided. "deadband" is the original D8 gate, which
+            // makes the action space a cliff with no gradient (findings F9);
+            // "explicit" gives the policy a third action that requests the lock.
+            string lockMode = ArgStr(args, "-rlLockMode", "explicit");
+
             // Train on the owner's recorded drives instead of a synthetic driver
             // (project-goals ③). -rlTrace all | <substring>. Traces must share a
             // setup per episode, including recorded seed and full duration.
@@ -98,7 +103,8 @@ namespace FluidStabilizer.SimEditor
                     baselineFactory: baseFactory, residualRateScaleRadPerSec: residualScale,
                     lockCapable: lockCapable,
                     traceSelector: traces.Count == 0 ? null : (Func<ulong, DriverTrace>)(s => traces[(int)(s % (ulong)traces.Count)]),
-                    baselineId: baseFactory == null ? null : baseline);
+                    baselineId: baseFactory == null ? null : baseline,
+                    lockMode: lockMode);
                 Debug.Log("[rl] policy contract: " + env.Contract.Encode());
                 env.EpisodeStarted = e =>
                 {

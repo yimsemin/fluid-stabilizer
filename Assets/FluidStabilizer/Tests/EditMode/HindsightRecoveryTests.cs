@@ -210,6 +210,57 @@ namespace FluidStabilizer.Tests
             }
         }
 
+        /// <summary>
+        /// The fix F9 asks for: with an explicit lock action the policy's floor is
+        /// the rigid tank <b>whatever its rate residual is</b> — because it chooses
+        /// the lock instead of having it inferred from that residual. That turns the
+        /// cliff into a real floor: ③ ⊇ ① holds for any action, not only a = 0.
+        /// </summary>
+        [Test]
+        public void ExplicitLock_KeepsTheRigidFloor_ForAnyResidual()
+        {
+            var t = SteadyTurn(0.62, 25.0, 0.45, 9000UL);
+            SimulationConfig cfg = t.ToConfig();
+            double rigid = HoldSpill(t);
+
+            double SpillWithLockRequest(double residual, double lockRequest)
+            {
+                var composer = new ActionComposer(
+                    0.08 * cfg.Gimbal.MaxRateRadPerSec, cfg.Gimbal.MaxRateRadPerSec,
+                    new HoldControllerLocal(), new LockGate(cfg.Gimbal), explicitLock: true);
+                var loop = new SimulationLoop(cfg,
+                    new ConstantResidual(composer, residual, lockRequest),
+                    new RecordedTraceDriver(t), new PendulumSloshModel());
+                return loop.RunEpisode(t.Seed).TotalOverflowVolume * 1000.0;
+            }
+
+            // Always ask for the lock: exactly the rigid tank, at every residual —
+            // including the ones that fell off the dead-band cliff at ~19 L.
+            foreach (double residual in new[] { 0.0, 0.3, 1.0, -1.0 })
+                Assert.AreEqual(rigid, SpillWithLockRequest(residual, 1.0), 1e-9,
+                    $"explicit lock must hold the rigid floor at residual {residual}");
+
+            // Never ask for it: the servo runs and the outcome is genuinely worse,
+            // so the two choices are distinguishable — there is something to learn.
+            Assert.Greater(SpillWithLockRequest(1.0, -1.0), rigid * 2.0);
+        }
+
+        /// <summary>Constant residual + constant lock request, set every control tick.</summary>
+        private sealed class ConstantResidual : IController
+        {
+            private readonly ActionComposer _c;
+            private readonly double _a, _lock;
+            public ConstantResidual(ActionComposer c, double a, double lockRequest)
+            { _c = c; _a = a; _lock = lockRequest; }
+            public string Name => "constant";
+            public void Reset() => _c.Reset();
+            public StabilizerCommand ComputeCommand(in SensorBundle s)
+            {
+                _c.SetAction(_a, _a, _lock);
+                return _c.ComputeCommand(s);
+            }
+        }
+
         // Maps the cliff: amplitude, and whether frequency matters at all.
         [Test, Explicit("diagnostic — does a wobbling residual break the lock floor?")]
         public void PrintResidualFloor_VsActionWobble()

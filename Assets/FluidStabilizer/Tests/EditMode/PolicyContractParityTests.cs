@@ -35,10 +35,17 @@ namespace FluidStabilizer.Tests
         // pipeline's, not the policy's.
         private const float ActP = 0.4f, ActR = -0.25f;
 
-        [TestCase("none", false)]
-        [TestCase("hold", true)]
-        [TestCase("sfa", true)]
-        public void TrainingAndServedPaths_ProduceTheSameCommandsAndSpill(string baselineId, bool lockCapable)
+        // A lock request that actually toggles: positive here, so an explicit-lock
+        // contract locks and a dead-band one ignores it. Either way both paths must
+        // agree — that is the whole point.
+        private const float ActLock = 0.6f;
+
+        [TestCase("none", false, "none")]
+        [TestCase("hold", true, "deadband")]
+        [TestCase("sfa", true, "deadband")]
+        [TestCase("hold", true, "explicit")]
+        public void TrainingAndServedPaths_ProduceTheSameCommandsAndSpill(
+            string baselineId, bool lockCapable, string lockMode)
         {
             SimulationConfig cfg = Cfg();
             bool residual = baselineId != "none";
@@ -51,13 +58,14 @@ namespace FluidStabilizer.Tests
                 baselineFactory: residual ? () => PolicyContract.MakeBaseline(baselineId) : (Func<IController>)null,
                 residualRateScaleRadPerSec: residualScale,
                 lockCapable: lockCapable,
-                baselineId: residual ? baselineId : null);
+                baselineId: residual ? baselineId : null,
+                lockMode: lockMode);
 
             env.Reset(7UL);
             var trainObs = new List<float[]>();
             while (true)
             {
-                RlStepResult r = env.Step(ActP, ActR);
+                RlStepResult r = env.Step(ActP, ActR, ActLock);
                 trainObs.Add(r.Observation);
                 if (r.Terminated || r.Truncated) break;
             }
@@ -69,7 +77,10 @@ namespace FluidStabilizer.Tests
             Assert.AreEqual(lockCapable, contract.LockCapable);
 
             int obsSize = ObservationEncoder.SingleFrameSize * contract.FrameStack;
-            using var server = new FakeContractServer(obsSize, new[] { ActP, ActR }, contract: contract.Encode());
+            float[] reply = contract.ActionSize == 3
+                ? new[] { ActP, ActR, ActLock }
+                : new[] { ActP, ActR };
+            using var server = new FakeContractServer(obsSize, reply, contract: contract.Encode());
 
             using var bridge = new RemotePolicyController(
                 "127.0.0.1", server.Port, contract.FrameStack,

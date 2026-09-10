@@ -63,6 +63,37 @@ namespace FluidStabilizer.Core.Sim
         }
 
         /// <summary>
+        /// Advance the gate one control tick from an <b>explicit</b> lock request
+        /// (findings F9). The dead-band variant below decides for the policy, which
+        /// makes the action space a cliff: inside the band the action has no effect
+        /// at all, past it the servo takes over and spill jumps ~2.4x, and there is
+        /// no gradient between for a policy to follow. Here the policy states its
+        /// intent and only the <i>physical</i> constraints remain — the lock can
+        /// still be engaged only near zero angle (the actuator snaps to zero) and
+        /// must persist <see cref="_minDwellTicks"/> before releasing, so the
+        /// mechanism cannot chatter at the control rate.
+        /// </summary>
+        public bool ShouldLockExplicit(bool request, double pitchAngle, double rollAngle)
+        {
+            if (!_enabled) return false;
+
+            double angle = Math.Max(Math.Abs(pitchAngle), Math.Abs(rollAngle));
+
+            if (_locked)
+            {
+                _ticksSinceLock++;
+                if (!request && _ticksSinceLock >= _minDwellTicks) _locked = false;
+            }
+            else if (request && angle < _lockAngle)
+            {
+                _locked = true;
+                _ticksSinceLock = 0;
+            }
+
+            return _locked;
+        }
+
+        /// <summary>
         /// Advance the gate one control tick. <paramref name="pitchRate"/> /
         /// <paramref name="rollRate"/> are the composed active rate command (rad/s)
         /// the controller would otherwise emit; <paramref name="pitchAngle"/> /

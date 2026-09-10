@@ -25,7 +25,7 @@ namespace FluidStabilizer.Rl
     public struct PolicyContract : IEquatable<PolicyContract>
     {
         /// <summary>Bump when the observation layout changes; a mismatch is refused.</summary>
-        public const int CurrentObsVersion = 1;
+        public const int CurrentObsVersion = 2;
 
         /// <summary>Baseline the policy corrects. "none" = the policy acts alone.</summary>
         public string Baseline;
@@ -38,6 +38,21 @@ namespace FluidStabilizer.Rl
 
         /// <summary>D8 hybrid action: mechanically lock instead of holding zero.</summary>
         public bool LockCapable;
+
+        /// <summary>
+        /// How the lock is decided. <c>"deadband"</c> = the original D8 gate infers
+        /// it from the composed rate — which makes the action space a cliff with no
+        /// gradient (findings F9). <c>"explicit"</c> = the policy emits a third
+        /// action requesting the lock, so staying locked is a choice it can learn.
+        /// Ignored when <see cref="LockCapable"/> is false.
+        /// </summary>
+        public string LockMode;
+
+        public bool IsExplicitLock => LockCapable
+            && string.Equals(LockMode, "explicit", StringComparison.OrdinalIgnoreCase);
+
+        /// <summary>Policy outputs: 2 rate residuals, plus the lock request when explicit.</summary>
+        public int ActionSize => IsExplicitLock ? 3 : 2;
 
         public int FrameStack;
         public int ObsVersion;
@@ -52,12 +67,14 @@ namespace FluidStabilizer.Rl
             ActionScaleRadPerSec = maxRate,
             MaxRateRadPerSec = maxRate,
             LockCapable = false,
+            LockMode = "none",
             FrameStack = frameStack,
             ObsVersion = CurrentObsVersion,
         };
 
         public static PolicyContract Residual(GimbalConfig gimbal, string baseline,
-            double actionScale = double.NaN, bool lockCapable = true, int frameStack = 6)
+            double actionScale = double.NaN, bool lockCapable = true, int frameStack = 6,
+            string lockMode = "deadband")
             => new PolicyContract
             {
                 Baseline = baseline,
@@ -65,6 +82,7 @@ namespace FluidStabilizer.Rl
                     ? 0.35 * gimbal.MaxRateRadPerSec : actionScale,
                 MaxRateRadPerSec = gimbal.MaxRateRadPerSec,
                 LockCapable = lockCapable,
+                LockMode = lockCapable ? lockMode : "none",
                 FrameStack = Math.Max(1, frameStack),
                 ObsVersion = CurrentObsVersion,
             };
@@ -94,6 +112,7 @@ namespace FluidStabilizer.Rl
                 "actionScale=" + ActionScaleRadPerSec.ToString("R", ic),
                 "maxRate=" + MaxRateRadPerSec.ToString("R", ic),
                 "lockCapable=" + (LockCapable ? "1" : "0"),
+                "lockMode=" + (LockCapable ? (LockMode ?? "deadband") : "none"),
                 "frameStack=" + FrameStack.ToString(ic),
                 "obsVersion=" + ObsVersion.ToString(ic),
             });
@@ -117,6 +136,7 @@ namespace FluidStabilizer.Rl
                 !double.TryParse(m, NumberStyles.Float, ic, out double maxRate)) return false;
             kv.TryGetValue("baseline", out string baseline);
             kv.TryGetValue("lockCapable", out string lockCapable);
+            kv.TryGetValue("lockMode", out string lockMode);
             int.TryParse(kv.TryGetValue("frameStack", out string fs) ? fs : "6", NumberStyles.Integer, ic, out int frameStack);
             int.TryParse(kv.TryGetValue("obsVersion", out string ov) ? ov : "1", NumberStyles.Integer, ic, out int obsVersion);
 
@@ -126,6 +146,7 @@ namespace FluidStabilizer.Rl
                 ActionScaleRadPerSec = actionScale,
                 MaxRateRadPerSec = maxRate,
                 LockCapable = lockCapable == "1" || string.Equals(lockCapable, "true", StringComparison.OrdinalIgnoreCase),
+                LockMode = string.IsNullOrEmpty(lockMode) ? "deadband" : lockMode,
                 FrameStack = Math.Max(1, frameStack),
                 ObsVersion = obsVersion,
             };
@@ -137,6 +158,7 @@ namespace FluidStabilizer.Rl
             && ActionScaleRadPerSec.Equals(o.ActionScaleRadPerSec)
             && MaxRateRadPerSec.Equals(o.MaxRateRadPerSec)
             && LockCapable == o.LockCapable
+            && string.Equals(LockMode ?? "deadband", o.LockMode ?? "deadband", StringComparison.OrdinalIgnoreCase)
             && FrameStack == o.FrameStack
             && ObsVersion == o.ObsVersion;
 

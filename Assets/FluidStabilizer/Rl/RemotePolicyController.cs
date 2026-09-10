@@ -123,7 +123,9 @@ namespace FluidStabilizer.Rl
 
         public StabilizerCommand ComputeCommand(in SensorBundle sensors)
         {
-            float[] obs = _encoder.Observe(sensors, _lastAp, _lastAr);
+            // The lock state is part of the observation (findings F9): a policy that
+            // chooses its own lock has to know which side of the switch it is on.
+            float[] obs = _encoder.Observe(sensors, _lastAp, _lastAr, _composer?.IsLocked ?? false);
 
             if (!_connected)
             {
@@ -153,12 +155,13 @@ namespace FluidStabilizer.Rl
                     PolicyTicks++;
                     _lastAp = Clamp1(act[0]);
                     _lastAr = _actSize > 1 ? Clamp1(act[1]) : 0.0;
+                    double lockReq = _actSize > 2 ? Clamp1(act[2]) : 0.0;
 
                     if (_composer != null)
                     {
                         // Same composition the policy was trained under — baseline,
-                        // residual scale and lock gate all from its own contract.
-                        _composer.SetAction(_lastAp, _lastAr);
+                        // residual scale and lock decision all from its own contract.
+                        _composer.SetAction(_lastAp, _lastAr, lockReq);
                         _seq++;
                         return _composer.ComputeCommand(sensors);
                     }
@@ -196,7 +199,8 @@ namespace FluidStabilizer.Rl
                 _obsSize = BridgeIo.GetI32(hs, 8);
                 _actSize = BridgeIo.GetI32(hs, 12);
 
-                if (_obsSize != ObservationEncoder.SingleFrameSize * _frameStack || _actSize != 2)
+                if (_obsSize != ObservationEncoder.SingleFrameSize * _frameStack ||
+                    (_actSize != 2 && _actSize != 3))
                     throw new InvalidOperationException("policy observation/action shape mismatch");
                 string identity = "unknown (legacy protocol v1)";
                 if (version == 2)
@@ -219,6 +223,9 @@ namespace FluidStabilizer.Rl
                         if (c.FrameStack != _frameStack)
                             throw new InvalidOperationException(
                                 $"policy frame stack {c.FrameStack} != bridge {_frameStack}");
+                        if (c.ActionSize != _actSize)
+                            throw new InvalidOperationException(
+                                $"policy contract action size {c.ActionSize} != server {_actSize}");
                         _composer = ActionComposerFactory.From(c, _gimbal);
                         _composer.Reset();
                         _contract = c;

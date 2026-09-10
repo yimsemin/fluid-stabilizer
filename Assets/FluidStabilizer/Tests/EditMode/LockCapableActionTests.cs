@@ -113,7 +113,7 @@ namespace FluidStabilizer.Tests
         public void LockCapableEnv_NamesItself_AndIsDeterministic()
         {
             var env = Env(lockCapable: true);
-            StringAssert.Contains("lock-capable", env.ActorName);
+            StringAssert.Contains("lock:", env.ActorName);
             Assert.AreEqual(Signature(env, 5), Signature(Env(true), 5), 1e-9);
         }
 

@@ -12,7 +12,7 @@ namespace FluidStabilizer.Rl
     /// control steps (design-review §11–§12: memory is required to infer the
     /// hidden slosh state).
     ///
-    /// Layout of one frame (see <see cref="SingleFrameSize"/> = 39):
+    /// Layout of one frame (see <see cref="SingleFrameSize"/> = 40):
     ///   [0..2]   vehicle IMU specific force / 10
     ///   [3..5]   vehicle IMU angular velocity / 3
     ///   [6..8]   tank IMU specific force / 10
@@ -29,7 +29,7 @@ namespace FluidStabilizer.Rl
     /// </summary>
     public sealed class ObservationEncoder
     {
-        public const int SingleFrameSize = 39;
+        public const int SingleFrameSize = 40;
 
         private readonly int _stack;
         private readonly float[] _ring;      // _stack × SingleFrameSize, circular by frame
@@ -65,7 +65,8 @@ namespace FluidStabilizer.Rl
         /// (a fresh array, oldest frame first). Before the stack has filled, the
         /// missing older frames read as zeros.
         /// </summary>
-        public float[] Observe(in SensorBundle b, double lastActionPitch, double lastActionRoll)
+        public float[] Observe(in SensorBundle b, double lastActionPitch, double lastActionRoll,
+            bool wasLocked = false)
         {
             double dt = _havePrev ? b.StampSeconds - _prevStamp : 0.0;
             if (dt <= 0.0) dt = 1.0e-2;
@@ -136,6 +137,11 @@ namespace FluidStabilizer.Rl
             f[o + 36] = (float)(lpR / 0.5);
             f[o + 37] = (float)(tiltRateP / 3.0);
             f[o + 38] = (float)(tiltRateR / 3.0);
+            // Whether the joint was mechanically locked on the previous tick. A
+            // policy that chooses its own lock (findings F9) has to know which side
+            // of that switch it is on; it is the controller's own state, not
+            // privileged plant information.
+            f[o + 39] = wasLocked ? 1f : 0f;
 
             _count++;
             return Stacked();
