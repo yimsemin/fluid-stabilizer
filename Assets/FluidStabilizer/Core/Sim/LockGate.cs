@@ -56,9 +56,16 @@ namespace FluidStabilizer.Core.Sim
         /// <summary>True while the gate is currently holding the joint mechanically locked.</summary>
         public bool IsLocked => _enabled && _locked;
 
-        public void Reset()
+        /// <param name="startLocked">
+        /// Begin the episode mechanically locked. This is the physical default —
+        /// the tank is bolted down until a controller decides to take over — and it
+        /// matters for learning: the lock can only be <i>engaged</i> near zero
+        /// angle, so a policy that starts unlocked and lets the servo move the joint
+        /// can never get back in. Starting locked makes "do nothing" mean the rigid
+        /// tank and turns unlocking into the deliberate act (findings F9).</param>
+        public void Reset(bool startLocked = false)
         {
-            _locked = false;
+            _locked = _enabled && startLocked;
             _ticksSinceLock = 0;
         }
 

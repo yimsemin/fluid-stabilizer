@@ -234,15 +234,17 @@ namespace FluidStabilizer.Tests
                 return loop.RunEpisode(t.Seed).TotalOverflowVolume * 1000.0;
             }
 
-            // Always ask for the lock: exactly the rigid tank, at every residual —
-            // including the ones that fell off the dead-band cliff at ~19 L.
+            // Never ask to release (an untrained network's ≈ 0 output included):
+            // exactly the rigid tank, at every residual — including the ones that
+            // fell off the dead-band cliff at ~19 L.
             foreach (double residual in new[] { 0.0, 0.3, 1.0, -1.0 })
-                Assert.AreEqual(rigid, SpillWithLockRequest(residual, 1.0), 1e-9,
-                    $"explicit lock must hold the rigid floor at residual {residual}");
+            foreach (double release in new[] { 0.0, -1.0 })
+                Assert.AreEqual(rigid, SpillWithLockRequest(residual, release), 1e-9,
+                    $"explicit lock must hold the rigid floor at residual {residual}, release {release}");
 
-            // Never ask for it: the servo runs and the outcome is genuinely worse,
-            // so the two choices are distinguishable — there is something to learn.
-            Assert.Greater(SpillWithLockRequest(1.0, -1.0), rigid * 2.0);
+            // Commit to releasing it: the servo runs and the outcome is genuinely
+            // worse, so the two choices are distinguishable — there is something to learn.
+            Assert.Greater(SpillWithLockRequest(1.0, 1.0), rigid * 2.0);
         }
 
         /// <summary>Constant residual + constant lock request, set every control tick.</summary>

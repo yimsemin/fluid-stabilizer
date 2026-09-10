@@ -89,15 +89,22 @@ namespace FluidStabilizer.Rl
             _pitch = _roll = _lockRequest = 0.0;
             _seq = 0;
             LastBundle = default;
-            _lockGate.Reset();
+            // Explicit mode starts locked: the rigid tank is the default state, and
+            // it is the only state the policy can return to from anywhere.
+            _lockGate.Reset(_explicitLock);
             _baseline?.Reset();
         }
 
         /// <summary>
         /// The pending action. <paramref name="lockRequest"/> is only read in
-        /// explicit-lock mode (findings F9): &gt; 0 asks for the mechanical lock,
-        /// ≤ 0 asks for the active servo. In dead-band mode it is ignored and the
-        /// gate infers the lock from the composed rate.
+        /// explicit-lock mode (findings F9), where it is a <b>release</b> request:
+        /// &gt; 0 hands the joint to the active servo, anything else keeps (or
+        /// returns to) the mechanical lock.
+        ///
+        /// The sign is deliberate. The rigid tank is the best analytic result we
+        /// have, so it must be what a policy gets for free: an untrained network
+        /// outputs ≈ 0 and therefore stays locked, and only a committed positive
+        /// output takes over. Under a dead-band contract this argument is ignored.
         /// </summary>
         public void SetAction(double normPitch, double normRoll, double lockRequest = 0.0)
         {
@@ -126,7 +133,7 @@ namespace FluidStabilizer.Rl
             // Explicit mode: the policy states the intent and only the physical
             // constraints remain (findings F9). Dead-band mode: the gate infers it.
             bool locked = _explicitLock
-                ? _lockGate.ShouldLockExplicit(_lockRequest > 0.0,
+                ? _lockGate.ShouldLockExplicit(_lockRequest <= 0.0,
                     sensors.Joints.PitchAngle, sensors.Joints.RollAngle)
                 : _lockGate.ShouldLock(p, r, sensors.Joints.PitchAngle, sensors.Joints.RollAngle);
 

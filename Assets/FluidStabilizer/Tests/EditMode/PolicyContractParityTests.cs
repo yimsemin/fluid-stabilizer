@@ -35,9 +35,9 @@ namespace FluidStabilizer.Tests
         // pipeline's, not the policy's.
         private const float ActP = 0.4f, ActR = -0.25f;
 
-        // A lock request that actually toggles: positive here, so an explicit-lock
-        // contract locks and a dead-band one ignores it. Either way both paths must
-        // agree — that is the whole point.
+        // A release request that actually takes effect: positive here, so an
+        // explicit-lock contract runs the servo and a dead-band one ignores it.
+        // Either way both paths must agree — that is the whole point.
         private const float ActLock = 0.6f;
 
         [TestCase("none", false, "none")]
