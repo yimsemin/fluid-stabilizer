@@ -55,6 +55,7 @@ namespace FluidStabilizer.Rl
         private readonly bool _explicitLock;   // the policy requests the lock itself (F9)
 
         private double _pitch, _roll, _lockRequest;
+        private double _releaseIntent;   // low-passed release request (explicit mode)
         private long _seq;
 
         public ActionComposer(double rateScale, double maxRate, IController baseline,
@@ -86,7 +87,7 @@ namespace FluidStabilizer.Rl
 
         public void Reset()
         {
-            _pitch = _roll = _lockRequest = 0.0;
+            _pitch = _roll = _lockRequest = _releaseIntent = 0.0;
             _seq = 0;
             LastBundle = default;
             // Explicit mode starts locked: the rigid tank is the default state, and
@@ -132,8 +133,15 @@ namespace FluidStabilizer.Rl
 
             // Explicit mode: the policy states the intent and only the physical
             // constraints remain (findings F9). Dead-band mode: the gate infers it.
+            // A mechanical lock is not re-decided at the control rate. The release
+            // request is low-passed into a sustained intent, so a stochastic policy's
+            // per-tick noise averages out — zero-mean sampling never reaches the
+            // threshold — and only a committed output releases the joint. Without
+            // this an episode is ~2500 independent draws, and even a policy whose
+            // mean says "stay locked" releases almost immediately (findings F9).
+            _releaseIntent += ReleaseIntentGain * (_lockRequest - _releaseIntent);
             bool locked = _explicitLock
-                ? _lockGate.ShouldLockExplicit(_lockRequest <= 0.0,
+                ? _lockGate.ShouldLockExplicit(_releaseIntent <= ReleaseThreshold,
                     sensors.Joints.PitchAngle, sensors.Joints.RollAngle)
                 : _lockGate.ShouldLock(p, r, sensors.Joints.PitchAngle, sensors.Joints.RollAngle);
 
@@ -167,6 +175,12 @@ namespace FluidStabilizer.Rl
                     break;
             }
         }
+
+        /// <summary>First-order gain on the release intent (≈ 10 control ticks).</summary>
+        private const double ReleaseIntentGain = 0.1;
+
+        /// <summary>Sustained intent needed to release the lock.</summary>
+        private const double ReleaseThreshold = 0.5;
 
         private static double Clamp(double v, double lim) => v < -lim ? -lim : (v > lim ? lim : v);
     }

@@ -263,6 +263,44 @@ namespace FluidStabilizer.Tests
             }
         }
 
+        // The trained policy keeps releasing the lock even though staying locked
+        // spills half as much. Two very different causes: PPO failing to find it,
+        // or the shaped reward not actually preferring it. This measures the return
+        // of the fixed strategies directly, which settles it.
+        [Test, Explicit("diagnostic — does the reward prefer staying locked?")]
+        public void PrintReturn_LockedVsReleased()
+        {
+            var cfg = new SimulationConfig { EpisodeSeconds = 25.0 };
+            cfg.Slosh.FillRatio = 0.62;
+            cfg.Road.Enabled = false;
+            cfg.Validate();
+
+            foreach (var (name, release) in new[] { ("stay locked", -1.0f), ("release", 1.0f) })
+            {
+                var env = new RlEnvironment(
+                    cfg, s2 => new ConstantDriver(new DriverControls
+                        { Throttle = 0.35, Brake = 0.0, Steer = 0.45 }),
+                    () => new PendulumSloshModel(), RewardWeights.Default(),
+                    frameStackLength: 6,
+                    baselineFactory: () => new HoldControllerLocal(),
+                    residualRateScaleRadPerSec: 0.35 * cfg.Gimbal.MaxRateRadPerSec,
+                    lockCapable: true, baselineId: "hold", lockMode: "explicit");
+
+                env.Reset(9000UL);
+                double ret = 0.0; int steps = 0;
+                while (true)
+                {
+                    RlStepResult r = env.Step(0f, 0f, release);
+                    ret += r.Reward; steps++;
+                    if (r.Terminated || r.Truncated) break;
+                }
+                var sum = env.Summary();
+                TestContext.WriteLine(
+                    $"{name,-12} return={ret,10:F1}  steps={steps,5}  " +
+                    $"spill={sum.TotalOverflowVolume * 1000.0,7:F3} L  effort={sum.MeanAbsActionRate:F3}");
+            }
+        }
+
         // Maps the cliff: amplitude, and whether frequency matters at all.
         [Test, Explicit("diagnostic — does a wobbling residual break the lock floor?")]
         public void PrintResidualFloor_VsActionWobble()
