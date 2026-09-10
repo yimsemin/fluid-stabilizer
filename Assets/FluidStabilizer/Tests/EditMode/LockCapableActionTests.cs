@@ -90,6 +90,7 @@ namespace FluidStabilizer.Tests
                 RewardWeights.Default(),
                 frameStackLength: 6,
                 baselineFactory: () => new HoldController(),
+                baselineId: "hold",
                 residualRateScaleRadPerSec: 1.0,
                 lockCapable: lockCapable);
         }

@@ -88,9 +88,11 @@ namespace FluidStabilizer.Sim
             if (_built is IDisposable d) { try { d.Dispose(); } catch { } }
 
             if (choice == StabilizerChoice.LearnedPolicy)
+            {
+                SimulationConfig active = ReplayTrace?.ToConfig() ?? Loop?.Config ?? new SimulationConfig();
                 _built = new RemotePolicyController(PolicyHost, PolicyPort, Mathf.Max(1, PolicyFrameStack),
-                    (ReplayTrace?.ToConfig() ?? Loop?.Config ?? new SimulationConfig()).Gimbal.MaxRateRadPerSec,
-                    log: s => Debug.Log(s));
+                    active.Gimbal.MaxRateRadPerSec, log: s => Debug.Log(s), gimbal: active.Gimbal);
+            }
             else if (choice == StabilizerChoice.HindsightCeiling)
                 _built = MakeHindsightCeiling(ReplayTrace) ?? new HoldController();
             else

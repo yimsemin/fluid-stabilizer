@@ -80,13 +80,10 @@ namespace FluidStabilizer.SimEditor
                     ? () => new ShallowWaterSloshModel()
                     : (Func<ISloshModel>)(() => new PendulumSloshModel());
 
-                Func<IController> baseFactory = baseline switch
-                {
-                    "hold" => () => new HoldController(),
-                    "sfa" => () => new SpecificForceAlignmentController(),
-                    "pid" => () => new PidController(),
-                    _ => (Func<IController>)null,
-                };
+                // One place decides what a baseline name means, so the trainer and a
+                // served checkpoint cannot disagree (PolicyContract).
+                Func<IController> baseFactory = PolicyContract.MakeBaseline(baseline) == null
+                    ? null : (Func<IController>)(() => PolicyContract.MakeBaseline(baseline));
                 double residualScale = baseFactory == null
                     ? double.NaN
                     : residualFrac * cfg.Gimbal.MaxRateRadPerSec;
@@ -94,7 +91,9 @@ namespace FluidStabilizer.SimEditor
                 var env = new RlEnvironment(cfg, drv, sl, RewardWeights.Default(), stack,
                     baselineFactory: baseFactory, residualRateScaleRadPerSec: residualScale,
                     lockCapable: lockCapable,
-                    traceSelector: traces.Count == 0 ? null : (Func<ulong, DriverTrace>)(s => traces[(int)(s % (ulong)traces.Count)]));
+                    traceSelector: traces.Count == 0 ? null : (Func<ulong, DriverTrace>)(s => traces[(int)(s % (ulong)traces.Count)]),
+                    baselineId: baseFactory == null ? null : baseline);
+                Debug.Log("[rl] policy contract: " + env.Contract.Encode());
                 env.EpisodeStarted = e =>
                 {
                     string path = FluidStabilizer.Core.Sim.Eval.RunProvenance.NewPath("Logs/rl-episode.txt");

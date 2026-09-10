@@ -34,7 +34,7 @@ namespace FluidStabilizer.Rl
         private readonly Func<ISloshModel> _sloshFactory;
         private readonly ObservationEncoder _encoder;
         private readonly RewardFunction _reward;
-        private ResidualActionController _actor;
+        private ActionComposer _actor;
         private readonly Func<ulong, DriverTrace> _traceSelector;
         private readonly Func<IController> _baselineFactory;
         private readonly double _scaleFraction;
@@ -80,7 +80,8 @@ namespace FluidStabilizer.Rl
             Func<IController> baselineFactory = null,
             double residualRateScaleRadPerSec = double.NaN,
             bool lockCapable = false,
-            Func<ulong, DriverTrace> traceSelector = null)
+            Func<ulong, DriverTrace> traceSelector = null,
+            string baselineId = null)
         {
             _traceSelector = traceSelector;
             _baselineFactory = baselineFactory;
@@ -100,7 +101,22 @@ namespace FluidStabilizer.Rl
 
             _scaleFraction = scale / maxRate;
             LockGate gate = lockCapable ? new LockGate(cfg.Gimbal) : LockGate.Disabled;
-            _actor = new ResidualActionController(scale, maxRate, baseline, gate);
+            Contract = new PolicyContract
+            {
+                // A contract id (PolicyContract.MakeBaseline understands it), not the
+                // controller's display name — the served policy has to rebuild the
+                // same baseline from this string.
+                Baseline = baseline == null ? "none"
+                    : (baselineId ?? throw new ArgumentException(
+                        "a residual environment must name its baseline (baselineId) so a served " +
+                        "checkpoint can rebuild it", nameof(baselineId))),
+                ActionScaleRadPerSec = scale,
+                MaxRateRadPerSec = maxRate,
+                LockCapable = lockCapable,
+                FrameStack = Math.Max(1, frameStackLength),
+                ObsVersion = PolicyContract.CurrentObsVersion,
+            };
+            _actor = new ActionComposer(scale, maxRate, baseline, gate);
             _controlDecimation = cfg.ControlDecimation;
         }
 
@@ -113,6 +129,19 @@ namespace FluidStabilizer.Rl
         public int ObservationSize => _encoder.StackedSize;
         public int PrivilegedObservationSize => PrivilegedEncoder.Size;
         public int ActionSize => 2;
+
+        /// <summary>
+        /// What this environment means by an action. A checkpoint trained here must
+        /// be served under the same contract — see <see cref="PolicyContract"/> and
+        /// <see cref="RemotePolicyController"/>.
+        /// </summary>
+        public PolicyContract Contract { get; private set; }
+
+        /// <summary>The bundle the next control tick will act on (what the composer sees).</summary>
+        public SensorBundle NextControlBundle => _loop.LatestSensorBundle;
+
+        /// <summary>The baseline this environment composes on top of, or null in plain mode.</summary>
+        public IController Baseline => _actor.BaselineController;
         public double SimTime => _loop?.SimTime ?? 0.0;
 
         public float[] Reset(ulong seed)
@@ -123,7 +152,7 @@ namespace FluidStabilizer.Rl
             {
                 _cfg = ActiveTrace.ToConfig();
                 _controlDecimation = _cfg.ControlDecimation;
-                _actor = new ResidualActionController(_scaleFraction * _cfg.Gimbal.MaxRateRadPerSec,
+                _actor = new ActionComposer(_scaleFraction * _cfg.Gimbal.MaxRateRadPerSec,
                     _cfg.Gimbal.MaxRateRadPerSec, _baselineFactory?.Invoke(),
                     _lockCapable ? new LockGate(_cfg.Gimbal) : LockGate.Disabled);
             }
@@ -182,7 +211,13 @@ namespace FluidStabilizer.Rl
 
             (double reward, bool terminated, RewardBreakdown breakdown) = _reward.Step(ctx);
 
-            float[] obs = _encoder.Observe(_actor.LastBundle, ap, ar);
+            // The bundle the *next* control tick will see, paired with the action
+            // just applied — the same (state, previous action) pairing the deployed
+            // RemotePolicyController builds. Using _actor.LastBundle here paired the
+            // action with the state one control tick older than deployment did, so a
+            // policy trained on it saw a differently-aligned observation than the one
+            // it is served (docs/rl.md "행동 계약").
+            float[] obs = _encoder.Observe(_loop.LatestSensorBundle, ap, ar);
             _lastActionPitch = ap;
             _lastActionRoll = ar;
 
@@ -209,104 +244,5 @@ namespace FluidStabilizer.Rl
 
         // ---- the controller seam the loop drives; turns the pending action into a command ----
 
-        /// <summary>
-        /// Emits the joint-rate command each control tick. Plain mode:
-        /// <c>rate = policy·scale</c>. Residual mode (a baseline is supplied):
-        /// <c>rate = baselineRate + policy·scale</c>, clamped to the max rate,
-        /// where the baseline's command is converted to an equivalent rate
-        /// (angle commands → P-tracked, a locked command → PD-held at zero).
-        /// </summary>
-        private sealed class ResidualActionController : IController
-        {
-            // Baseline command → rate conversion (rad/s per rad, and per rad/s).
-            private const double BaselineTrackGain = 9.0;
-            private const double BaselineRateDamp = 0.6;
-
-            private readonly double _rateScale;   // what a policy ±1 maps to (rad/s)
-            private readonly double _maxRate;     // hard clamp on the composed rate
-            private readonly IController _baseline; // null = plain policy
-            private readonly LockGate _lockGate;   // D8 hybrid action; LockGate.Disabled = off
-
-            private double _pitch, _roll;
-            private long _seq;
-
-            public ResidualActionController(double rateScale, double maxRate, IController baseline, LockGate lockGate = null)
-            {
-                _rateScale = rateScale;
-                _maxRate = maxRate;
-                _baseline = baseline;
-                _lockGate = lockGate ?? LockGate.Disabled;
-            }
-
-            public string Name
-            {
-                get
-                {
-                    string s = _baseline == null
-                        ? "RL policy (joint-rate)"
-                        : "RL residual on " + _baseline.Name;
-                    return _lockGate.Enabled ? s + " (lock-capable)" : s;
-                }
-            }
-
-            public SensorBundle LastBundle { get; private set; }
-
-            public void Reset()
-            {
-                _pitch = _roll = 0.0;
-                _seq = 0;
-                LastBundle = default;
-                _lockGate.Reset();
-                _baseline?.Reset();
-            }
-
-            public void SetAction(double normPitch, double normRoll)
-            {
-                _pitch = normPitch;
-                _roll = normRoll;
-            }
-
-            public StabilizerCommand ComputeCommand(in SensorBundle sensors)
-            {
-                LastBundle = sensors;
-
-                double baseP = 0.0, baseR = 0.0;
-                if (_baseline != null)
-                {
-                    StabilizerCommand b = _baseline.ComputeCommand(sensors);
-                    BaselineRates(b, sensors, out baseP, out baseR);
-                }
-
-                double p = Clamp(baseP + _pitch * _rateScale, _maxRate);
-                double r = Clamp(baseR + _roll * _rateScale, _maxRate);
-
-                if (_lockGate.ShouldLock(p, r, sensors.Joints.PitchAngle, sensors.Joints.RollAngle))
-                    return StabilizerCommand.Hold(_seq++, sensors.StampSeconds);
-
-                return StabilizerCommand.Rate(_seq++, sensors.StampSeconds, p, r);
-            }
-
-            private static void BaselineRates(in StabilizerCommand b, in SensorBundle s,
-                out double pitchRate, out double rollRate)
-            {
-                switch (b.Mode)
-                {
-                    case StabilizerCommandMode.JointRate:
-                        pitchRate = b.PitchCommand;
-                        rollRate = b.RollCommand;
-                        break;
-                    case StabilizerCommandMode.JointAngle:
-                        pitchRate = BaselineTrackGain * (b.PitchCommand - s.Joints.PitchAngle);
-                        rollRate = BaselineTrackGain * (b.RollCommand - s.Joints.RollAngle);
-                        break;
-                    default: // Locked → hold the joint at zero
-                        pitchRate = -BaselineTrackGain * s.Joints.PitchAngle - BaselineRateDamp * s.Joints.PitchRate;
-                        rollRate = -BaselineTrackGain * s.Joints.RollAngle - BaselineRateDamp * s.Joints.RollRate;
-                        break;
-                }
-            }
-
-            private static double Clamp(double v, double lim) => v < -lim ? -lim : (v > lim ? lim : v);
-        }
     }
 }

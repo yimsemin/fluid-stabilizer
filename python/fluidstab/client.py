@@ -10,7 +10,7 @@ import socket
 import struct
 
 MAGIC = 0x464C5544
-VERSION = 1
+VERSION = 2
 
 _OP_RESET = 0
 _OP_STEP = 1
@@ -28,8 +28,14 @@ class FluidStabClient:
 
         hs = self._recv_exact(20)
         magic, version, self.obs_size, self.priv_size, self.act_size = struct.unpack("<IIiii", hs)
-        if magic != MAGIC or version != VERSION:
+        if magic != MAGIC or version not in (1, VERSION):
             raise ProtocolError(f"bad handshake: magic={magic:#x} version={version}")
+
+        # v2 states how the environment turns an action into a command. Carry it
+        # into the checkpoint so serve_policy can hand it back to Unity, instead of
+        # the bridge guessing "absolute joint rate" for a residual policy.
+        self.contract = self._recv_frame().decode("utf-8") if version >= 2 else ""
+        self.protocol_version = version
 
     # ---- public API ----
 

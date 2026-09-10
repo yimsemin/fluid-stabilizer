@@ -135,7 +135,9 @@ def main():
     obs_dim = env.observation_space.shape[0]
     priv_dim = env.privileged_size
     act_dim = env.action_space.shape[0]
+    contract = getattr(env, "contract", "")
     print(f"obs={obs_dim} priv={priv_dim} act={act_dim} device={device}")
+    print(f"action contract: {contract or '(none — legacy environment)'}")
 
     agent = ActorCritic(obs_dim, priv_dim, act_dim).to(device)
     opt = torch.optim.Adam(agent.parameters(), lr=args.lr, eps=1e-5)
@@ -292,7 +294,10 @@ def main():
             {"actor_mean": agent.actor_mean.state_dict(),
              "actor_logstd": agent.actor_logstd.detach().cpu(),
              "obs_dim": obs_dim, "act_dim": act_dim,
-             "obs_rms_mean": obs_rms.mean, "obs_rms_var": obs_rms.var},
+             "obs_rms_mean": obs_rms.mean, "obs_rms_var": obs_rms.var,
+             # What an action from this checkpoint means. serve_policy hands it back
+             # to Unity so the bridge composes the action the way training did.
+             "contract": contract},
             f"runs/{run_name}/actor.pt",
         )
         if update_idx % max(1, args.save_every) == 0:

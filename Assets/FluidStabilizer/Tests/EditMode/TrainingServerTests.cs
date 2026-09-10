@@ -50,6 +50,12 @@ namespace FluidStabilizer.Tests
                 int privSize = BitConverter.ToInt32(hs, 12);
                 int actSize = BitConverter.ToInt32(hs, 16);
 
+                // v2 states the action contract before any episode traffic.
+                string contract = System.Text.Encoding.UTF8.GetString(ReadFrame(s));
+                Assert.IsTrue(PolicyContract.TryParse(contract, out PolicyContract c),
+                    "handshake must carry a parseable action contract: " + contract);
+                Assert.AreEqual(PolicyContract.CurrentObsVersion, c.ObsVersion);
+
                 var reference = MakeEnv();
                 Assert.AreEqual(reference.ObservationSize, obsSize);
                 Assert.AreEqual(reference.PrivilegedObservationSize, privSize);

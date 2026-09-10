@@ -26,7 +26,7 @@ namespace FluidStabilizer.Rl
     public sealed class TrainingServer
     {
         public const uint Magic = 0x464C5544;
-        public const uint Version = 1;
+        public const uint Version = 2;
 
         private const byte OpReset = 0;
         private const byte OpStep = 1;
@@ -77,6 +77,11 @@ namespace FluidStabilizer.Rl
             Put(hs, 12, env.PrivilegedObservationSize);
             Put(hs, 16, env.ActionSize);
             stream.Write(hs, 0, hs.Length);
+
+            // v2: the action contract this environment trains under, so the trainer
+            // can stamp it into the checkpoint and the deployed bridge can execute
+            // the policy the way it was trained (PolicyContract).
+            WriteFrame(stream, System.Text.Encoding.UTF8.GetBytes(env.Contract.Encode()));
 
             while (true)
             {

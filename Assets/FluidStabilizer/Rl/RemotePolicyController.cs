@@ -1,6 +1,7 @@
 using System;
 using System.Net.Sockets;
 using FluidStabilizer.Contracts;
+using FluidStabilizer.Core.Sim;
 
 namespace FluidStabilizer.Rl
 {
@@ -38,10 +39,13 @@ namespace FluidStabilizer.Rl
         private readonly int _port;
         private readonly int _frameStack;
         private readonly double _rateScale;
+        private readonly GimbalConfig _gimbal;    // the actuator this bridge drives
         private readonly int _timeoutMs;
         private readonly Action<string> _log;
 
         private ObservationEncoder _encoder;
+        private PolicyContract _contract;
+        private ActionComposer _composer;   // null = legacy plain absolute-rate path
         private TcpClient _client;
         private NetworkStream _stream;
         private int _obsSize, _actSize;
@@ -51,10 +55,16 @@ namespace FluidStabilizer.Rl
         private long _retryAtSeq;   // while dropped, re-probe the server every ~2 s of control ticks
         private int _retriesLeft = 3;
 
+        /// <param name="gimbal">
+        /// The actuator being driven. Required to compose a <b>residual</b> policy's
+        /// action the same way training did (baseline + residual, lock gate); when
+        /// null only the legacy plain absolute-rate contract can be served.</param>
         public RemotePolicyController(
             string host = "127.0.0.1", int port = 5601, int frameStack = 6,
-            double rateScaleRadPerSec = 3.5, int timeoutMs = 5000, Action<string> log = null)
+            double rateScaleRadPerSec = 3.5, int timeoutMs = 5000, Action<string> log = null,
+            GimbalConfig gimbal = null)
         {
+            _gimbal = gimbal ?? new GimbalConfig { MaxRateRadPerSec = rateScaleRadPerSec };
             _host = host;
             _port = port;
             _frameStack = Math.Max(1, frameStack);
@@ -73,7 +83,12 @@ namespace FluidStabilizer.Rl
             ? (PolicyTicks > 0 ? "mixed-policy-and-hold" : "hold-fallback")
             : PolicyTicks == 0 ? "not-executed"
             : !_identityVerified || _identityChanged ? "policy-unverified" : "policy-ok";
-        public string PolicySettings => $"endpoint={_host}:{_port};stack={_frameStack};rateScale={_rateScale.ToString("R", System.Globalization.CultureInfo.InvariantCulture)};action=absolute-joint-rate";
+        /// <summary>The contract this bridge is actually executing under.</summary>
+        public PolicyContract Contract => _contract;
+
+        public string PolicySettings =>
+            $"endpoint={_host}:{_port};stack={_frameStack};" +
+            (_composer != null ? _contract.Encode() : "action=absolute-joint-rate;contract=legacy-assumed");
 
         private StabilizerCommand Fallback(in SensorBundle sensors)
         {
@@ -94,12 +109,15 @@ namespace FluidStabilizer.Rl
             _identityVerified = _identityChanged = false;
             _warned = false;
             _encoder = new ObservationEncoder(_frameStack);
+            _contract = PolicyContract.Legacy(_rateScale, _frameStack);
+            _composer = null;
             _lastAp = _lastAr = 0.0;
             _seq = 0;
             _retriesLeft = 3;
             _retryAtSeq = 0;
 
             TryConnect();
+            _composer?.Reset();
 
         }
 
@@ -135,6 +153,15 @@ namespace FluidStabilizer.Rl
                     PolicyTicks++;
                     _lastAp = Clamp1(act[0]);
                     _lastAr = _actSize > 1 ? Clamp1(act[1]) : 0.0;
+
+                    if (_composer != null)
+                    {
+                        // Same composition the policy was trained under — baseline,
+                        // residual scale and lock gate all from its own contract.
+                        _composer.SetAction(_lastAp, _lastAr);
+                        _seq++;
+                        return _composer.ComputeCommand(sensors);
+                    }
                     return StabilizerCommand.Rate(_seq++, sensors.StampSeconds,
                         _lastAp * _rateScale, _lastAr * _rateScale);
                 }
@@ -179,6 +206,24 @@ namespace FluidStabilizer.Rl
                     identity = System.Text.Encoding.UTF8.GetString(meta);
                     if (!System.Text.RegularExpressions.Regex.IsMatch(identity, @"^checkpoint-sha256=[0-9a-f]{64};"))
                         throw new InvalidOperationException("invalid policy identity");
+
+                    // A v2 server may state the contract its checkpoint was trained
+                    // under. Honour it exactly, or refuse — running a residual policy
+                    // as if it were an absolute-rate one is the failure this guards.
+                    int ci = identity.IndexOf("contract=", StringComparison.Ordinal);
+                    if (ci >= 0)
+                    {
+                        string raw = identity.Substring(ci + "contract=".Length);
+                        if (!PolicyContract.TryParse(raw, out PolicyContract c))
+                            throw new InvalidOperationException("unparseable policy contract: " + raw);
+                        if (c.FrameStack != _frameStack)
+                            throw new InvalidOperationException(
+                                $"policy frame stack {c.FrameStack} != bridge {_frameStack}");
+                        _composer = ActionComposerFactory.From(c, _gimbal);
+                        _composer.Reset();
+                        _contract = c;
+                        _log("[policy] contract " + c.Encode());
+                    }
                 }
                 if (PolicyIdentity != "unknown" && PolicyIdentity != identity) _identityChanged = true;
                 if (PolicyIdentity == "unknown") PolicyIdentity = identity;

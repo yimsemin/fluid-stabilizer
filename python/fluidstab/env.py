@@ -30,6 +30,8 @@ class FluidStabEnv(gym.Env):
             low=-1.0, high=1.0, shape=(self._c.act_size,), dtype=np.float32
         )
         self.privileged_size = self._c.priv_size
+        # How Unity turns an action into a command (PolicyContract); "" on protocol v1.
+        self.contract = getattr(self._c, "contract", "")
         self._priv = np.zeros(self._c.priv_size, dtype=np.float32)
 
     def reset(self, *, seed: int | None = None, options=None):

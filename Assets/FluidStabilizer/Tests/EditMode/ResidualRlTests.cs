@@ -28,7 +28,8 @@ namespace FluidStabilizer.Tests
                 RewardWeights.Default(),
                 frameStackLength: 6,
                 baselineFactory: baseline,
-                residualRateScaleRadPerSec: baseline == null ? double.NaN : 1.0);
+                residualRateScaleRadPerSec: baseline == null ? double.NaN : 1.0,
+                baselineId: baseline == null ? null : "hold");
         }
 
         private static double RolloutSignature(RlEnvironment env, ulong seed)

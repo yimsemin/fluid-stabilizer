@@ -186,8 +186,9 @@ namespace FluidStabilizer.Sim
             string host = Runner != null ? Runner.PolicyHost : PolicyHost;
             int port = Runner != null ? Runner.PolicyPort : PolicyPort;
             int stack = Runner != null ? Runner.PolicyFrameStack : PolicyFrameStack;
+            var gimbal = trace.ToConfig().Gimbal;
             return new RemotePolicyController(host, port, stack,
-                trace.ToConfig().Gimbal.MaxRateRadPerSec, PolicyConnectTimeoutMs, s => Debug.Log(s));
+                gimbal.MaxRateRadPerSec, PolicyConnectTimeoutMs, s => Debug.Log(s), gimbal);
         }
 
         public void Stop()

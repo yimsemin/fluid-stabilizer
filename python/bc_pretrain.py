@@ -132,7 +132,11 @@ def main():
             "act_dim": act_dim,
             "obs_rms_mean": np.asarray(rms.mean, dtype="float64").tolist(),
             "obs_rms_var": np.asarray(rms.var, dtype="float64").tolist(),
-            "bc": {"rows": int(n), "val_mse": best_val, "drives": meta.get("drives", "")},
+            "bc": {"rows": int(n), "val_mse": best_val, "drives": meta.get("drives", ""),
+                   "clamped_fraction": meta.get("clampedFraction", "")},
+            # The action space these targets live in — must match the environment the
+            # student is fine-tuned in and the bridge it is served through.
+            "contract": meta.get("contract", ""),
         },
         args.out,
     )

@@ -32,6 +32,11 @@ namespace FluidStabilizer.SimEditor
         {
             string[] a = Environment.GetCommandLineArgs();
             int stack = ArgInt(a, "-bcStack", 6);
+            // Targets are expressed in the contract the student will be trained and
+            // served in — a residual policy needs residual targets (PolicyContract).
+            string bcBaseline = ArgStr(a, "-bcBaseline", null);
+            double bcResidualScale = ArgDouble(a, "-bcResidualScale", double.NaN);
+            bool bcLockCapable = ArgInt(a, "-bcLockCapable", 0) != 0;
             string sloshName = ArgStr(a, "-bcSlosh", null);
             Func<FluidStabilizer.Contracts.ISloshModel> slosh = sloshName == "shallow"
                 ? () => new ShallowWaterSloshModel()
@@ -81,7 +86,10 @@ namespace FluidStabilizer.SimEditor
                 using (var r = new StreamReader(trajPath)) traj = BcDatasetExporter.LoadTrajectory(r);
                 if (traj.Count == 0) continue;
 
-                var samples = BcDatasetExporter.FromDrive(trace, traj, sloshName == null ? trace.MakeSloshModel : slosh, stack);
+                var samples = BcDatasetExporter.FromDrive(
+                    trace, traj, sloshName == null ? trace.MakeSloshModel : slosh, stack,
+                    baselineId: bcBaseline, residualScaleRadPerSec: bcResidualScale,
+                    lockCapable: bcLockCapable);
                 if (samples.Count == 0) continue;
 
                 all.AddRange(samples);
@@ -100,11 +108,16 @@ namespace FluidStabilizer.SimEditor
             Directory.CreateDirectory("Logs/bc");
             string output = FluidStabilizer.Core.Sim.Eval.RunProvenance.NewPath("Logs/bc/dataset.csv");
             using (var w = new StreamWriter(output, false))
-                BcDatasetExporter.Write(w, all, obsSize, stack, scale, used);
+                BcDatasetExporter.Write(w, all, obsSize, stack, scale, used,
+                    BcDatasetExporter.LastContract, BcDatasetExporter.LastClampedFraction);
 
             File.WriteAllText(output + ".metadata.txt", evidence.ToString() + "\nstack=" + stack);
             Debug.Log($"[bc] {all.Count} rows from {used.Count} drive(s) → {output}");
         }
+
+        private static double ArgDouble(string[] a, string key, double def) =>
+            double.TryParse(ArgStr(a, key, null), System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out double v) ? v : def;
 
         private static string ArgStr(string[] a, string key, string def)
         {

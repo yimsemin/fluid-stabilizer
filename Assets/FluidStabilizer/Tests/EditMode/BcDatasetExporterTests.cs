@@ -116,7 +116,7 @@ t,pitchRate,rollRate
                     if (line[0] == '#' || line.StartsWith("o0,")) header++;
                     else data++;
                 }
-                Assert.AreEqual(7, header);            // 6 "# ..." + 1 column header
+                Assert.AreEqual(9, header);            // 8 "# ..." (incl. contract, clampedFraction) + 1 column header
                 Assert.AreEqual(samples.Count, data);
             }
         }

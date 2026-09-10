@@ -101,7 +101,7 @@ F5/F6 는 "이 조건에서 못 이긴다" 는 주장인데, trace 가 탱크 �
 **어셈블리** ([Assets/FluidStabilizer/README.md](../Assets/FluidStabilizer/README.md)):
 `Contracts` / `Core` / `Controller` / `Rl` (모두 엔진프리) · `Sim` / `Sim.Editor` (Unity) · `Tests.EditMode`.
 
-**검증:** EditMode 테스트 **145 통과 / 0 실패 / 13 스킵** (스킵 = `[Explicit]` 진단).
+**검증:** EditMode 테스트 **150 통과 / 0 실패 / 13 스킵** (스킵 = `[Explicit]` 진단).
 ```
 "/Applications/Unity/Hub/Editor/6000.5.10f1/Unity.app/Contents/MacOS/Unity" -batchmode -nographics -projectPath . -runTests -testPlatform EditMode -testResults Logs/editmode-results.xml -logFile -
 ```

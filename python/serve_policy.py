@@ -63,8 +63,13 @@ def load_policy(path: str):
     act.policy_identity = (
         f"checkpoint-sha256={hashlib.sha256(checkpoint_bytes).hexdigest()};"
         f"checkpoint={Path(path).name};server-sha256={hashlib.sha256(Path(__file__).read_bytes()).hexdigest()};"
-        f"torch={torch.__version__};numpy={np.__version__};action=absolute-joint-rate;deterministic=mean"
+        f"torch={torch.__version__};numpy={np.__version__};deterministic=mean;"
+        + (f"contract={ck['contract']}" if ck.get("contract")
+           else "action=absolute-joint-rate;contract=absent")
     )
+    if not ck.get("contract"):
+        print("WARNING: checkpoint states no action contract — served on the legacy "
+              "absolute-joint-rate path and reported policy-unverified.")
     return act, obs_dim, act_dim
 
 

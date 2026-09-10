@@ -51,7 +51,7 @@ namespace FluidStabilizer.SimEditor
             // served commands scaled to the wrong ceiling.
             Func<SimulationConfig, IController> hold = _ => new HoldController();
             Func<SimulationConfig, IController> policy = cfg => new RemotePolicyController(
-                host, port, stack, cfg.Gimbal.MaxRateRadPerSec, log: s => Debug.Log(s));
+                host, port, stack, cfg.Gimbal.MaxRateRadPerSec, log: s => Debug.Log(s), gimbal: cfg.Gimbal);
             var controllers = new List<(string, Func<SimulationConfig, IController>)>
             {
                 ("Rigid (Hold)", hold),

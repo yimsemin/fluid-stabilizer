@@ -44,7 +44,7 @@ fluid-stabilizer/
 **파이프라인 전체 완성 + 물리 현실성 (묶음 1·2) + 전제 스윕 (묶음 2c)** (2026-08-30).
 녹화 → hindsight 천장 → BC 데이터셋 → BC 사전학습 → 잔차 PPO → `serve_policy.py`
 → Unity 앱 내 ①②③ 비교 → standalone 앱, 처음부터 끝까지 돈다.
-EditMode 테스트 **145 통과 / 13 스킵**. 리모트 `origin` = `github.com/yimsemin/fluid-stabilizer`.
+EditMode 테스트 **150 통과 / 13 스킵**. 리모트 `origin` = `github.com/yimsemin/fluid-stabilizer`.
 
 **정직한 헤드라인: ① 강체 탱크가 이긴다** (findings F1·F4·F5·**F6**). 완전한
 미래 지식을 가진 후행지식 천장조차 어느 운영점에서도 강체를 못 이긴다 — 이

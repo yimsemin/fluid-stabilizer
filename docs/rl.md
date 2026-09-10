@@ -106,6 +106,37 @@ hindsight 행동을 먹여 → `Logs/bc/dataset.csv`. 그다음 `python bc_pretr
 무동작이라 BC 가 가르치는 건 저진폭 매끄러운 프라이어(탐색을 절벽에서 떼어놓음)
 이지 유능한 정책이 아니다.
 
+## 행동 계약 (PolicyContract) — 2026-09-10
+
+**문제였던 것:** 학습(`RlEnvironment`)은 `rate = baseline + policy·0.35·maxRate`
+를 만들고 lock gate 를 통과시켰는데, 배포(`RemotePolicyController`)는
+`rate = policy·maxRate` 만 보냈다. baseline 도 잠금도 없었다. 즉 **잔차 정책을
+브릿지로 서빙하면 학습 때와 완전히 다른 의미로 실행**됐다. 관측도 1 틱
+어긋나 있었다 — 학습은 `(s_t, a_t)`, 배포는 `(s_{t+1}, a_t)` 를 인코딩했다.
+
+**지금:**
+
+- `PolicyContract` 하나가 baseline · 행동 배율 · maxRate · lock 여부 ·
+  frame stack · 관측 버전을 담는다.
+- `ActionComposer` 하나가 행동 → 명령 합성을 담당하고 **학습과 배포가 같은 것을
+  쓴다.**
+- 관측 정렬을 배포 쪽에 맞췄다 (`_loop.LatestSensorBundle`). **이전 체크포인트는
+  다른 정렬로 학습됐다** — 재학습 대상.
+- 계약이 체크포인트를 따라다닌다: 학습 서버 핸드셰이크(v2) → `train_ppo.py` /
+  `bc_pretrain.py` 가 체크포인트에 저장 → `serve_policy.py` 가 핸드셰이크로
+  되돌려 보냄 → Unity 가 그대로 실행.
+- **계약이 없거나 맞지 않으면 조용히 실행하지 않는다.** 없으면 레거시 절대rate
+  경로 + `policy-unverified`; 액추에이터 상한이나 frame stack 이 다르면 **거부**
+  하고 `hold-fallback` 으로 기록한다 (재스케일 안 함).
+- BC 목표도 계약에 맞춘다. 잔차 계약이면
+  `target = (교사rate − baselineRate) / actionScale` 로 변환하고, 한계에 걸린
+  비율(`clampedFraction`)을 데이터셋 헤더에 기록한다. 절대 목표를 잔차 정책에
+  복제하면 "교사 rate + baseline rate" 를 명령하는 다른 궤적을 배운다.
+
+가드: `PolicyContractParityTests` — 같은 초기조건·결정론적 정책으로 학습 환경과
+브릿지 경로의 **스필·freeboard·명령 rate·스텝 수가 모두 일치**해야 한다
+(plain / hold-잔차 / sfa-잔차 + 잠금). 인코더 클래스가 같다는 건 근거가 아니다.
+
 **정책 서빙 (step D — 배포 분리):** 학습된 정책이 자기 프로세스로 실행,
 `python serve_policy.py --checkpoint runs/<run>/actor.pt --port 5601`
 (`actor_mean` + whitener 로드, 결정론적 mean 반환, 클라이언트별 스레드). Unity
