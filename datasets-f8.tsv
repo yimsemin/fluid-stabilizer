@@ -1,0 +1,4 @@
+# fluid-stabilizer-datasets/v1
+# F8 시연 조건(합성 정상선회). 소유자의 녹화 주행이 아니다 — datasets.tsv 와 별개.
+split	file	sourceSha256	history
+train	demo-corner-20260910-105317-96def66f3dbf43a3bbc2d0d1cae4ca08.trace.csv	8f2efba2a8a9c73d7e9c6d8e32bc239fd671fac9032fae9372027ecdb8e6b2ec	synthetic-f8-demo

@@ -27,9 +27,12 @@ namespace FluidStabilizer.Rl
 
         public struct Sample
         {
-            public float[] Obs;      // length = 39 · frameStack
+            public float[] Obs;      // length = SingleFrameSize · frameStack
             public float ActPitch;   // normalised, [-1, 1]
             public float ActRoll;
+            /// <summary>Explicit-lock contracts only: the release request (findings F9).
+            /// The hindsight teacher is an always-active trajectory, so it releases.</summary>
+            public float ActLock;
         }
 
         /// <summary>One control-rate trajectory row: rad/s, as written by <c>HindsightOptimizer.WriteTrajectoryCsv</c>.</summary>
@@ -76,7 +79,7 @@ namespace FluidStabilizer.Rl
         public static List<Sample> FromDrive(
             DriverTrace trace, IReadOnlyList<TrajRow> traj, Func<ISloshModel> slosh, int frameStack,
             string baselineId = null, double residualScaleRadPerSec = double.NaN,
-            bool lockCapable = false)
+            bool lockCapable = false, string lockMode = "deadband")
         {
             SimulationConfig cfg = trace.ToConfig();
             double dtControl = cfg.PhysicsStepSeconds * cfg.ControlDecimation;
@@ -94,7 +97,8 @@ namespace FluidStabilizer.Rl
                 baselineFactory: residual ? () => PolicyContract.MakeBaseline(baselineId) : (Func<IController>)null,
                 residualRateScaleRadPerSec: residualScaleRadPerSec,
                 lockCapable: lockCapable,
-                baselineId: residual ? baselineId : null);
+                baselineId: residual ? baselineId : null,
+                lockMode: lockMode);
 
             double scale = env.Contract.ActionScaleRadPerSec;
             IController baseline = residual ? PolicyContract.MakeBaseline(baselineId) : null;
@@ -123,9 +127,12 @@ namespace FluidStabilizer.Rl
                 float ap = (float)Clamp1(rawP);
                 float ar = (float)Clamp1(rawR);
 
-                samples.Add(new Sample { Obs = obs, ActPitch = ap, ActRoll = ar });
+                // The teacher runs the servo the whole way, so under an explicit-lock
+                // contract its release request is a committed +1 (findings F9).
+                float al = env.Contract.IsExplicitLock ? 1f : 0f;
+                samples.Add(new Sample { Obs = obs, ActPitch = ap, ActRoll = ar, ActLock = al });
 
-                RlStepResult res = env.Step(ap, ar);
+                RlStepResult res = env.Step(ap, ar, al);
                 obs = res.Observation;
                 if (res.Terminated) break;
             }
@@ -161,7 +168,8 @@ namespace FluidStabilizer.Rl
 
             var sb = new System.Text.StringBuilder();
             for (int i = 0; i < obsSize; i++) sb.Append("o").Append(i.ToString(ic)).Append(',');
-            sb.Append("aPitch,aRoll");
+            bool withLock = contract.IsExplicitLock;
+            sb.Append(withLock ? "aPitch,aRoll,aLock" : "aPitch,aRoll");
             w.WriteLine(sb.ToString());
 
             foreach (Sample s in samples)
@@ -170,6 +178,7 @@ namespace FluidStabilizer.Rl
                 for (int i = 0; i < s.Obs.Length; i++)
                     sb.Append(s.Obs[i].ToString("R", ic)).Append(',');
                 sb.Append(s.ActPitch.ToString("R", ic)).Append(',').Append(s.ActRoll.ToString("R", ic));
+                if (withLock) sb.Append(',').Append(s.ActLock.ToString("R", ic));
                 w.WriteLine(sb.ToString());
             }
         }

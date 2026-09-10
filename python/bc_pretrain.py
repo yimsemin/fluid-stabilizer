@@ -31,6 +31,7 @@ from train_ppo import RunningMeanStd, layer_init
 
 def load_dataset(path: str):
     meta: dict[str, str] = {}
+    n_act = 2
     rows: list[list[float]] = []
     with open(path) as f:
         for line in f:
@@ -40,11 +41,13 @@ def load_dataset(path: str):
                 k, _, v = line[1:].partition(":")
                 meta[k.strip()] = v.strip()
                 continue
-            if line[0] == "o":  # "o0,o1,...,aPitch,aRoll" column header
+            if line[0] == "o":  # "o0,...,aPitch,aRoll[,aLock]" column header
+                n_act = 3 if line.rstrip().endswith("aLock") else 2
                 continue
             rows.append([float(x) for x in line.split(",")])
     arr = np.asarray(rows, dtype=np.float32)
-    obs, act = arr[:, :-2], arr[:, -2:]
+    # Explicit-lock contracts carry a third action column (the release request).
+    obs, act = arr[:, :-n_act], arr[:, -n_act:]
     return obs, act, meta
 
 

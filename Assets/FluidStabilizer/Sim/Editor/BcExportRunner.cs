@@ -37,6 +37,7 @@ namespace FluidStabilizer.SimEditor
             string bcBaseline = ArgStr(a, "-bcBaseline", null);
             double bcResidualScale = ArgDouble(a, "-bcResidualScale", double.NaN);
             bool bcLockCapable = ArgInt(a, "-bcLockCapable", 0) != 0;
+            string bcLockMode = ArgStr(a, "-bcLockMode", "explicit");
             string sloshName = ArgStr(a, "-bcSlosh", null);
             Func<FluidStabilizer.Contracts.ISloshModel> slosh = sloshName == "shallow"
                 ? () => new ShallowWaterSloshModel()
@@ -62,7 +63,14 @@ namespace FluidStabilizer.SimEditor
 
             foreach (DriverTrace trace in TraceStore.LoadDataset("train"))
             {
-                string trajPath = Path.Combine(trajDir, trace.Label + ".traj.csv");
+                // Trajectories written by DemoDriveRunner sit beside their drive
+                // (<drive>.traj.csv) rather than in a run directory keyed by label.
+                string beside = trace.SourcePath.EndsWith(".trace.csv", StringComparison.OrdinalIgnoreCase)
+                    ? trace.SourcePath.Substring(0, trace.SourcePath.Length - ".trace.csv".Length) + ".traj.csv"
+                    : null;
+                string trajPath = beside != null && File.Exists(beside)
+                    ? beside
+                    : Path.Combine(trajDir, trace.Label + ".traj.csv");
                 if (!File.Exists(trajPath)) throw new FileNotFoundException("Missing trajectory for assigned training drive", trajPath);
 
                 var headers = File.ReadLines(trajPath).Where(l => l.StartsWith("# ") && l.Contains(":"))
@@ -74,8 +82,15 @@ namespace FluidStabilizer.SimEditor
                         || !headers.TryGetValue("inputSha256", out string inputHash) || inputHash != trace.InputSha256
                         || !headers.TryGetValue("optimizeModel", out string optimizeModel) || optimizeModel != model)
                         throw new InvalidDataException("Trajectory config/input/model mismatch: " + trajPath);
-                    if (headers.TryGetValue("lockCapable", out string locked) && locked != "False")
-                        throw new InvalidDataException("BC absolute-rate export does not reproduce lock-capable trajectories: " + trajPath);
+                    // A lock-capable teacher only makes sense for a student that can
+                    // also lock. Under an explicit-lock contract it does — the teacher's
+                    // always-active trajectory becomes "release + this residual"
+                    // (findings F9). Under the plain absolute-rate export it does not.
+                    if (headers.TryGetValue("lockCapable", out string locked) && locked != "False"
+                        && !(bcLockCapable && bcLockMode == "explicit"))
+                        throw new InvalidDataException(
+                            "A lock-capable trajectory needs a lock-capable student: pass " +
+                            "-bcLockCapable 1 -bcLockMode explicit. " + trajPath);
                 }
                 else if (ArgInt(a, "-bcAllowLegacyTrajectory", 0) != 1)
                     throw new InvalidDataException("Legacy trajectory settings unknown; explicitly pass -bcAllowLegacyTrajectory 1 for exploratory use only.");
@@ -89,7 +104,7 @@ namespace FluidStabilizer.SimEditor
                 var samples = BcDatasetExporter.FromDrive(
                     trace, traj, sloshName == null ? trace.MakeSloshModel : slosh, stack,
                     baselineId: bcBaseline, residualScaleRadPerSec: bcResidualScale,
-                    lockCapable: bcLockCapable);
+                    lockCapable: bcLockCapable, lockMode: bcLockMode);
                 if (samples.Count == 0) continue;
 
                 all.AddRange(samples);

@@ -301,6 +301,57 @@ namespace FluidStabilizer.Tests
             }
         }
 
+        // PPO fine-tuning raised the shaped return (-875 → -682) while doubling the
+        // spill (12.4 → 24.4 L). If the reward and the metric disagree, the reward
+        // is what the policy optimises — so this prints the per-term totals for the
+        // strategies whose spill we know, to see which term pays for spilling.
+        [Test, Explicit("diagnostic — which reward term disagrees with spill?")]
+        public void PrintRewardBreakdown_ByStrategy()
+        {
+            var cfg = new SimulationConfig { EpisodeSeconds = 25.0 };
+            cfg.Slosh.FillRatio = 0.62;
+            cfg.Road.Enabled = false;
+            cfg.Validate();
+
+            TestContext.WriteLine(
+                $"{"strategy",-18}{"spill[L]",10}{"total",12}{"overflow",12}{"nearRim",10}" +
+                $"{"sloshE",10}{"actRate",10}{"effort",10}{"jointLim",10}{"tilt",10}{"alive",10}{"term",10}");
+
+            foreach (var (name, res, rel) in new[]
+            {
+                ("locked", 0f, -1f),
+                ("release, a=0", 0f, 1f),
+                ("release, a=0.3", 0.3f, 1f),
+                ("release, a=1", 1f, 1f),
+            })
+            {
+                var env = new RlEnvironment(
+                    cfg, _ => new ConstantDriver(new DriverControls
+                        { Throttle = 0.35, Brake = 0.0, Steer = 0.45 }),
+                    () => new PendulumSloshModel(), RewardWeights.Default(),
+                    frameStackLength: 6,
+                    baselineFactory: () => new HoldControllerLocal(),
+                    residualRateScaleRadPerSec: cfg.Gimbal.MaxRateRadPerSec,
+                    lockCapable: true, baselineId: "hold", lockMode: "explicit");
+
+                env.Reset(9000UL);
+                double ov = 0, nr = 0, se = 0, ar = 0, ef = 0, jl = 0, ti = 0, al = 0, te = 0, tot = 0;
+                while (true)
+                {
+                    RlStepResult r = env.Step(res, res, rel);
+                    var b2 = r.RewardBreakdown;
+                    ov += b2.Overflow; nr += b2.NearRim; se += b2.SloshEnergy; ar += b2.ActionRate;
+                    ef += b2.ActuatorEffort; jl += b2.JointLimitProximity; ti += b2.TankTilt;
+                    al += b2.AliveBonus; te += b2.TerminalSpill; tot += r.Reward;
+                    if (r.Terminated || r.Truncated) break;
+                }
+                double spill = env.Summary().TotalOverflowVolume * 1000.0;
+                TestContext.WriteLine(
+                    $"{name,-18}{spill,10:F3}{tot,12:F1}{ov,12:F1}{nr,10:F1}{se,10:F1}" +
+                    $"{ar,10:F1}{ef,10:F1}{jl,10:F1}{ti,10:F1}{al,10:F1}{te,10:F1}");
+            }
+        }
+
         // Maps the cliff: amplitude, and whether frequency matters at all.
         [Test, Explicit("diagnostic — does a wobbling residual break the lock floor?")]
         public void PrintResidualFloor_VsActionWobble()
