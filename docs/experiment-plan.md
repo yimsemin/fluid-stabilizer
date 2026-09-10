@@ -73,8 +73,25 @@ F5/F6 는 "이 조건에서 못 이긴다" 는 주장인데, trace 가 탱크 �
 토크 94~100 % 포화). 천장 5 L 와 최선의 인과 컨트롤러 25 L 사이 **20 L 간극**
 = 이 프로젝트에서 처음 측정된 "학습이 메울 여지".
 
-**다음 걸음 (소유자 판단 대기):** 작은 잔차 RL 을 **이 조건에서** 시도할 근거가
-생겼다. 녹화 주행에서가 아니다. 헤드라인은 그대로 유지된다.
+## 2026-09-10 — 정책 계약 정비 + F8 조건 잔차 RL (findings F9)
+
+**작업 2 (행동 계약):** 학습과 서빙이 서로 다른 행동 의미로 돌고 있었다
+(`baseline + policy·0.35·maxRate` + 잠금 vs `policy·maxRate`), 관측도 1 틱
+어긋나 있었다. `PolicyContract` + `ActionComposer` 로 한 곳에 묶고, 계약이
+체크포인트를 따라다니게 했다 ([rl.md](rl.md) "행동 계약"). 가드:
+`PolicyContractParityTests` — 두 경로의 스필·freeboard·명령rate·스텝수가 일치.
+
+**F8 조건 잔차 RL:** 2회 × 250 k 스텝, Hold 잔차 + lock-capable. **강체를 못
+이긴다** (18~19 L vs 강체 7.9 L, 천장 5.1 L). 리턴은 학습 내내 하락. 실행 상태는
+`policy-ok` — fallback 이 아니라 진짜 결과다.
+
+**이유가 측정됐다 — 액션 공간이 절벽이다** (F9). dead-band 안에서는 관절이 잠겨
+행동 효과가 **정확히 0** (스필이 소수점까지 강체와 동일), 문턱을 넘으면 스필이
+2.4 배. 사이에 기울기가 없다. 주파수 무관, 진폭 임계.
+
+**다음에 바꿀 것은 학습이 아니라 액션 공간이다** — 잠금을 dead-band 로 사후
+판정하지 말고 정책이 명시적으로 요청하게 (세 번째 출력, 또는 잠금 상태를
+관측에 + 전환 비용을 보상에). **소유자 판단 대기.** 헤드라인은 그대로.
 
 ## 지금까지 만든 것
 
@@ -101,7 +118,7 @@ F5/F6 는 "이 조건에서 못 이긴다" 는 주장인데, trace 가 탱크 �
 **어셈블리** ([Assets/FluidStabilizer/README.md](../Assets/FluidStabilizer/README.md)):
 `Contracts` / `Core` / `Controller` / `Rl` (모두 엔진프리) · `Sim` / `Sim.Editor` (Unity) · `Tests.EditMode`.
 
-**검증:** EditMode 테스트 **150 통과 / 0 실패 / 13 스킵** (스킵 = `[Explicit]` 진단).
+**검증:** EditMode 테스트 **150 통과 / 0 실패 / 14 스킵** (스킵 = `[Explicit]` 진단).
 ```
 "/Applications/Unity/Hub/Editor/6000.5.10f1/Unity.app/Contents/MacOS/Unity" -batchmode -nographics -projectPath . -runTests -testPlatform EditMode -testResults Logs/editmode-results.xml -logFile -
 ```
