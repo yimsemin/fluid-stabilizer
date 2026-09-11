@@ -21,8 +21,8 @@ Physical AI 시뮬레이션 프로젝트: **인간이 운전하는** 트럭에 �
 - [docs/project-goals.md](docs/project-goals.md) — 무엇을 · 왜 · 헤드라인 결과 · 최종 아키텍처
 - [docs/experiment-plan.md](docs/experiment-plan.md) — 살아있는 현황 + 다음 단계
 - [docs/demo-guide.md](docs/demo-guide.md) — **시연용 참고 문서** (비개발자 청중)
-- [docs/findings.md](docs/findings.md) — 실험으로 밝혀진 사실 F1~F6
-- [docs/decisions.md](docs/decisions.md) — 설계 결정 로그 D1~D8
+- [docs/findings.md](docs/findings.md) — 실험으로 밝혀진 사실 F1~F10
+- [docs/decisions.md](docs/decisions.md) — 설계 결정 로그 D1~D10
 - [docs/design-review.md](docs/design-review.md) — 아키텍처 결정의 근거 (큰 참고 문서)
 
 ## 저장소 구조
@@ -41,16 +41,23 @@ fluid-stabilizer/
 
 ## 현재 상태
 
-**파이프라인 전체 완성 + 물리 현실성 (묶음 1·2) + 전제 스윕 (묶음 2c)** (2026-08-30).
-녹화 → hindsight 천장 → BC 데이터셋 → BC 사전학습 → 잔차 PPO → `serve_policy.py`
-→ Unity 앱 내 ①②③ 비교 → standalone 앱, 처음부터 끝까지 돈다.
-EditMode 테스트 **152 통과 / 16 스킵**. 리모트 `origin` = `github.com/yimsemin/fluid-stabilizer`.
+**phase-1 종료** (2026-09-11). 녹화 → hindsight 천장 → BC 데이터셋 → BC 사전학습
+→ 잔차 PPO → `serve_policy.py` → Unity 앱 내 ①②③④ 비교 → standalone 앱까지
+처음부터 끝까지 돈다. 재현성(trace v2 · 데이터셋 split · 실행 증거)과 정책 행동
+계약도 갖춰졌다. EditMode 테스트 **152 통과 / 16 스킵**.
+리모트 `origin` = `github.com/yimsemin/fluid-stabilizer`.
 
-**정직한 헤드라인: ① 강체 탱크가 이긴다** (findings F1·F4·F5·**F6**). 완전한
-미래 지식을 가진 후행지식 천장조차 어느 운영점에서도 강체를 못 이긴다 — 이
-문제에서 능동 2축 안정화는 탱크를 볼트로 고정하는 것보다 나을 여지가 없다는
-결과. 긴 잔차 RL 은 전제(탱크 형상 또는 얌전한 주행)가 바뀌기 전까지 보류.
-자세한 건 [docs/experiment-plan.md](docs/experiment-plan.md), [docs/findings.md](docs/findings.md) F6.
+**정직한 헤드라인: ① 강체 탱크가 이긴다** (findings F1·F4·F5·F6). 소유자의 녹화
+주행에서는 완전한 미래 지식을 가진 후행지식 천장조차 강체를 못 이긴다. 인과적
+센서전용 정책이 비인과적 천장을 넘을 수 없으므로 이 결론은 방어된다.
+
+**그리고 ③ 이 실제로 학습한다** (F10). 합성 운영점(매끄러운 노면의 지속 코너링)
+에서 교사 → BC → 배포가 끝까지 돌고 ③ 이 규칙기반을 **51 %** 앞선다
+(12.4 vs 25.2 L; 강체 7.9 L 에는 여전히 패). 그동안 학습이 안 된 이유도 특정됐다 —
+하이퍼파라미터가 아니라 **액션 공간**이었다 (F9 → F10).
+
+자세한 건 [docs/experiment-plan.md](docs/experiment-plan.md) 와
+[docs/findings.md](docs/findings.md) "한눈에" 표.
 
 ## 프로젝트 열기
 
@@ -58,4 +65,5 @@ Unity Hub → **Add → Add project from disk** → 이 폴더 선택. Unity
 **6000.5.10f1** 정확히 (Mac 과 Windows 같은 버전).
 
 플레이 씬: 메뉴 ▸ FluidStabilizer ▸ Rebuild Play Scene 후 `PlayScene.unity` 열기.
-`W/S` 가감속, `A/D` 조향, `0~4` 스태빌라이저, `C` 3-way 비교, `P` 주행 녹화.
+`W/S` 가감속, `A/D` 조향, `0~5` 스태빌라이저(5 = 후행지식 천장), `C` 3-way 비교,
+`P` 주행 녹화, `L` 재생. 시연 흐름은 [docs/demo-guide.md](docs/demo-guide.md).

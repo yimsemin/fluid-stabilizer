@@ -16,7 +16,7 @@
 | [demo-guide.md](demo-guide.md) | **시연용 참고 문서** — 개요·구조·학습 과정·비교·결과 해석·남은 과제 (비개발자 청중) | 소유자 (시연 시) |
 | [vision-check.md](vision-check.md) | 초안 단계별 O/X 체크리스트 (2026-08-30 초안 종료 — 기록으로 보존) | 소유자 |
 | [findings.md](findings.md) | **실험으로 밝혀진 사실 F1~F10** (숫자·근거) | 소유자 + Claude |
-| [decisions.md](decisions.md) | **설계 결정 로그 D1~D8** (무엇을 정했고 왜) | Claude + 소유자 |
+| [decisions.md](decisions.md) | **설계 결정 로그 D1~D10** (무엇을 정했고 왜) | Claude + 소유자 |
 | [design-review.md](design-review.md) | 아키텍처 결정의 근거 (큰 참고 문서, 잘 안 바뀜) | 주로 Claude |
 | [reproducibility.md](reproducibility.md) | **재현성 · 데이터 셋 분리 · 실행 기록 규칙** (trace v2, `datasets.tsv`, provenance, 정책 실행 상태) | Claude + 소유자 |
 | [rl.md](rl.md) | RL 경로 세부 (브릿지·학습기·정책 서빙) | Claude |
@@ -26,6 +26,18 @@
 | [setup-status.md](setup-status.md) | 개발 환경 사실 (버전·경로·도구) | Claude |
 
 ## 정비 이력
+
+### 2026-09-11 — phase-1 종료 정비
+
+- **`findings.md` 맨 위에 "한눈에 — F1~F10" 표** 추가. 769 줄을 한 화면에서
+  훑을 수 있게.
+- **`experiment-plan.md` 통합** — 2026-09-10 에 날짜별로 다섯 덩이 쌓였던 것을
+  "한 문단 현황(phase-1 종료)" 하나로 합치고, "다음에 할 수 있는 것" (A/B/C)을
+  추가. 묶음 3 를 ✅ 로.
+- **`project-goals.md`** — ③ 상태를 🟡 → ✅ (학습한다, 단 ① 에는 패), 로드맵에
+  9~12 단계 추가(재현성 · 전제 조정 · 계약/액션공간 · 종료).
+- **`decisions.md` D9·D10 추가** — 정책 행동 계약, 명시적 잠금 액션(D8 수정).
+- 스테일 참조 정정: F1~F6 → F1~F10, D1~D8 → D1~D10, 테스트 수 131 → 152.
 
 ### 2026-09-10 — 재현성 정비 + F7·F8
 
