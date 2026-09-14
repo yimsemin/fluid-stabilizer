@@ -103,10 +103,12 @@ namespace FluidStabilizer.Sim
         {
             EnsureStyles();
 
-            // A slim always-visible hint so the panel is discoverable.
+            // A slim always-visible hint so the panel is discoverable. Sits below
+            // TraceRecorder's top-center status pill (never on the same row) so the
+            // two never overlap regardless of screen width.
             if (!_open)
             {
-                var hint = new Rect(Screen.width - 232, 10, 222, 26);
+                var hint = new Rect(Screen.width - 232, 46, 222, 26);
                 SimGui.Panel(hint);
                 SimGui.ShadowLabel(new Rect(hint.x + 10, hint.y + 5, hint.width - 20, 18),
                     "`(백틱): 설정 패널", _lbl);

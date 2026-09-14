@@ -119,21 +119,28 @@ namespace FluidStabilizer.Sim
 
             GUILayout.EndArea();
 
-            var botPanel = _detail
-                ? new Rect(12, Screen.height - 96, Mathf.Min(940, Screen.width - 24), 86)
-                : new Rect(12, Screen.height - 40, Mathf.Min(940, Screen.width - 24), 30);
+            // Fixed line count per mode (not one long wrappable string) — a wrapped
+            // line pushes the rest of the block down, and a GUILayout area does not
+            // clip or scroll, so overflow used to render straight past the bottom
+            // of the screen. Height is sized to the panel's own line count and the
+            // panel is anchored by that height, so it always sits inside the screen
+            // with a fixed margin regardless of resolution.
+            string[] detailLines =
+            {
+                "W/S 또는 트리거: 가감속   A/D 또는 스틱: 조향   Space: 스태빌라이저 on/off",
+                "0-4: 스태빌라이저 선택 (4=학습)   M: 슬로시 모델   G: 도로",
+                "R: 리셋   T: 슬로모   Tab: 카메라   P: 녹화   L: 재생",
+                "C: ①②③ 비교   `(백틱): 컨트롤 패널   H: 자세히 숨기기",
+            };
+            const float lineH = 22f, pad = 16f;
+            float botH = _detail ? detailLines.Length * lineH + pad : lineH + pad;
+            var botPanel = new Rect(12, Screen.height - botH - 10, Mathf.Min(720, Screen.width - 24), botH);
             SimGui.Panel(botPanel);
             GUILayout.BeginArea(new Rect(botPanel.x + 12, botPanel.y + 8, botPanel.width - 24, botPanel.height - 16));
             if (_detail)
-            {
-                GUILayout.Label("W/S 또는 트리거: 가감속   A/D 또는 스틱: 조향   Space: 스태빌라이저 on/off", _label);
-                GUILayout.Label("0-4: 스태빌라이저 선택 (4 = 학습, serve_policy.py 필요)   M: 슬로시 모델   G: 도로   R: 리셋   T: 슬로모   Tab: 카메라", _label);
-                GUILayout.Label("P: 주행 녹화   L: 최신 재생   C: ①②③ 비교   `(백틱): 컨트롤 패널   H: 자세히 숨기기", _label);
-            }
+                foreach (var line in detailLines) GUILayout.Label(line, _label, GUILayout.Height(lineH));
             else
-            {
-                GUILayout.Label("W/S·A/D: 운전   Space: 스태빌라이저 on/off   C: ①②③ 비교   H: 자세히 보기", _hint);
-            }
+                GUILayout.Label("W/S·A/D: 운전   Space: 스태빌라이저 on/off   C: ①②③ 비교   H: 자세히 보기", _hint, GUILayout.Height(lineH));
             GUILayout.EndArea();
         }
 
