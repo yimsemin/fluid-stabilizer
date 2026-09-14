@@ -351,7 +351,7 @@ namespace FluidStabilizer.Sim
                 // thin divider between strips
                 if (i > 0) SimGui.Box(new Rect(0, i * stripH - 1, Screen.width, 2), new Color(0, 0, 0, 0.6f));
 
-                var card = new Rect(12, i * stripH + 10, 250, 118);
+                var card = new Rect(12, i * stripH + 10, 300, 128);
                 SimGui.Panel(card);
                 if (isBest) SimGui.Border(card, new Color(0.35f, 0.95f, 0.45f, 0.95f), 2f);
 

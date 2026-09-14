@@ -53,7 +53,8 @@ namespace FluidStabilizer.Sim
             Box(new Rect(r.xMax - t, r.y, t, r.height), c);
         }
 
-        /// <summary>A label style with a soft drop shadow — legible even without a panel behind it.</summary>
+        /// <summary>A label style with a soft drop shadow — legible even without a panel behind it.
+        /// Word-wraps by default so Korean text never runs past its box edge.</summary>
         public static GUIStyle Shadowed(int fontSize, Color color, FontStyle style = FontStyle.Normal)
         {
             var s = new GUIStyle(GUI.skin.label)
@@ -62,6 +63,7 @@ namespace FluidStabilizer.Sim
                 fontStyle = style,
                 normal = { textColor = color },
                 richText = false,
+                wordWrap = true,
             };
             return s;
         }

@@ -113,7 +113,7 @@ namespace FluidStabilizer.Sim
                 return;
             }
 
-            float w = 366f, x = Screen.width - w - 10f, y = 10f, h = Screen.height - 20f;
+            float w = 400f, x = Screen.width - w - 10f, y = 10f, h = Screen.height - 20f;
             var panel = new Rect(x, y, w, h);
             SimGui.Panel(panel, 0.92f);
 
@@ -311,10 +311,10 @@ namespace FluidStabilizer.Sim
         private double Slider(string label, double v, double lo, double hi, string suffix)
         {
             GUILayout.BeginHorizontal();
-            GUILayout.Label(label, _lbl, GUILayout.Width(150));
+            GUILayout.Label(label, _lbl, GUILayout.Width(172), GUILayout.ExpandWidth(false));
             float nv = GUILayout.HorizontalSlider((float)v, (float)lo, (float)hi, GUILayout.ExpandWidth(true));
             string txt = suffix == "×" ? "×" + nv.ToString("0.0") : nv.ToString("0.00") + suffix;
-            GUILayout.Label(txt, _lbl, GUILayout.Width(60));
+            GUILayout.Label(txt, _lbl, GUILayout.Width(70), GUILayout.ExpandWidth(false));
             GUILayout.EndHorizontal();
             return nv;
         }
@@ -322,7 +322,7 @@ namespace FluidStabilizer.Sim
         private string Choice(string label, string cur, params string[] opts)
         {
             GUILayout.BeginHorizontal();
-            if (!string.IsNullOrEmpty(label)) GUILayout.Label(label, _lbl, GUILayout.Width(60));
+            if (!string.IsNullOrEmpty(label)) GUILayout.Label(label, _lbl, GUILayout.Width(70), GUILayout.ExpandWidth(false));
             string result = cur;
             foreach (var o in opts)
                 if (GUILayout.Button(o, o == cur ? _btnOn : _btn, GUILayout.Height(22))) result = o;
