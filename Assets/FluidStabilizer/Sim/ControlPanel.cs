@@ -264,6 +264,24 @@ namespace FluidStabilizer.Sim
             catch { return null; }
         }
 
+        /// <summary>Stop-then-start so a running server picks up the newest checkpoint
+        /// (<see cref="LatestCheckpoint"/>) — used after <see cref="LiveTrainingPanel"/>
+        /// finishes training a new one. No-op outside the Editor.</summary>
+        public void RestartServer()
+        {
+            if (!Application.isEditor) return;
+            StartCoroutine(RestartServerRoutine());
+        }
+
+        private System.Collections.IEnumerator RestartServerRoutine()
+        {
+            bool wasRunning = _serverProc != null;
+            StopServer(quiet: true);
+            _portListening = false;
+            if (wasRunning) yield return new WaitForSecondsRealtime(0.6f); // let the old process release the port
+            StartServer();
+        }
+
         private void StartServer()
         {
             if (!Application.isEditor)

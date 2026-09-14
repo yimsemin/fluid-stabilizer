@@ -130,7 +130,7 @@ namespace FluidStabilizer.Sim
                 "W/S 또는 트리거: 가감속   A/D 또는 스틱: 조향   Space: 스태빌라이저 on/off",
                 "0-4: 스태빌라이저 선택 (4=학습)   M: 슬로시 모델   G: 도로",
                 "R: 리셋   T: 슬로모   Tab: 카메라   P: 녹화   L: 재생",
-                "C: ①②③ 비교   `(백틱): 컨트롤 패널   H: 자세히 숨기기",
+                "C: ①②③ 비교   `(백틱): 컨트롤 패널   K: 라이브 학습   H: 자세히 숨기기",
             };
             const float lineH = 22f, pad = 16f;
             float botH = _detail ? detailLines.Length * lineH + pad : lineH + pad;

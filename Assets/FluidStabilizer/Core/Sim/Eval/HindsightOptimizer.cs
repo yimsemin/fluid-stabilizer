@@ -286,8 +286,16 @@ namespace FluidStabilizer.Core.Sim.Eval
             return loop.RunEpisode(trace.Seed);
         }
 
-        /// <summary>Run the offline search for one drive. Deterministic given the trace and options.</summary>
-        public static HindsightOptimization Optimize(DriverTrace trace, HindsightOptions opts)
+        /// <summary>Total <see cref="Cost"/> evaluations <see cref="Optimize"/> will run for
+        /// <paramref name="opts"/> — for a progress bar, computed without actually running anything.</summary>
+        public static int EstimatedEvalCount(HindsightOptions opts) =>
+            1 + Math.Max(0, opts.Restarts - 1) + Math.Max(1, opts.Restarts) * opts.IterationsPerRestart;
+
+        /// <summary>Run the offline search for one drive. Deterministic given the trace and options.
+        /// <paramref name="onEval"/>, if given, is called after every simulated episode with the
+        /// cumulative eval count (compare against <see cref="EstimatedEvalCount"/> for a fraction) —
+        /// safe to call off the main thread, it touches no Unity API.</summary>
+        public static HindsightOptimization Optimize(DriverTrace trace, HindsightOptions opts, Action<int> onEval = null)
         {
             if (opts.KnotCount < 1) throw new ArgumentException("KnotCount must be >= 1");
 
@@ -301,6 +309,7 @@ namespace FluidStabilizer.Core.Sim.Eval
                 EpisodeResult r = EvaluateTrajectory(trace, p, opts.KnotCount, opts.OptimizeModel, rateScale,
                     opts.ConfigOverride, opts.LockCapable);
                 evals++;
+                onEval?.Invoke(evals);
                 return r.TotalOverflowVolume * 1000.0
                        + opts.EffortCostWeightLitresPerRadPerSec * r.MeanAbsActionRate;
             }
@@ -362,9 +371,9 @@ namespace FluidStabilizer.Core.Sim.Eval
         }
 
         /// <summary>Optimise one drive, then score the ceiling vs the Hold floor vs do-nothing under every eval model.</summary>
-        public static HindsightDriveReport Run(DriverTrace trace, HindsightOptions opts)
+        public static HindsightDriveReport Run(DriverTrace trace, HindsightOptions opts, Action<int> onEval = null)
         {
-            HindsightOptimization opt = Optimize(trace, opts);
+            HindsightOptimization opt = Optimize(trace, opts, onEval);
             SimulationConfig effCfg = opts.MakeConfig(trace);
 
             var report = new HindsightDriveReport
