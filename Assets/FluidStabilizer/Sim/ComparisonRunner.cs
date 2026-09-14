@@ -48,6 +48,15 @@ namespace FluidStabilizer.Sim
         public int PolicyFrameStack = 6;
         public int PolicyConnectTimeoutMs = 2000;
 
+        /// <summary>Port for <see cref="StabilizerChoice.LearnedPolicyB"/> — the "새 정책" lane
+        /// in <see cref="StartOldVsNewComparison"/>, a second <c>serve_policy.py</c> process
+        /// serving a different checkpoint than the one on <see cref="PolicyPort"/>.</summary>
+        public int PolicyPortB = 5602;
+
+        /// <summary>Per-lane title override for the current run (set by
+        /// <see cref="StartOldVsNewComparison"/>); null = the usual "①②③" + ShortName.</summary>
+        private string[] _laneLabels;
+
         /// <summary>Freeboard (m) below which a lane is "near the rim".</summary>
         public double NearRimMargin = 0.05;
 
@@ -86,7 +95,7 @@ namespace FluidStabilizer.Sim
             else StartFromNewestTrace();
         }
 
-        public void StartFromNewestTrace()
+        public void StartFromNewestTrace(StabilizerChoice[] lanesOverride = null, string[] labelsOverride = null)
         {
             string path = TraceStore.NewestFile();
             if (path == null)
@@ -94,15 +103,22 @@ namespace FluidStabilizer.Sim
                 Debug.LogWarning("[compare] no recorded traces in " + TraceStore.Dir + " — press P to record one first.");
                 return;
             }
-            StartComparison(DriverTrace.LoadFromFile(path));
+            StartComparison(DriverTrace.LoadFromFile(path), withRigs: true, lanesOverride, labelsOverride);
         }
 
         public void StartComparison(DriverTrace trace) => StartComparison(trace, withRigs: true);
 
-        /// <summary><paramref name="withRigs"/> = false skips all Unity scene objects — for headless tests.</summary>
-        public void StartComparison(DriverTrace trace, bool withRigs)
+        /// <summary>
+        /// <paramref name="withRigs"/> = false skips all Unity scene objects — for headless tests.
+        /// <paramref name="lanesOverride"/>/<paramref name="labelsOverride"/> run a one-off lane
+        /// set (e.g. <see cref="StartOldVsNewComparison"/>) without touching <see cref="Lanes"/>,
+        /// so the next plain <c>C</c> press still gets the usual ①②③.
+        /// </summary>
+        public void StartComparison(DriverTrace trace, bool withRigs, StabilizerChoice[] lanesOverride = null, string[] labelsOverride = null)
         {
             Stop();
+            StabilizerChoice[] lanes = lanesOverride ?? Lanes;
+            _laneLabels = labelsOverride;
             _trace = trace;
             if (!string.IsNullOrEmpty(trace.Assumptions)) Debug.LogWarning("[compare] legacy assumptions: " + trace.Assumptions);
             _finished = false;
@@ -121,24 +137,24 @@ namespace FluidStabilizer.Sim
                 if (Camera != null) Camera.enabled = false;   // the split-screen lane cameras take over
             }
 
-            int n = Lanes.Length;
+            int n = lanes.Length;
             for (int i = 0; i < n; i++)
             {
-                IController ctrl = BuildLaneController(Lanes[i], trace);
+                IController ctrl = BuildLaneController(lanes[i], trace);
                 var loop = new SimulationLoop(
                     trace.ToConfig(), ctrl, new RecordedTraceDriver(trace), trace.MakeSloshModel());
                 loop.BeginEpisode(trace.Seed);
 
                 var lane = new Lane
                 {
-                    Choice = Lanes[i], Controller = ctrl, Loop = loop,
+                    Choice = lanes[i], Controller = ctrl, Loop = loop,
                     WorldOffset = new Vector3(i * LaneWorldGap, 0f, 0f),
                 };
 
                 if (withRigs && RigTemplate != null)
                 {
                     var rig = Instantiate(RigTemplate.gameObject);
-                    rig.name = "CompareLane_" + Lanes[i];
+                    rig.name = "CompareLane_" + lanes[i];
                     rig.SetActive(true);
 
                     var view = rig.AddComponent<SimView>();
@@ -160,7 +176,7 @@ namespace FluidStabilizer.Sim
                     lane.Ribbon = ribbon;
 
                     // Its own camera, rendering a horizontal strip (① top → ③ bottom).
-                    var camGo = new GameObject("CompareCam_" + Lanes[i]);
+                    var camGo = new GameObject("CompareCam_" + lanes[i]);
                     var cam = camGo.AddComponent<Camera>();
                     if (Camera != null) cam.CopyFrom(Camera);
                     cam.enabled = true;
@@ -174,21 +190,41 @@ namespace FluidStabilizer.Sim
             }
 
             Active = true;
-            Debug.Log($"[compare] '{trace.Label}' — split screen, {_lanes.Count} strips: {string.Join(", ", Lanes.Select(SimulationRunner.ShortName))}");
+            Debug.Log($"[compare] '{trace.Label}' — split screen, {_lanes.Count} strips: {string.Join(", ", lanes.Select(SimulationRunner.ShortName))}");
         }
 
-        /// <summary>The learned lane is a bridge client; the rest are the engine-free analytic controllers.</summary>
+        /// <summary>The learned lane(s) are bridge clients; the rest are the engine-free analytic controllers.</summary>
         private IController BuildLaneController(StabilizerChoice choice, DriverTrace trace)
         {
-            if (choice != StabilizerChoice.LearnedPolicy)
+            if (choice != StabilizerChoice.LearnedPolicy && choice != StabilizerChoice.LearnedPolicyB)
                 return SimulationRunner.MakeController(choice);
 
             string host = Runner != null ? Runner.PolicyHost : PolicyHost;
-            int port = Runner != null ? Runner.PolicyPort : PolicyPort;
+            int port = choice == StabilizerChoice.LearnedPolicyB
+                ? PolicyPortB
+                : (Runner != null ? Runner.PolicyPort : PolicyPort);
             int stack = Runner != null ? Runner.PolicyFrameStack : PolicyFrameStack;
             var gimbal = trace.ToConfig().Gimbal;
             return new RemotePolicyController(host, port, stack,
                 gimbal.MaxRateRadPerSec, PolicyConnectTimeoutMs, s => Debug.Log(s), gimbal);
+        }
+
+        /// <summary>
+        /// "청중 데이터로 재학습했더니 실제로 나아졌나?" — a 3-lane comparison of
+        /// ① rigid (the project's one hard baseline, CLAUDE.md) against the
+        /// policy that was already running (<see cref="PolicyPort"/>, left
+        /// untouched) and the one <see cref="LiveTrainingPanel"/> just trained
+        /// (a second <c>serve_policy.py</c> the caller has started on
+        /// <paramref name="newPolicyPort"/>). Uses the newest recorded trace,
+        /// like the normal <c>C</c> comparison. A later plain <c>C</c> press
+        /// goes back to the usual ①②③ — this does not touch <see cref="Lanes"/>.
+        /// </summary>
+        public void StartOldVsNewComparison(int newPolicyPort)
+        {
+            PolicyPortB = newPolicyPort;
+            StartFromNewestTrace(
+                new[] { StabilizerChoice.Off, StabilizerChoice.LearnedPolicy, StabilizerChoice.LearnedPolicyB },
+                new[] { "① 강체", "이전 정책", "새 정책" });
         }
 
         public void Stop()
@@ -355,10 +391,12 @@ namespace FluidStabilizer.Sim
                 SimGui.Panel(card);
                 if (isBest) SimGui.Border(card, new Color(0.35f, 0.95f, 0.45f, 0.95f), 2f);
 
-                string tag = i < 3 ? "①②③"[i].ToString() + " " : "";
+                string title = _laneLabels != null && i < _laneLabels.Length
+                    ? _laneLabels[i]
+                    : (i < 3 ? "①②③"[i].ToString() + " " : "") + SimulationRunner.ShortName(l.Choice);
 
                 GUILayout.BeginArea(new Rect(card.x + 12, card.y + 8, card.width - 24, card.height - 16));
-                GUILayout.Label(tag + SimulationRunner.ShortName(l.Choice) + (offline ? "  [" + ((RemotePolicyController)l.Controller).ExecutionStatus + "]" : ""), _title);
+                GUILayout.Label(title + (offline ? "  [" + ((RemotePolicyController)l.Controller).ExecutionStatus + "]" : ""), _title);
                 GUILayout.Space(2);
                 var prevC = _big.normal.textColor;
                 _big.normal.textColor = isBest ? new Color(0.5f, 1f, 0.55f)

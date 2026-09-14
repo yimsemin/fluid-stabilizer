@@ -231,10 +231,11 @@ namespace FluidStabilizer.Sim
 
         // ------------------------------------------------------------- python
 
-        private static string RepoRoot() =>
+        /// <summary>Reused by <see cref="LiveTrainingPanel"/> to launch the "새 정책" comparison server.</summary>
+        internal static string RepoRoot() =>
             Directory.GetParent(Application.dataPath)?.FullName ?? Application.dataPath;
 
-        private static string PythonExe()
+        internal static string PythonExe()
         {
             string venv = Path.Combine(RepoRoot(), "python", ".venv", "bin", "python");
             if (File.Exists(venv)) return venv;

@@ -142,6 +142,7 @@ namespace FluidStabilizer.SimEditor
             controlPanel.Comparison = comparison;
 
             liveTraining.ControlPanel = controlPanel;
+            liveTraining.Comparison = comparison;
 
             // --- save ---
             Directory.CreateDirectory(Path.GetDirectoryName(ScenePath));

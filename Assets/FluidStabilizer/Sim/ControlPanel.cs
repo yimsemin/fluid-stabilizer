@@ -33,6 +33,9 @@ namespace FluidStabilizer.Sim
         public int PolicyPort = 5601;
         private System.Diagnostics.Process _serverProc;   // non-null only if we launched it
         private volatile bool _portListening;
+        /// <summary>True once the port probe has confirmed something answers on <see cref="PolicyPort"/> —
+        /// used by <see cref="LiveTrainingPanel"/> to tell whether there's an "이전 정책" to compare against.</summary>
+        public bool ServerRunning => _portListening;
         private float _probeIn;
         private string _serverMsg = "";
 

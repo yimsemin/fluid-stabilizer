@@ -18,6 +18,9 @@ namespace FluidStabilizer.Sim
         PrivilegedFeedforward,  // cheats (true slosh-free tilt) — for comparison only
         LearnedPolicy,          // ③ — the RL policy, served by python/serve_policy.py over TCP
         HindsightCeiling,       // ④ — offline optimum replayed; needs <trace>.traj.csv beside the trace
+        LearnedPolicyB,         // comparison-only: a second learned-policy lane on ComparisonRunner.PolicyPortB
+                                 // (the "새 정책" side of the old-vs-new live-training comparison) — never
+                                 // reachable from the single-sim 0-5 keys, only from ComparisonRunner.
     }
 
     public enum SloshModelChoice
@@ -246,6 +249,7 @@ namespace FluidStabilizer.Sim
             StabilizerChoice.PrivilegedFeedforward => "Privileged feed-forward",
             StabilizerChoice.LearnedPolicy => "Learned policy (③)",
             StabilizerChoice.HindsightCeiling => "Hindsight ceiling (④)",
+            StabilizerChoice.LearnedPolicyB => "새 정책 (재학습)",
             _ => c.ToString(),
         };
 

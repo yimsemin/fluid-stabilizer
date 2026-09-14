@@ -1,7 +1,12 @@
-using System.Collections.Generic;
+using System;
+using System.Collections;
+using System.Diagnostics;
+using System.IO;
+using System.Net.Sockets;
 using FluidStabilizer.Core.Sim.Drivers;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using Debug = UnityEngine.Debug;
 
 namespace FluidStabilizer.Sim
 {
@@ -16,11 +21,18 @@ namespace FluidStabilizer.Sim
     public sealed class LiveTrainingPanel : MonoBehaviour
     {
         public ControlPanel ControlPanel;
+        public ComparisonRunner Comparison;
 
         private bool _open;
         private readonly LiveTrainingPipeline _pipeline = new LiveTrainingPipeline();
         private int _usableCount = -1;
         private float _recheckIn;
+
+        // --- old-vs-new comparison server (a second serve_policy.py; ControlPanel's own
+        // server, the "이전 정책", is left running untouched) ---
+        private Process _cmpServerProc;
+        private string _cmpMsg = "";
+        private bool _cmpStarting;
 
         private GUIStyle _h1, _h2, _lbl, _dim, _btn, _bar, _barFillOk, _barFillErr, _warn, _hint;
 
@@ -106,8 +118,21 @@ namespace FluidStabilizer.Sim
             {
                 GUILayout.Space(10);
                 GUILayout.Label("새 체크포인트: " + System.IO.Path.GetFileName(System.IO.Path.GetDirectoryName(snap.CheckpointPath)) + "/actor.pt", _dim);
+
                 if (ControlPanel != null && GUILayout.Button("정책 서버 (재)시작 → ③ 레인에 반영", _btn, GUILayout.Height(28)))
                     ControlPanel.RestartServer();
+
+                GUILayout.Space(6);
+                bool canCompare = ControlPanel != null && Comparison != null && ControlPanel.ServerRunning && !_cmpStarting;
+                using (new Disabled(!canCompare))
+                {
+                    if (GUILayout.Button("이전 vs 새 정책 비교 시작 (①·이전·새 3레인)", _btn, GUILayout.Height(28)))
+                        StartCoroutine(StartOldVsNewComparisonRoutine(snap.CheckpointPath));
+                }
+                if (ControlPanel != null && !ControlPanel.ServerRunning)
+                    GUILayout.Label("먼저 컨트롤 패널(`)에서 서버를 켜두세요 — 그게 '이전 정책'이 됩니다.", _dim);
+                if (!string.IsNullOrEmpty(_cmpMsg))
+                    GUILayout.Label(_cmpMsg, _dim);
             }
 
             GUILayout.FlexibleSpace();
@@ -151,6 +176,76 @@ namespace FluidStabilizer.Sim
             var pctStyle = new GUIStyle(_lbl) { alignment = TextAnchor.MiddleCenter, fontStyle = FontStyle.Bold };
             GUI.Label(rect, $"{snap.Progress * 100f:0}%", pctStyle);
         }
+
+        // ------------------------------------------------------- old-vs-new comparison
+
+        private IEnumerator StartOldVsNewComparisonRoutine(string checkpointPath)
+        {
+            _cmpStarting = true;
+            int port = ControlPanel.PolicyPort + 1;
+            _cmpMsg = $"새 정책 서버 시작 중… (port {port})";
+            StopComparisonServer();
+            StartComparisonServer(checkpointPath, port);
+
+            float waited = 0f;
+            while (waited < 8f && !ProbePort(port))
+            {
+                yield return new WaitForSecondsRealtime(0.5f);
+                waited += 0.5f;
+            }
+            _cmpMsg = waited >= 8f
+                ? "새 정책 서버 응답 없음 — 그래도 비교를 시작합니다 (offline 으로 보일 수 있음)"
+                : "새 정책 서버 준비됨";
+
+            Comparison.StartOldVsNewComparison(port);
+            _cmpStarting = false;
+            _open = false; // get the guided panel out of the way once the comparison is on screen
+        }
+
+        private void StartComparisonServer(string checkpointPath, int port)
+        {
+            string script = Path.Combine(LiveTrainingPipeline.RepoRoot(), "python", "serve_policy.py");
+            if (!File.Exists(script)) { _cmpMsg = "serve_policy.py 를 찾을 수 없음"; return; }
+            try
+            {
+                var psi = new ProcessStartInfo(LiveTrainingPipeline.PythonExe())
+                {
+                    Arguments = $"\"{script}\" --checkpoint \"{checkpointPath}\" --port {port}",
+                    WorkingDirectory = Path.Combine(LiveTrainingPipeline.RepoRoot(), "python"),
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                };
+                _cmpServerProc = Process.Start(psi);
+            }
+            catch (Exception e)
+            {
+                _cmpServerProc = null;
+                _cmpMsg = "새 정책 서버 시작 실패: " + e.Message;
+            }
+        }
+
+        private void StopComparisonServer()
+        {
+            if (_cmpServerProc == null) return;
+            try { if (!_cmpServerProc.HasExited) _cmpServerProc.Kill(); } catch { }
+            _cmpServerProc = null;
+        }
+
+        private static bool ProbePort(int port)
+        {
+            try
+            {
+                using var c = new TcpClient();
+                var ar = c.BeginConnect("127.0.0.1", port, null, null);
+                bool ok = ar.AsyncWaitHandle.WaitOne(200) && c.Connected;
+                if (c.Connected) c.EndConnect(ar);
+                return ok;
+            }
+            catch { return false; }
+        }
+
+        private void OnApplicationQuit() => StopComparisonServer();
+        private void OnDestroy() => StopComparisonServer();
 
         private readonly struct Disabled : System.IDisposable
         {
