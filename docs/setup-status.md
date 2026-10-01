@@ -15,7 +15,7 @@
 | Git 신원 | `YSM` (global), `core.autocrlf=input` (local) |
 | GitHub CLI (`gh`) | `yimsemin` 으로 인증 (scopes: repo, workflow, read:org, gist) |
 | Python (시스템) | 3.13 |
-| **Python (프로젝트, `python/.venv`)** | **3.9.6** (CommandLineTools) — torch 2.8.0 / gymnasium 1.1.1 / tensorboard, 전부 arm64, MPS 사용 가능 |
+| **Python (프로젝트, `python/.venv`)** | **3.12** (uv 관리, `python/.python-version`) — 정확한 버전은 `python/uv.lock`. torch / gymnasium / tensorboard 전부 arm64, MPS 사용 가능 |
 
 ## Unity 프로젝트
 

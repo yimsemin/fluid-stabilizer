@@ -56,8 +56,8 @@ findings F1~F4: 강체(잠금 관절) `Hold` 상대로 **어떤 분석적 반응
 > `Temp/UnityLockfile` 이 사라졌는지 확인.
 
 ```bash
-# 1. 학습기 설치 (한 번). CPython 3.9~3.13 아무거나. 커밋된 python/.venv 는 3.9.6.
-cd python && python3 -m venv .venv && . .venv/bin/activate && pip install -r requirements.txt
+# 1. 학습기 설치 (한 번). Python 3.12 는 uv 가 내려받음. 자세히: python/README.md
+cd python && uv sync
 
 # 2. 시뮬 서버 시작 (헤드리스 Unity; 계속 켜둠 — Serve() 가 accept 루프에서
 #    영원히 블록, 정상, -quit 주지 말 것). ~5 s (웜) ~ 1 분 (콜드).

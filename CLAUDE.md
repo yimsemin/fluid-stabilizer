@@ -74,8 +74,10 @@ design-review §6. **브래킷 규율** (findings F3): 진자 ROM 으로 학습,
   `github.com/yimsemin/fluid-stabilizer` (존재).
 - 생성 파일 (`Library/`, `*.sln`, `*.csproj`, `Logs/`, `UserSettings/`,
   `Temp/`, `Builds/`)은 gitignore.
-- Python: `python/.venv` = **Python 3.9.6** (CommandLineTools), torch 2.8.0 /
-  gymnasium / tensorboard 모두 arm64 에서 작동.
+- Python: **uv** 로 관리. `python/.python-version` = 3.12 (uv 가 내려받음),
+  의존성 정본 `python/pyproject.toml` + `uv.lock`, `python/requirements.txt` 는
+  거기서 생성한 pip 용 파일. `cd python && uv sync` → `python/.venv` (Unity 가
+  이 경로를 가정). torch / gymnasium / tensorboard 모두 arm64 에서 작동.
 - 헤드리스 검증: `"/Applications/Unity/Hub/Editor/6000.5.10f1/Unity.app/Contents/MacOS/Unity" -batchmode -nographics -projectPath . -runTests -testPlatform EditMode -testResults Logs/x.xml -logFile -`
 
 ## 현재 상태
