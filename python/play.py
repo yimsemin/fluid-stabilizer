@@ -48,7 +48,7 @@ def main():
     args = p.parse_args()
 
     env = FluidStabEnv(args.host, args.port)
-    ckpt = torch.load(args.actor, map_location="cpu")
+    ckpt = torch.load(args.actor, map_location="cpu", weights_only=False)
     actor = build_actor(ckpt, env.observation_space.shape[0], env.action_space.shape[0])
     whiten = make_whitener(ckpt)
 
