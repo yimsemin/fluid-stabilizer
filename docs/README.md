@@ -17,7 +17,7 @@
 | [vision-check.md](vision-check.md) | 초안 단계별 O/X 체크리스트 (2026-08-30 초안 종료 — 기록으로 보존) | 소유자 |
 | [lessons.md](lessons.md) | **결과·교훈·후속 제언 요약** — 처음 보는 사람용 한 문서 (포트폴리오·후속 프로젝트 출발점) | 누구나 |
 | [findings.md](findings.md) | **실험으로 밝혀진 사실 F1~F13** (숫자·근거) | 소유자 + Claude |
-| [decisions.md](decisions.md) | **설계 결정 로그 D1~D10** (무엇을 정했고 왜) | Claude + 소유자 |
+| [decisions.md](decisions.md) | **설계 결정 로그 D1~D11** (무엇을 정했고 왜) | Claude + 소유자 |
 | [design-review.md](design-review.md) | 아키텍처 결정의 근거 (큰 참고 문서, 잘 안 바뀜) | 주로 Claude |
 | [reproducibility.md](reproducibility.md) | **재현성 · 데이터 셋 분리 · 실행 기록 규칙** (trace v2, `datasets.tsv`, provenance, 정책 실행 상태) | Claude + 소유자 |
 | [rl.md](rl.md) | RL 경로 세부 (브릿지·학습기·정책 서빙) | Claude |
@@ -32,6 +32,9 @@
 
 - **`lessons.md` 신설** — 결과·교훈·한계·후속 제언을 처음 보는 사람 기준으로 한 곳에.
 - **F11~F13 추가** — 교사 다양화 · DAgger · 홀드아웃 최종 평가. `final` 7 주행 소비.
+- **D11 추가** — 유휴 교사 잠금 라벨, 합성 교사 별도 매니페스트, BC/DAgger 줄기 닫음.
+- **`experiment-plan.md` "앞으로 할 수 있는 것"** 을 닫힘 / 열림 / 보류로 재구성.
+  `project-goals.md` 로드맵에 13~15 단계, `CLAUDE.md` 현재 상태 정정.
 
 ### 2026-09-11 — phase-1 종료 정비
 
