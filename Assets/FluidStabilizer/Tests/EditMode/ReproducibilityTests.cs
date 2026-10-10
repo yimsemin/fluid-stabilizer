@@ -134,15 +134,19 @@ namespace FluidStabilizer.Tests
         }
 
         [Test]
-        public void ShippedManifest_LoadsAndAssignsNoFinalDrives()
+        public void ShippedManifest_LoadsAllSplitsWithoutOverlap()
         {
             if (!File.Exists("datasets.tsv") || !Directory.Exists("Traces"))
                 Assert.Ignore("no local Traces/ — recorded drives are not committed");
             var train = TraceDataset.Load("datasets.tsv", "Traces", "train");
+            var validation = TraceDataset.Load("datasets.tsv", "Traces", "validation");
+            var final = TraceDataset.Load("datasets.tsv", "Traces", "final");
             Assert.IsNotEmpty(train);
-            CollectionAssert.AllItemsAreUnique(train.Select(t => t.InputSha256).ToList());
-            // documented in docs/reproducibility.md: a real holdout does not exist yet
-            Assert.Throws<InvalidDataException>(() => TraceDataset.Load("datasets.tsv", "Traces", "final"));
+            Assert.IsNotEmpty(validation);
+            Assert.IsNotEmpty(final);
+            // no drive may sit in two splits (also enforced by the loader)
+            var all = train.Concat(validation).Concat(final).Select(t => t.InputSha256).ToList();
+            CollectionAssert.AllItemsAreUnique(all);
         }
 
         // The demo the owner runs by hand depends on a file convention, not on

@@ -1,6 +1,6 @@
 # fluid-stabilizer-datasets/v1
 # 기존 BC 및 반복 조건 탐색에 사용한 6개 주행. 새 홀드아웃 아님.
-# validation/final은 아직 없음. final의 history는 unseen만 허용.
+# validation/final: 2026-10-10 새로 녹화한 주행 9개 (녹화 후 재생·평가 안 함). final의 history는 unseen만 허용.
 split	file	sourceSha256	history
 train	drive-20260829-132335.trace.csv	ec61c3969336b474250a96fcee8aa43842f8b64f7f28443b893c232a5bcdc914	bc-and-repeated-condition-search
 train	drive-20260829-132407.trace.csv	bd6f580f6a4e622dbc2f65ac35f59bf6d7542763069e734b61dbce4f2a2f6649	bc-and-repeated-condition-search
@@ -8,3 +8,12 @@ train	drive-20260829-132508.trace.csv	4957741111cf5a4d429ad70d3b8474dbcbaa7dcd6d
 train	drive-20260829-140245.trace.csv	4048b3b9096b50cff23025de9132e6dd833e5f9ed0a803d24d839d89d55934bb	bc-and-repeated-condition-search
 train	drive-20260829-140321.trace.csv	5225973f54fdf703bf86575e3378dc4dd0de5ba2698a5c82c809eaa7241fa587	bc-and-repeated-condition-search
 train	drive-20260829-140440.trace.csv	b23c3a38cd4603da4ccfd24290f03d30cb3fa949f12c044e52a4ae13a363a97a	bc-and-repeated-condition-search
+validation	drive-20261010-232421-150-d4e120df.trace.csv	d3df48642ce1313d42f9f1e3339c4e04a2cc06834d7e73fe9f483c85a9df5ee5	unseen-at-registration
+validation	drive-20261010-232628-188-3100b8b3.trace.csv	4bac3ca941ec2610bcfddade478c23e91f928b0048a0cdae3d1ed2f6c9a45a2b	unseen-at-registration
+final	drive-20261010-232217-229-037c5cfa.trace.csv	54af0622c1121a4a43cc0fbb105c0082fd04682df9fca9e7030dd93f9c17fde5	unseen
+final	drive-20261010-232523-254-64830d7c.trace.csv	c45ebbcfa0ae2a0135c11c4bf3950dceb6b2777325c222adf503cc7493876a35	unseen
+final	drive-20261010-232319-306-1b0c0c20.trace.csv	e157c7b7e4e267788e92f7fd0fa3b8c40f9c2ebf681f79ee0ec3faba9988a7dc	unseen
+final	drive-20261010-232734-098-427a206c.trace.csv	80b69969bb427267ed8870d1f9cbe0028bf1f2e6abf12c35f670c49330f54ea5	unseen
+final	drive-20261010-233230-965-0b3e0822.trace.csv	6c21889dddddce91933a5f12a83dc5f489ee3cc2a3891b7517dff31d789451c8	unseen
+final	drive-20261010-233334-358-e5035fa5.trace.csv	994389b5ee563a95ee9ad92a01e2a57391fb7fb79f74803c6396e492312a90aa	unseen
+final	drive-20261010-233436-863-6aee7781.trace.csv	1e4a93fc5fecd0daf3cacc21c1dd123df18c4c3fb81506147b2223e6c4aa1273	unseen

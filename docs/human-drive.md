@@ -74,7 +74,7 @@
 
 *다른* 주행 여러 개 녹화 (차분한 통근, brisk 고속도로, **G** 켠 거친 도로 주행).
 어느 주행이 학습용이고 어느 게 평가용인지는 녹화가 아니라 루트 `datasets.tsv`
-가 정한다 — 지금은 `train` 6 개뿐이고 `final` 은 비어 있다
+가 정한다 — 지금은 `train` 6 · `validation` 2 · `final` 7
 ([reproducibility.md](reproducibility.md)). 스태빌라이저를
 *판별*하려는 주행은 **도로 on (`G`)** 유지하고 탱크를 꽤 채워 — 약 55% fill
 아래면 진자 모델의 파도가 rim 에 도달 못 해서 아무것도 안 넘침.
