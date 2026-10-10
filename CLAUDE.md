@@ -23,10 +23,12 @@
 2. [docs/experiment-plan.md](docs/experiment-plan.md) — 살아있는 현황 + 다음 단계.
 3. [docs/design-review.md](docs/design-review.md) — 비판적 리뷰 + 권장 아키텍처.
    **설계 결정의 근거 출처.**
-4. [docs/decisions.md](docs/decisions.md) — 결정 로그 D1~D6.
-5. [docs/findings.md](docs/findings.md) — 실험으로 밝혀진 사실 F1~F5.
+4. [docs/decisions.md](docs/decisions.md) — 결정 로그 D1~D11.
+5. [docs/findings.md](docs/findings.md) — 실험으로 밝혀진 사실 F1~F13.
 6. [docs/frames-units-conventions.md](docs/frames-units-conventions.md) — 좌표계,
    단위, 타이밍 (물리 코드 전에 합의됨, 고정).
+7. [docs/lessons.md](docs/lessons.md) — 결과·교훈·후속 제언 한 문서 요약
+   (처음 읽는다면 이것부터).
 
 ## 소유자
 
@@ -82,17 +84,21 @@ design-review §6. **브래킷 규율** (findings F3): 진자 ROM 으로 학습,
 
 ## 현재 상태
 
-**초안(수직 슬라이스) 완성** (2026-08-29). 파이프라인 전체가 처음부터 끝까지 돈다:
-녹화 → hindsight 천장 → BC 데이터셋 → BC 사전학습 → PPO 미세조정 →
-`serve_policy.py` → Unity 앱 내 ①②③ 비교 → standalone 빌드. EditMode 테스트
-**113 통과 / 0 실패 / 8 스킵**. 만든 것의 전체 목록은
-[docs/experiment-plan.md](docs/experiment-plan.md) "지금까지 만든 것".
+**phase-1 종료, 홀드아웃 최종 평가까지 끝남** (2026-10-11). 파이프라인 전체가
+처음부터 끝까지 돌고(녹화 → 천장 → BC → DAgger/PPO → 정책 서빙 → ①②③④ 비교 →
+standalone 빌드), EditMode 테스트 **153 통과 / 0 실패 / 16 스킵**.
 
-**게이트 결과 (finding F5):** 완전한 후행지식 + 실제 액추에이터 제약 하에서도
-최적 짐벌 궤적이 소유자의 녹화 주행에서 기계적으로 잠근 탱크보다 더 스필한다.
-**제대로 된 잔차 RL 은 전제 조정(탱크 freeboard, 도로 강도, 또는 하이브리드
-lock-capable 액션 공간) + step-3 재실행 전까지 보류.** 그 게이트가 통과하기
-전까지 **잔차 RL 을 시작하거나 맨땅 PPO 를 재실행하지 말 것.**
+**헤드라인 (F13):** 학습·튜닝에 쓰지 않은 `final` 7 주행에서도 **① 강체가
+이긴다** (114.4 L; 규칙기반 ② 166~175, 학습 ③ 120~131). ③ 은 합성 F8 조건의
+주행 하나에서만 규칙기반을 이겼고(F10) 교사를 늘리거나 DAgger 를 써도 강체를
+못 이긴다(F11·F12). 결과·교훈·후속 제언 요약: [docs/lessons.md](docs/lessons.md).
+
+**하지 말 것:** 맨땅 PPO · 현재 형태의 PPO 미세조정 · 교사 주행 수만 늘리기 ·
+`final` 7 주행으로 다시 튜닝(소비됨 — 추가 홀드아웃은 새로 녹화).
+
+**다음에 할 것:** 필수 작업 없음. 이어가려면
+[docs/experiment-plan.md](docs/experiment-plan.md) "앞으로 할 수 있는 것" 에서
+소유자가 방향을 고른다 (전제 변경 · 프리뷰 허용 · 활성 구간 감지기 · MPC).
 
 세션 커밋은 바로 `main` 으로 (혼자 쓰는 로컬 저장소 — feature 브랜치 없음).
 
