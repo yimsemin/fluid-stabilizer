@@ -26,7 +26,9 @@ findings F1~F4: 강체(잠금 관절) `Hold` 상대로 **어떤 분석적 반응
 | `BcDatasetExporter` | `Rl/` | ✅ hindsight 궤적 → BC 지도학습 데이터셋 (step C) |
 | `RlServerLauncher` / `BcExportRunner` / `PolicyEvalRunner` | `Sim/Editor/` | ✅ `-executeMethod` / 메뉴 진입점 (헤드리스 Unity 호스트) |
 | Python env + PPO | `python/` | 🟡 비대칭 크리틱 CleanRL 스타일 PPO; end-to-end 실행됨, obs/return 정규화까지 올림. **맨땅 PPO 는 여전히 학습 못 함** — 튜닝이 아니라 잔차 RL / 커리큘럼 / 웜스타트가 필요. "첫 실행 결과" 참고 |
-| `bc_pretrain.py` / `serve_policy.py` | `python/` | ✅ BC 사전학습 + 정책 추론 프로세스 (step C/D) |
+| `bc_pretrain.py` / `serve_policy.py` | `python/` | ✅ BC 사전학습 + 정책 추론 프로세스 (step C/D). `serve_policy.py --release-bias/--release-ema` 는 해제 요청 보정 실험 옵션(기본 꺼짐, F12) |
+| `DaggerRolloutRunner` / `dagger.py` | `Sim/Editor/` · `python/` | ✅ 학습자 상태를 교사 행동으로 재라벨 + 누적 재학습 루프 (F12). **줄기는 닫힘** (D11) |
+| `MultiCornerRunner` | `Sim/Editor/` | ✅ F8 계열 합성 코너링 주행 + 주행별 천장 + `datasets-f8-multi.tsv` (F11). 천장이 이득을 못 주는 주행은 0 궤적(유휴) |
 | 도메인 랜덤화 | — | ⬜ (보류 — 활성 RL 학습 재개 시) |
 | 체크포인트 재개 | `train_ppo.py --resume` | ✅ (2026-08-30, 묶음 3) — `state.pt` 로 이어서 학습. 커리큘럼 자동화는 아직 수동 |
 | 에피소드 로깅 | `EpisodeLog` → `Logs/episodes.csv` | ✅ (2026-08-30) — 평가/비교 러너가 에피소드당 한 줄 append. RL 학습 자체는 아직 미배선 (필요 시 `RlEnvironment` 에서) |
@@ -105,6 +107,13 @@ hindsight 행동을 먹여 → `Logs/bc/dataset.csv`. 그다음 `python bc_pretr
 --init-actor runs/bc/actor.pt` 가 PPO 웜스타트. F5 hindsight 최적해가 거의
 무동작이라 BC 가 가르치는 건 저진폭 매끄러운 프라이어(탐색을 절벽에서 떼어놓음)
 이지 유능한 정책이 아니다.
+
+**교사 다양화 · DAgger (F11·F12, 2026-10-11 — 줄기는 닫힘, D11):**
+`MultiCornerRunner.Run` 이 합성 주행을 만들고 `-traceManifest datasets-f8-multi.tsv`
+로 내보내기·평가에 쓴다. `python/dagger.py --dataset … --manifest …` 가 학습자를
+굴려 방문 상태를 재라벨하고 누적 재학습한다. 천장이 이득을 못 주는(유휴) 교사는
+내보내기에서 **잠금 라벨**이 된다. 결과는 강체를 못 이겼다 — 재개 조건은
+[experiment-plan.md](experiment-plan.md).
 
 ## 행동 계약 (PolicyContract) — 2026-09-10
 

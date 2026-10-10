@@ -7,6 +7,9 @@ External Python trainer. **No Unity dependency** — talks to the C#
 - `fluidstab/env.py` — `FluidStabEnv(gymnasium.Env)`; `info["privileged"]` holds the asymmetric-critic obs
 - `train_ppo.py` — CleanRL-style PPO with an asymmetric critic
 - `play.py` — run a checkpoint, print episode returns
+- `bc_pretrain.py` — behaviour-cloning pretraining from `Logs/bc/dataset-*.csv`
+- `serve_policy.py` — serve a checkpoint to Unity (`--release-bias/--release-ema` are experiment options, off by default)
+- `dagger.py` — DAgger loop around the Unity plant (closed line, see `docs/findings.md` F12)
 
 See [`../docs/rl.md`](../docs/rl.md) for the full workflow.
 
