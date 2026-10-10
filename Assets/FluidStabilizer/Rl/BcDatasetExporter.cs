@@ -104,6 +104,10 @@ namespace FluidStabilizer.Rl
             IController baseline = residual ? PolicyContract.MakeBaseline(baselineId) : null;
             baseline?.Reset();
 
+            bool teacherIdle = true;
+            for (int i = 0; i < traj.Count && teacherIdle; i++)
+                teacherIdle = traj[i].PitchRate == 0.0 && traj[i].RollRate == 0.0;
+
             var samples = new List<Sample>(nTicks);
             float[] obs = env.Reset(trace.Seed);
             int clamped = 0;
@@ -128,8 +132,12 @@ namespace FluidStabilizer.Rl
                 float ar = (float)Clamp1(rawR);
 
                 // The teacher runs the servo the whole way, so under an explicit-lock
-                // contract its release request is a committed +1 (findings F9).
-                float al = env.Contract.IsExplicitLock ? 1f : 0f;
+                // contract its release request is a committed +1 (findings F9) —
+                // except when the teacher IS the rigid tank: an all-zero trajectory
+                // means "hindsight found nothing better than locked", and labelling
+                // that as "release + zero rate" would teach an unlocked servo, which
+                // is strictly worse than the rigid floor (findings F11).
+                float al = env.Contract.IsExplicitLock && !teacherIdle ? 1f : 0f;
                 samples.Add(new Sample { Obs = obs, ActPitch = ap, ActRoll = ar, ActLock = al });
 
                 RlStepResult res = env.Step(ap, ar, al);

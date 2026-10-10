@@ -120,5 +120,20 @@ t,pitchRate,rollRate
                 Assert.AreEqual(samples.Count, data);
             }
         }
+
+        // findings F11: a do-nothing teacher is the rigid tank, so its label must be
+        // "stay locked" — "release + zero rate" would teach an unlocked servo.
+        [Test]
+        public void ExplicitLock_IdleTeacherLabelsLocked_ActiveTeacherLabelsRelease()
+        {
+            var trace = ShortTrace();
+            var idle = BcDatasetExporter.FromDrive(trace, Traj(300, 0.0), () => new PendulumSloshModel(), 6,
+                baselineId: "hold", residualScaleRadPerSec: 3.5, lockCapable: true, lockMode: "explicit");
+            var active = BcDatasetExporter.FromDrive(trace, Traj(300, 0.5), () => new PendulumSloshModel(), 6,
+                baselineId: "hold", residualScaleRadPerSec: 3.5, lockCapable: true, lockMode: "explicit");
+            Assert.IsNotEmpty(idle);
+            foreach (var s in idle) Assert.AreEqual(0f, s.ActLock);
+            foreach (var s in active) Assert.AreEqual(1f, s.ActLock);
+        }
     }
 }

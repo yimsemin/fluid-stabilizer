@@ -1,0 +1,15 @@
+# fluid-stabilizer-datasets/v1
+# F8 계열 합성 코너링 (교사 다양화, experiment-plan A1). 소유자의 녹화 주행이 아니다 — datasets.tsv 와 별개.
+split	file	sourceSha256	history
+train	f8multi-s9100.trace.csv	a3772cbdca5f757297661bfd80ec0499fe066a27bf095944e30e0de1fbad9fe3	synthetic-f8-multi
+train	f8multi-s9101.trace.csv	bf33b136672e64c2df584d07756ce3f22e219c0994e83da6f549010d638d215c	synthetic-f8-multi
+train	f8multi-s9102.trace.csv	fd5dc45bd132880ef8a5c436153d78254a939333147e0eaa0c01a0aa31ea75e2	synthetic-f8-multi
+train	f8multi-s9103.trace.csv	9342f3e0d835018d454f5cc70a7977b17e095553d8ef0138fb540eb4651437b7	synthetic-f8-multi
+train	f8multi-s9104.trace.csv	d445b7c6606795b2f633c6dc71dbc2faa286d1720920dd8b030e31e7178ebf96	synthetic-f8-multi
+train	f8multi-s9105.trace.csv	2f731c42b4a8a6599989725fb94edd9bf3c3d34a561788acd7b28c4343065f07	synthetic-f8-multi
+train	f8multi-s9106.trace.csv	d866d7c33dda1f22a1785d76379190be6965c285d945530a97a6b1afe5e57bf4	synthetic-f8-multi
+train	f8multi-s9107.trace.csv	ffbaea0d72f220d42418d5eb2d5b4a983856b13049192f37799058cb83d7142a	synthetic-f8-multi
+validation	f8multi-s9108.trace.csv	5ec9bb78aa253f0e84ddbf18f89d6204122d570f8526346334075a29f03a54ce	synthetic-f8-multi
+validation	f8multi-s9109.trace.csv	03f9b0164ed55d0f9abb38667df07dfa60d4830de33a3e02b779f83144d7710e	synthetic-f8-multi
+validation	f8multi-s9110.trace.csv	71648add0d479a40e57b04362df80b0d9eb2bc2f033cf968c2dccd518c1e7107	synthetic-f8-multi
+validation	f8multi-s9111.trace.csv	55b628feb2d25bd6be93910f8b926d2ee2e13dcba0ec56efacae4b09462c249c	synthetic-f8-multi
