@@ -73,6 +73,13 @@ namespace FluidStabilizer.Rl
             _log = log ?? (_ => { });
         }
 
+        /// <summary>
+        /// Called with every observation exactly as it is sent to the policy (and the
+        /// sensors it came from) — DAgger relabels the learner's own visited states
+        /// with the teacher's action (<c>DaggerRolloutRunner</c>). Null in normal use.
+        /// </summary>
+        public Action<float[], SensorBundle> ObservationTap { get; set; }
+
         public bool Connected => _connected;
         public string PolicyIdentity { get; private set; } = "unknown";
         public long PolicyTicks { get; private set; }
@@ -126,6 +133,7 @@ namespace FluidStabilizer.Rl
             // The lock state is part of the observation (findings F9): a policy that
             // chooses its own lock has to know which side of the switch it is on.
             float[] obs = _encoder.Observe(sensors, _lastAp, _lastAr, _composer?.IsLocked ?? false);
+            ObservationTap?.Invoke(obs, sensors);
 
             if (!_connected)
             {

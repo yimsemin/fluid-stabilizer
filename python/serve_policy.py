@@ -37,7 +37,7 @@ MAGIC = 0x504F4C59
 VERSION = 2
 
 
-def load_policy(path: str):
+def load_policy(path: str, release_bias: float = 0.0, release_ema: float = 1.0):
     # Hash the exact bytes loaded, avoiding a path/hash race with checkpoint replacement.
     checkpoint_bytes = Path(path).read_bytes()
     ck = torch.load(io.BytesIO(checkpoint_bytes), map_location="cpu", weights_only=False)
@@ -54,16 +54,33 @@ def load_policy(path: str):
         z = (np.asarray(x, np.float64) - mean) / np.sqrt(var + 1e-8)
         return np.clip(z, -clip, clip).astype(np.float32)
 
+    # Deploy-side release stabilisation (experiment-plan A, findings F11). The
+    # explicit-lock policy's 3rd output is a release request; C# releases when its
+    # own 0.1-gain low-pass of it exceeds 0.5. `release_bias` is subtracted first
+    # (needs a more committed request) and `release_ema` low-passes it again over a
+    # longer window. Defaults leave the output untouched. State resets on op 0.
+    state = {"r": 0.0}
+
+    def reset():
+        state["r"] = 0.0
+
     @torch.no_grad()
     def act(obs_raw):
         o = torch.tensor(whiten(obs_raw)).unsqueeze(0)
-        a = net(o)[0].numpy()
+        a = net(o)[0].numpy().copy()
+        if act_dim == 3 and (release_bias != 0.0 or release_ema != 1.0):
+            state["r"] += release_ema * ((a[2] - release_bias) - state["r"])
+            a[2] = state["r"]
         return np.clip(a, -1.0, 1.0).astype("<f4")
+
+    act.reset = reset
 
     act.policy_identity = (
         f"checkpoint-sha256={hashlib.sha256(checkpoint_bytes).hexdigest()};"
         f"checkpoint={Path(path).name};server-sha256={hashlib.sha256(Path(__file__).read_bytes()).hexdigest()};"
         f"torch={torch.__version__};numpy={np.__version__};deterministic=mean;"
+        + (f"release-bias={release_bias};release-ema={release_ema};"
+           if (release_bias != 0.0 or release_ema != 1.0) else "")
         + (f"contract={ck['contract']}" if ck.get("contract")
            else "action=absolute-joint-rate;contract=absent")
     )
@@ -108,6 +125,8 @@ def serve_client(conn, act, obs_dim, act_dim):
         if op == 2:  # close
             return
         if op == 0:  # reset
+            if hasattr(act, "reset"):
+                act.reset()
             _send_frame(conn, b"\x01")
             continue
         if op == 1:  # infer
@@ -123,9 +142,13 @@ def main():
     p.add_argument("--checkpoint", default="runs/bc/actor.pt")
     p.add_argument("--host", default="127.0.0.1")
     p.add_argument("--port", type=int, default=5601)
+    p.add_argument("--release-bias", type=float, default=0.0,
+                   help="subtract from the release request (deploy-side, F11 experiment)")
+    p.add_argument("--release-ema", type=float, default=1.0,
+                   help="extra low-pass gain on the release request, 1 = off")
     args = p.parse_args()
 
-    act, obs_dim, act_dim = load_policy(args.checkpoint)
+    act, obs_dim, act_dim = load_policy(args.checkpoint, args.release_bias, args.release_ema)
 
     srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
