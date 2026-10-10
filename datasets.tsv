@@ -1,6 +1,6 @@
 # fluid-stabilizer-datasets/v1
 # 기존 BC 및 반복 조건 탐색에 사용한 6개 주행. 새 홀드아웃 아님.
-# validation/final: 2026-10-10 새로 녹화한 주행 9개 (녹화 후 재생·평가 안 함). final의 history는 unseen만 허용.
+# validation/final: 2026-10-10 새로 녹화한 주행 9개 (녹화 후 재생·평가 안 함). final의 history는 unseen만 허용. final 7개는 2026-10-11 에 1회 평가되어 소비됨(findings F13).
 split	file	sourceSha256	history
 train	drive-20260829-132335.trace.csv	ec61c3969336b474250a96fcee8aa43842f8b64f7f28443b893c232a5bcdc914	bc-and-repeated-condition-search
 train	drive-20260829-132407.trace.csv	bd6f580f6a4e622dbc2f65ac35f59bf6d7542763069e734b61dbce4f2a2f6649	bc-and-repeated-condition-search
