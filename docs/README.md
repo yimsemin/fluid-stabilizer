@@ -17,7 +17,7 @@
 | [vision-check.md](vision-check.md) | 초안 단계별 O/X 체크리스트 (2026-08-30 초안 종료 — 기록으로 보존) | 소유자 |
 | [lessons.md](lessons.md) | **결과·교훈·후속 제언 요약** — 처음 보는 사람용 한 문서 (포트폴리오·후속 프로젝트 출발점) | 누구나 |
 | [findings.md](findings.md) | **실험으로 밝혀진 사실 F1~F13** (숫자·근거) | 소유자 + Claude |
-| [decisions.md](decisions.md) | **설계 결정 로그 D1~D11** (무엇을 정했고 왜) | Claude + 소유자 |
+| [decisions.md](decisions.md) | **설계 결정 로그 D1~D12** (무엇을 정했고 왜) | Claude + 소유자 |
 | [design-review.md](design-review.md) | 아키텍처 결정의 근거 (큰 참고 문서, 잘 안 바뀜) | 주로 Claude |
 | [reproducibility.md](reproducibility.md) | **재현성 · 데이터 셋 분리 · 실행 기록 규칙** (trace v2, `datasets.tsv`, provenance, 정책 실행 상태) | Claude + 소유자 |
 | [rl.md](rl.md) | RL 경로 세부 (브릿지·학습기·정책 서빙) | Claude |
@@ -26,72 +26,4 @@
 | [frames-units-conventions.md](frames-units-conventions.md) | 좌표계 · 단위 · 타이밍 규약 (고정) | Claude |
 | [setup-status.md](setup-status.md) | 개발 환경 사실 (버전·경로·도구) | Claude |
 
-## 정비 이력
-
-### 2026-10-11 — 홀드아웃 평가 + 교훈 문서
-
-- **`lessons.md` 신설** — 결과·교훈·한계·후속 제언을 처음 보는 사람 기준으로 한 곳에.
-- **F11~F13 추가** — 교사 다양화 · DAgger · 홀드아웃 최종 평가. `final` 7 주행 소비.
-- **D11 추가** — 유휴 교사 잠금 라벨, 합성 교사 별도 매니페스트, BC/DAgger 줄기 닫음.
-- **`experiment-plan.md` "앞으로 할 수 있는 것"** 을 닫힘 / 열림 / 보류로 재구성.
-  `project-goals.md` 로드맵에 13~15 단계, `CLAUDE.md` 현재 상태 정정.
-
-### 2026-09-11 — phase-1 종료 정비
-
-- **`findings.md` 맨 위에 "한눈에 — F1~F10" 표** 추가. 769 줄을 한 화면에서
-  훑을 수 있게.
-- **`experiment-plan.md` 통합** — 2026-09-10 에 날짜별로 다섯 덩이 쌓였던 것을
-  "한 문단 현황(phase-1 종료)" 하나로 합치고, "다음에 할 수 있는 것" (A/B/C)을
-  추가. 묶음 3 를 ✅ 로.
-- **`project-goals.md`** — ③ 상태를 🟡 → ✅ (학습한다, 단 ① 에는 패), 로드맵에
-  9~12 단계 추가(재현성 · 전제 조정 · 계약/액션공간 · 종료).
-- **`decisions.md` D9·D10 추가** — 정책 행동 계약, 명시적 잠금 액션(D8 수정).
-- 스테일 참조 정정: F1~F6 → F1~F10, D1~D8 → D1~D10, 테스트 수 131 → 152.
-
-### 2026-09-10 — 재현성 정비 + F7·F8
-
-- **F8 추가** — 운전 축을 훑는 `DrivingPremiseSweepRunner` 로 **프로젝트 최초의
-  게이트 PASS** (매끄러운 노면의 지속 코너링). 동시에 규칙기반 ②는 그 이득을
-  못 가져간다는 것도 측정. `demo-guide.md` 에 시연 절차, 키 **5** = ④ 천장 레인.
-- 헤드라인은 유지: 소유자의 실제 녹화 주행에서는 ① 강체가 이긴다.
-- **F9 추가** — F8 조건 잔차 RL 실패 + 원인(잔차 액션 공간이 절벽). `rl.md` 에
-  "행동 계약" 절 신설 (PolicyContract / ActionComposer / 관측 정렬 수정).
-- **F10 추가** — 명시적 잠금 액션으로 F9 를 수정. ③ 이 처음으로 학습해서
-  규칙기반을 51 % 앞섰다(12.4 vs 25.2 L). 강체(7.9)에는 여전히 진다.
-  `demo-guide.md` 에 정책 서버 띄우고 ③ 보는 절차 추가.
-
-
-- **`reproducibility.md` 신설** — 주행 파일 형식·데이터 셋 분리·실행 기록·정책
-  실행 상태를 한 곳에. `reproducibility-handoff.md`(중단 세션 인계문서)를 흡수·폐기.
-- **용어 정정:** 기존 6 주행을 "홀드아웃" 이라 부르던 서술을 고쳤다. BC 데이터셋과
-  2c 조건 스윕에 반복 사용됐으므로 홀드아웃이 아니다. **F1~F6 의 관측 숫자는
-  그대로 두었다** — 라벨이 틀렸던 것이지 측정이 틀린 게 아니다.
-- `rl.md` 의 "hindsight 파일 유무로 학습 셋 결정 / 첫 주행 설정 일괄 적용 /
-  가장 짧은 주행 길이로 자르기" 서술을 실제 코드로 교체.
-- **F7 추가** (findings) — F5/F6 재검증. `project-goals.md` 의 "어느 운영점에서도"
-  단정을 F7 범위로 좁혔다. 소유자의 2026-08-30 결정은 바꾸지 않았다.
-
-### 2026-08-30 — 묶음 2c/3 이후 정비
-
-- **`demo-guide.md` 신설** — 시연용(비개발자 청중) 참고 문서.
-- **`vision-check.md`** — 초안 단계 종료 표시, 기록으로 보존 (삭제 안 함, 소유자 관리).
-- 진행상황 숫자 갱신: EditMode 113 → **131 통과**, findings **F1~F6**, decisions **D1~D8**.
-- `experiment-plan.md` "한 문단 현황" 을 F6 결과 + 소유자 결정(정직한 헤드라인
-  수용)으로 재작성. 묶음 2 ✅, 묶음 3 ⏸ (전제 조정 대기).
-
-### 2026-08-29 한글화
-
-- **`plan-next.md` 폐기** — 2026-08-28 시점의 계획(얕은물 모델·운전자·플레이 씬).
-  전부 완료됨. `experiment-plan.md` 가 대체.
-- **`phase1-progress.md` 폐기** — 진행상황 추적이 `experiment-plan.md` 와 중복.
-  "지금까지 만든 것" 목록만 `experiment-plan.md` 로 흡수.
-- **`project-brief.md` → `project-goals.md` 로 병합** — "원래 요청"은
-  `project-goals.md` 안의 한 절로 보존. 의도 문서는 하나만 둔다.
-- **모순 수정:**
-  - `decisions.md` D1 이 "500 Hz" 라고 적혀 있었음 → 실제는 **600 Hz**
-    (`frames-units-conventions.md` 가 근거: 200 Hz 센서가 정수로 나눠지도록
-    500 대신 600 선택).
-  - 루트 `README.md` 가 "코드 없음 / GitHub 리모트 없음 / 설계 리뷰 대기중"
-    이라고 되어 있었음 → 전부 옛말. 갱신.
-  - `plan-next.md` 의 "키 3 = LQR, S = 스태빌라이저 토글" → 실제는 LQR 폐기,
-    `Space` 토글, 키 `0~4`. (폐기 문서라 그대로 두고 삭제)
+문서 변경 이력은 `git log -- docs/` 로 본다 (이 파일에는 현재 상태만 둔다).

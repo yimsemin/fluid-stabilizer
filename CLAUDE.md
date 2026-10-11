@@ -23,7 +23,7 @@
 2. [docs/experiment-plan.md](docs/experiment-plan.md) — 살아있는 현황 + 다음 단계.
 3. [docs/design-review.md](docs/design-review.md) — 비판적 리뷰 + 권장 아키텍처.
    **설계 결정의 근거 출처.**
-4. [docs/decisions.md](docs/decisions.md) — 결정 로그 D1~D11.
+4. [docs/decisions.md](docs/decisions.md) — 결정 로그 D1~D12.
 5. [docs/findings.md](docs/findings.md) — 실험으로 밝혀진 사실 F1~F13.
 6. [docs/frames-units-conventions.md](docs/frames-units-conventions.md) — 좌표계,
    단위, 타이밍 (물리 코드 전에 합의됨, 고정).
@@ -96,9 +96,13 @@ standalone 빌드), EditMode 테스트 **153 통과 / 0 실패 / 16 스킵**.
 **하지 말 것:** 맨땅 PPO · 현재 형태의 PPO 미세조정 · 교사 주행 수만 늘리기 ·
 `final` 7 주행으로 다시 튜닝(소비됨 — 추가 홀드아웃은 새로 녹화).
 
-**다음에 할 것:** 필수 작업 없음. 이어가려면
-[docs/experiment-plan.md](docs/experiment-plan.md) "앞으로 할 수 있는 것" 에서
-소유자가 방향을 고른다 (전제 변경 · 프리뷰 허용 · 활성 구간 감지기 · MPC).
+**하지 말 것 (추가):** 미래 도로·운전자 입력을 AI/제어기 관측에 넣는 것(프리뷰) —
+소유자 결정 D12.
+
+**다음에 할 것:** **인과 MPC 검증** — 단계(0~4), 중단 기준, 지킬 제약, 설계 메모는
+[docs/experiment-plan.md](docs/experiment-plan.md) "다음 작업". 근거는 D12 와
+[F1·F4·F6](docs/findings.md)(천장은 저대역이라 능동 감쇠의 상한이 아님). 다른
+후보(배플 기준선, 활성 구간 감지기)는 같은 문서 "열림" 표.
 
 세션 커밋은 바로 `main` 으로 (혼자 쓰는 로컬 저장소 — feature 브랜치 없음).
 

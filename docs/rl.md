@@ -25,12 +25,12 @@ findings F1~F4: 강체(잠금 관절) `Hold` 상대로 **어떤 분석적 반응
 | `RemotePolicyController` | `Rl/` | ✅ 학습된 정책의 브릿지 *클라이언트* — `serve_policy.py` 에 연결 (step D) |
 | `BcDatasetExporter` | `Rl/` | ✅ hindsight 궤적 → BC 지도학습 데이터셋 (step C) |
 | `RlServerLauncher` / `BcExportRunner` / `PolicyEvalRunner` | `Sim/Editor/` | ✅ `-executeMethod` / 메뉴 진입점 (헤드리스 Unity 호스트) |
-| Python env + PPO | `python/` | 🟡 비대칭 크리틱 CleanRL 스타일 PPO; end-to-end 실행됨, obs/return 정규화까지 올림. **맨땅 PPO 는 여전히 학습 못 함** — 튜닝이 아니라 잔차 RL / 커리큘럼 / 웜스타트가 필요. "첫 실행 결과" 참고 |
+| Python env + PPO | `python/` | 🟡 비대칭 크리틱 CleanRL 스타일 PPO; end-to-end 실행됨, obs/return 정규화까지 올림. **맨땅 PPO 는 학습하지 못한다** (F1·F4·F9·F10). BC 클론이 PPO 미세조정보다 낫다 (F10). "첫 실행 결과" 참고 |
 | `bc_pretrain.py` / `serve_policy.py` | `python/` | ✅ BC 사전학습 + 정책 추론 프로세스 (step C/D). `serve_policy.py --release-bias/--release-ema` 는 해제 요청 보정 실험 옵션(기본 꺼짐, F12) |
 | `DaggerRolloutRunner` / `dagger.py` | `Sim/Editor/` · `python/` | ✅ 학습자 상태를 교사 행동으로 재라벨 + 누적 재학습 루프 (F12). **줄기는 닫힘** (D11) |
 | `MultiCornerRunner` | `Sim/Editor/` | ✅ F8 계열 합성 코너링 주행 + 주행별 천장 + `datasets-f8-multi.tsv` (F11). 천장이 이득을 못 주는 주행은 0 궤적(유휴) |
 | 도메인 랜덤화 | — | ⬜ (보류 — 활성 RL 학습 재개 시) |
-| 체크포인트 재개 | `train_ppo.py --resume` | ✅ (2026-08-30, 묶음 3) — `state.pt` 로 이어서 학습. 커리큘럼 자동화는 아직 수동 |
+| 체크포인트 재개 | `train_ppo.py --resume` | ✅ (2026-08-30) — `state.pt` 로 이어서 학습. 커리큘럼 자동화는 아직 수동 |
 | 에피소드 로깅 | `EpisodeLog` → `Logs/episodes.csv` | ✅ (2026-08-30) — 평가/비교 러너가 에피소드당 한 줄 append. RL 학습 자체는 아직 미배선 (필요 시 `RlEnvironment` 에서) |
 
 ## 행동 / 관측 / reward
@@ -168,10 +168,8 @@ rate 로 clamp. 정책은 멀쩡한 동작점 주변에서 작은 보정만 학�
 0 근처면 env 가 `Locked` 명령을 발행 — 처지는 서보가 아니라 강체 관절.
 `LockGate` (engine-free 결정론 상태기계, 히스테리시스+최소 체류). ③ 의 바닥이
 ①(잠근 탱크)이 되어 F5 의 구조적 핸디캡 제거. **결과 (F6): 그래도 후행지식이
-강체를 못 이김** — 긴 학습 보류. `LockCapableActionTests` (8), [decisions.md](decisions.md) D8.
-**메모:** `serve_policy.py` 는 raw actor 출력(잔차)만 반환하므로, lock-capable
-잔차 정책을 실제로 서빙하려면 `RemotePolicyController` 가 같은 baseline 합성 +
-`LockGate` 를 로컬로 돌려야 함 (아직 미구현 — 학습 재개 시).
+강체를 못 이김** (녹화 주행 기준). `LockCapableActionTests` (8), [decisions.md](decisions.md) D8.
+서빙은 `RemotePolicyController` 가 정책 계약(D9)대로 같은 baseline 합성 + `LockGate` 를 로컬에서 돌린다.
 
 **병렬 롤아웃:** 서버는 단일 클라이언트. N 포트에 N 서버를 띄우고 N 개
 `FluidStabEnv` 를 Gymnasium `AsyncVectorEnv` 로 감쌈 (v1 PPO 스크립트는
@@ -210,28 +208,16 @@ obs 둘 다에 `RunningMeanStd` whitening (±10 클립); CleanRL 스타일 retur
 ≈ −3200 에서 조기 종료, 크리틱이 "전부 −3200" 을 학습, gradient 가 사라지고
 log-std 가 붕괴. 맨땅 on-policy 학습기는 여기서 예측 정책을 발견 못 한다.
 
-**이건 스텝이나 튜닝이 아니라 과제 설계 변경이 필요.** → [experiment-plan.md](experiment-plan.md)
-의 결정으로 이어짐: 잔차 RL (design-review 의 명시된 접근), 쉬운 것부터
-커리큘럼, 웜스타트/BC, 훨씬 무거운 action-rate 패널티.
+**이건 스텝이나 튜닝이 아니라 과제 설계 변경이 필요했다.** 이후 순서:
 
-### 결정 (step-back 세션, 2026-08-29) — [experiment-plan.md](experiment-plan.md)
+1. **녹화 인간 주행**(`DriverTrace`)과 **feasibility 천장**(`HindsightOptimizer`)을 먼저
+   만들었다. 천장은 결정 게이트였고 녹화 주행에서 강체를 못 이겼다 (F5·F6).
+2. **잔차 + lock-capable 액션**(D8)으로 구조적 핸디캡을 없앴다.
+3. 잔차 액션 공간이 **절벽**이라 학습 신호가 0 임을 특정하고 **명시적 잠금 액션**으로
+   고쳤다 (F9 → F10, D10). 이 뒤로 ③ 이 학습한다.
+4. 교사 다양화·DAgger 로도 강체를 못 이겼다 (F11·F12). **이 줄기는 닫혔다** (D11).
 
-두 가지가 존재하기 전까지 RL 실행 없음: **녹화 인간 주행** (완료 — `DriverTrace`)
-과 **feasibility 천장** (고정 녹화 주행에 대한 오프라인 hindsight 궤적 최적화).
-천장은 하드 게이트: 특권/hindsight 해가 녹화 주행에서 잠근 Hold 베이스라인을
-못 이기면, RL 전에 전제를 조정.
-
-**2026-08-29 갱신 — 천장을 만들고 돌렸고(`HindsightOptimizer`), 게이트 미통과.
-finding F5 참고.** 녹화 6 주행(BC·반복 조건 탐색에 쓴 `train` 셋 — 홀드아웃이
-아니다, [reproducibility.md](reproducibility.md))에서 hindsight-최적 짐벌-rate 궤적이 잠근
-탱크보다 2~6 L *더* 스필 (진자 ROM; 얕은물에서 훨씬 나쁨). 0 을 명령하는
-액추에이터 서보 자체가 이미 기계적으로 잠근 관절에 ≈ 5~7 L 진다. **잔차 RL 은
-전제 조정(freeboard, 도로 강도, 또는 잔차 베이스라인이 25 L 처지는 서보가 아니라
-19 L 잠근 탱크가 되도록 하는 하이브리드 lock-capable 액션 공간) + step-3
-재실행이 hindsight 가 잠근 Hold 를 이기는 걸 보이기 전까지 보류.** RL 이 재개되면
-여전히 **잔차 RL** — 정책 = 베이스라인 + 작은 보정, `Logs/hindsight/*.traj.csv`
-궤적 behaviour-cloning 으로 웜스타트 — 이는 `RlEnvironment` 합성(완료)과
-`train_ppo.py` 체크포인트 재개(미구현)가 필요.
+현재 상태와 재개 조건은 [experiment-plan.md](experiment-plan.md).
 
 ## 메모 / 리스크
 
@@ -240,7 +226,7 @@ finding F5 참고.** 녹화 6 주행(BC·반복 조건 탐색에 쓴 `train` 셋
   만들지만 TCP 프로토콜(RESET/STEP/CLOSE)이 노출 안 함. 정책을 F4 와 비교하려면
   `SUMMARY` opcode 나 `PolicyEvalRunner` 경로(step D, `Logs/policy-eval.txt`)
   필요.
-- **체크포인트 재개 (2026-08-30, 묶음 3):** `train_ppo.py --resume runs/<name>/state.pt`
+- **체크포인트 재개:** `train_ppo.py --resume runs/<name>/state.pt`
   가 agent + optimizer + obs/priv/return 정규화기 + `global_step` 을 복원해
   이어서 학습한다 (`--init-actor` 보다 우선). `state.pt` 는 `--save-every` (기본
   20) 업데이트마다 + 종료 시 기록 (`actor.pt` 는 매 업데이트 — serve 호환 슬림).
