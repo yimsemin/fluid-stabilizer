@@ -23,7 +23,7 @@
 2. [docs/experiment-plan.md](docs/experiment-plan.md) — 살아있는 현황 + 다음 단계.
 3. [docs/design-review.md](docs/design-review.md) — 비판적 리뷰 + 권장 아키텍처.
    **설계 결정의 근거 출처.**
-4. [docs/decisions.md](docs/decisions.md) — 결정 로그 D1~D12.
+4. [docs/decisions.md](docs/decisions.md) — 결정 로그 D1~D13.
 5. [docs/findings.md](docs/findings.md) — 실험으로 밝혀진 사실 F1~F14.
 6. [docs/frames-units-conventions.md](docs/frames-units-conventions.md) — 좌표계,
    단위, 타이밍 (물리 코드 전에 합의됨, 고정).
@@ -84,7 +84,7 @@ design-review §6. **브래킷 규율** (findings F3): 진자 ROM 으로 학습,
 
 ## 현재 상태
 
-**phase-1 종료, 홀드아웃 최종 평가까지 끝남** (2026-10-11). 파이프라인 전체가
+**phase-1 종료, 홀드아웃 최종 평가와 인과 MPC 검증까지 끝남** (2026-10-12). 파이프라인 전체가
 처음부터 끝까지 돌고(녹화 → 천장 → BC → DAgger/PPO → 정책 서빙 → ①②③④ 비교 →
 standalone 빌드), EditMode 테스트 **155 통과 / 0 실패 / 16 스킵**.
 
@@ -99,10 +99,15 @@ standalone 빌드), EditMode 테스트 **155 통과 / 0 실패 / 16 스킵**.
 **하지 말 것 (추가):** 미래 도로·운전자 입력을 AI/제어기 관측에 넣는 것(프리뷰) —
 소유자 결정 D12.
 
-**인과 MPC 검증 (F14):** 단계 1 오라클 MPC 가 8 주행 합 −5 ~ −8 % (게이트 −10 %
-미달) — 중단 기준에 따라 단계 2 이후는 시작하지 않았다. 이득은 자유 진동 주행 1 개에
-집중. **다음 방향은 소유자 결정**: [docs/experiment-plan.md](docs/experiment-plan.md)
-"열림" 표 (MPC 마무리 권장 / 활성 구간 감지기 / 배플 기준선).
+**인과 MPC (F14·D13):** 완전 상태 + 정확한 모델의 오라클 MPC 도 8 주행 합 −5 ~ −8 %
+(게이트 −10 % 미달)라 줄기를 닫았다. 이득은 자유 진동 주행 1 개에 집중되고 원천은
+"개입하지 않기"(시간의 ~55 % 잠금)였다. 상태 추정·학습 단계는 하지 않는다.
+
+**하지 말 것 (추가 2):** 상태 추정·얕은물·학습으로 MPC 를 이어가는 것 — 재개 조건은
+[docs/experiment-plan.md](docs/experiment-plan.md) "닫힘" 표.
+
+**다음에 할 것:** 없음 (소유자 선택 대기). 열린 후보(배플 기준선, 활성 구간 감지기)는
+같은 문서 "열림" 표. 결과·교훈 요약은 [docs/lessons.md](docs/lessons.md).
 
 세션 커밋은 바로 `main` 으로 (혼자 쓰는 로컬 저장소 — feature 브랜치 없음).
 
