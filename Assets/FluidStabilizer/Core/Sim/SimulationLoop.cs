@@ -248,14 +248,22 @@ namespace FluidStabilizer.Core.Sim
         /// </summary>
         private void ProjectSloshLoadOntoJoints(Double3 reactionTorqueTankFrame, in GimbalState g)
         {
-            Double3x3 rVT = Double3x3.Gimbal(g.Pitch.Angle, g.Roll.Angle);
-            Double3 tauV = rVT * reactionTorqueTankFrame;
+            JointLoad(reactionTorqueTankFrame, g.Pitch.Angle, g.Roll.Angle,
+                out _lastSloshLoadPitch, out _lastSloshLoadRoll);
+        }
 
-            double cp = Math.Cos(g.Pitch.Angle), sp = Math.Sin(g.Pitch.Angle);
+        /// <summary>Project a tank-frame torque onto the pitch and roll joint axes (N·m).</summary>
+        public static void JointLoad(Double3 torqueTankFrame, double pitchAngle, double rollAngle,
+            out double pitchLoad, out double rollLoad)
+        {
+            Double3x3 rVT = Double3x3.Gimbal(pitchAngle, rollAngle);
+            Double3 tauV = rVT * torqueTankFrame;
+
+            double cp = Math.Cos(pitchAngle), sp = Math.Sin(pitchAngle);
             var rollAxisV = new Double3(cp, 0.0, -sp);
 
-            _lastSloshLoadPitch = tauV.Y;                       // pitch joint axis = V.Y
-            _lastSloshLoadRoll = Double3.Dot(tauV, rollAxisV);  // roll joint axis
+            pitchLoad = tauV.Y;                        // pitch joint axis = V.Y
+            rollLoad = Double3.Dot(tauV, rollAxisV);   // roll joint axis
         }
 
         /// <summary>Assemble the privileged observation for the current step (critic / ceiling baseline only).</summary>
@@ -284,7 +292,10 @@ namespace FluidStabilizer.Core.Sim
                 SloshDampingRatio = sg.ModeDampingRatio,
                 LiquidComTankFrame = sg.LiquidCenterOfMass,
                 SloshKineticEnergy = sg.SloshKineticEnergy,
-                MinFreeboard = double.IsPositiveInfinity(_worstFreeboard) ? 0.0 : _lastSlosh.MinFreeboard
+                MinFreeboard = double.IsPositiveInfinity(_worstFreeboard) ? 0.0 : _lastSlosh.MinFreeboard,
+                VehicleAngularVelocityBody = VehicleState.AngularVelocityBody,
+                VehicleAngularAccelerationBody = VehicleState.AngularAccelerationBody,
+                CumulativeOverflowVolume = _cumulativeOverflow
             };
         }
 

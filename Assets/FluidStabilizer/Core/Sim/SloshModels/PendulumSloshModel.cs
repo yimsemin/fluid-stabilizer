@@ -185,6 +185,31 @@ namespace FluidStabilizer.Core.Sim.SloshModels
             };
         }
 
+        /// <summary>
+        /// Set the dynamic state (pendulum angles/rates, liquid already spilled)
+        /// of an episode-configured model. For predictive controllers.
+        /// </summary>
+        public void SetState(double thPitch, double thPitchDot, double thRoll, double thRollDot, double spilledVolume)
+        {
+            _thx = thPitch; _thxDot = thPitchDot; _thy = thRoll; _thyDot = thRollDot;
+            _liquidVolume = Math.Max(0.0, _fullLiquidVolume - Math.Max(0.0, spilledVolume));
+            if (_fullLiquidVolume > 1e-12)
+                _restSurfaceZ = _restSurfaceZ0 * (_liquidVolume / _fullLiquidVolume);
+        }
+
+        /// <summary>Copy the dynamic state of a model configured with the same parameters.</summary>
+        public void CopyStateFrom(PendulumSloshModel o)
+        {
+            _thx = o._thx; _thxDot = o._thxDot; _thy = o._thy; _thyDot = o._thyDot;
+            _liquidVolume = o._liquidVolume; _restSurfaceZ = o._restSurfaceZ;
+            _lastSpillVolume = o._lastSpillVolume;
+        }
+
+        /// <summary>Mechanical energy (kinetic + potential, J) in the two sloshing pendulums; no allocation.</summary>
+        public double ModeEnergy =>
+            0.5 * _m1x * Sq(_Lx * _thxDot) + _m1x * MathD.StandardGravity * _Lx * (1.0 - Math.Cos(_thx)) +
+            0.5 * _m1y * Sq(_Ly * _thyDot) + _m1y * MathD.StandardGravity * _Ly * (1.0 - Math.Cos(_thy));
+
         public SloshGroundTruth SampleGroundTruth()
         {
             // Liquid CoM ≈ fixed-mass centroid shifted by the pendulum excursions.

@@ -13,6 +13,8 @@ namespace FluidStabilizer.Core
 
         public double Value => _y;
 
+        public void CopyStateFrom(LowPass o) { _y = o._y; _primed = o._primed; }
+
         public void Reset(double value = 0.0)
         {
             _y = value;

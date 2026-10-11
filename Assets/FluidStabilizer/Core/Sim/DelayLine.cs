@@ -33,6 +33,13 @@ namespace FluidStabilizer.Core.Sim
 
         public void Reset() => Reset(_fill);
 
+        /// <summary>Copy the buffered samples of an identically-configured line.</summary>
+        public void CopyStateFrom(DelayLine o)
+        {
+            Array.Copy(o._buffer, _buffer, _buffer.Length);
+            _head = o._head;
+        }
+
         /// <summary>Push the newest sample and return the delayed sample.</summary>
         public double Step(double newest)
         {

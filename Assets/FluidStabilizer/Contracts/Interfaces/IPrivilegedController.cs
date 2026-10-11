@@ -39,6 +39,13 @@ namespace FluidStabilizer.Contracts
         /// <summary>True slosh kinetic energy (J) and smallest current freeboard (m).</summary>
         public double SloshKineticEnergy;
         public double MinFreeboard;
+
+        /// <summary>True vehicle body angular velocity / acceleration (body frame) — external disturbance for predictive controllers.</summary>
+        public Double3 VehicleAngularVelocityBody;
+        public Double3 VehicleAngularAccelerationBody;
+
+        /// <summary>Liquid spilled so far this episode (m³); lowers the still-surface height.</summary>
+        public double CumulativeOverflowVolume;
     }
 
     /// <summary>

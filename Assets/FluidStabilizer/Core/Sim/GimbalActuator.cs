@@ -95,6 +95,39 @@ namespace FluidStabilizer.Core.Sim
             _roll.ReflectedInertia = Math.Max(0.0, roll);
         }
 
+        /// <summary>
+        /// Copy the full internal state (servo setpoint/integral, delay line, accel
+        /// filter, thermal) of an actuator built with the same config and step —
+        /// for predictive controllers that roll the model forward from a snapshot.
+        /// </summary>
+        public void CopyStateFrom(GimbalActuator o)
+        {
+            CopyAxis(_pitch, o._pitch);
+            CopyAxis(_roll, o._roll);
+        }
+
+        /// <summary>
+        /// Overwrite the observable joint state (angle, rate, winding heat) while
+        /// keeping hidden servo internals — how a controller re-syncs its own
+        /// dead-reckoned copy to a measurement.
+        /// </summary>
+        public void OverwriteMeasured(double pitchAngle, double pitchRate, double pitchThermal,
+            double rollAngle, double rollRate, double rollThermal)
+        {
+            _pitch.Angle = pitchAngle; _pitch.Rate = pitchRate; _pitch.Thermal = pitchThermal;
+            _roll.Angle = rollAngle; _roll.Rate = rollRate; _roll.Thermal = rollThermal;
+        }
+
+        private static void CopyAxis(AxisSim d, AxisSim s)
+        {
+            d.Angle = s.Angle; d.Rate = s.Rate; d.Setpoint = s.Setpoint; d.Integral = s.Integral;
+            d.LastAccel = s.LastAccel; d.LastAccelSmoothed = s.LastAccelSmoothed;
+            d.LastTorque = s.LastTorque; d.LastCurrent = s.LastCurrent; d.Thermal = s.Thermal;
+            d.AtLimit = s.AtLimit; d.Saturated = s.Saturated; d.ReflectedInertia = s.ReflectedInertia;
+            d.CommandDelay.CopyStateFrom(s.CommandDelay);
+            d.AccelFilter.CopyStateFrom(s.AccelFilter);
+        }
+
         public GimbalState State => new GimbalState
         {
             Pitch = Snapshot(_pitch),
