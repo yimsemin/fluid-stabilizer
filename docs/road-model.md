@@ -1,8 +1,7 @@
 # 도로 모델
 
-2026-08-29 추가 (계획 리뷰, 결정 D6). design-review §4/§5 가 "grade, bank,
-거칠기를 가진 도로" 를 v1 필수 모델링으로 꼽음; 스텁(`RoadInput`)만 있고 아무것도
-안 채웠음. 이게 그 갭을 닫음.
+결정 D6 의 구현. design-review §4/§5 가 "grade, bank, 거칠기를 가진 도로" 를 필수 모델링으로
+꼽았고, 이 문서가 그 도로 모델을 설명한다.
 
 ## 왜 중요한가
 
@@ -10,7 +9,7 @@
 전달한다. 완벽히 평평한 도로에서는 현실적 고속도로 운전 하에 강체 탱크가 거의
 안 넘친다 (finding F4), 그래서 학습 정책이 이길 게 별로 없다. 실제 도로 — 굽이치는
 grade, 커브 bank, 노면 거칠기, 간간이 포트홀 — 는 강체 탱크가 *거부할 수 없고*
-예측 정책은 할 수 있는 disturbance. 3-way 비교(project-goals.md)를 다시 흥미로운
+예측 정책은 할 수 있는 disturbance. 4종 비교(project-goals.md)를 다시 흥미로운
 조건으로 되돌린다.
 
 ## 무엇을 모델링하나 — `RoadModel` (엔진프리, `FluidStabilizer.Core.Sim`)
@@ -33,7 +32,7 @@ grade, 커브 bank, 노면 거칠기, 간간이 포트홀 — 는 강체 탱크�
 스트림이 이 채널 존재 전과 바이트 동일 (opt-in 하는 RoughRoad* 시나리오만 새
 동작을 봄 — 그 베이스라인 수는 재스윕 필요).
 
-## 트럭이 도로를 운전한다 — 레인 모델 (2026-08-29)
+## 트럭이 도로를 운전한다 — 레인 모델
 
 도로는 레일이 아니라 **운전하는 코스**. `VehicleModel.Step` (도로 on 일 때만):
 
@@ -56,11 +55,10 @@ grade, 커브 bank, 노면 거칠기, 간간이 포트홀 — 는 강체 탱크�
 코너링은 lateral 슬로시 disturbance 도 더함. 도로가 off 면 `Curvature` 가 0,
 레인 모델을 완전히 건너뛰고, 동작이 이전과 바이트 동일.
 
-## 좌우 바퀴 트랙 비대칭 (2026-08-30)
+## 좌우 바퀴 트랙 비대칭
 
-소유자 피드백: "왼쪽 바퀴에 돌맹이가 있으면 왼쪽으로 들썩거릴 수 있잖아? 그런게
-지금 적용 안 된 건가." 맞다 — v1 은 단일 트랙 프로파일이었다. 이제 좌/우 바퀴
-트랙을 구분한다.
+왼쪽 바퀴만 돌에 올라가면 차체가 왼쪽으로 들썩인다. 이를 표현하려고 단일 트랙 프로파일이 아니라
+좌/우 바퀴 트랙을 구분한다.
 
 - `RoadInput.SurfaceHeightLeft` / `SurfaceHeightRight` — 각 바퀴 트랙 아래 노면
   높이. `SurfaceHeight` 는 둘의 **평균** (기존 heave 경로가 그대로 씀).
@@ -68,7 +66,7 @@ grade, 커브 bank, 노면 거칠기, 간간이 포트홀 — 는 강체 탱크�
   노면은 짧은 파장에서 decorrelate), **이산 이벤트는 ~55% 가 한쪽 바퀴만**
   (돌, 가장자리 포트홀) — 나머지는 양쪽 (신축 조인트, 넓은 포트홀).
 - `RoadConfig.WheelTrackRoughnessFrac` (기본 0.35) 가 차등 거칠기 진폭을
-  `RoughnessRmsM` 의 비율로. **0 = 옛 대칭 단일 트랙 도로** (이벤트도 전부 양쪽).
+  `RoughnessRmsM` 의 비율로. **0 = 대칭 단일 트랙 도로** (이벤트도 전부 양쪽).
 - `VehicleModel` 이 `atan2(heightL − heightR, TrackWidthM)` 를 도로 유발 roll
   목표로 만들어 기존 roll 2차 서스펜션(1.6 Hz)으로 필터 → 한쪽 범프가
   일시적 roll 로 온다. `VehicleConfig.TrackWidthM` (2.0), `RoadRollGain` (1.0).
@@ -79,11 +77,10 @@ grade, 커브 bank, 노면 거칠기, 간간이 포트홀 — 는 강체 탱크�
   거리에서 같은 lateral 위치 → 동일한 L/R 트랙을 샘플링. 시각적 오프셋은 무관.
   통제된 비교 유지.
 
-## 미끄러운 노면 슬립 프록시 (2026-08-30)
+## 미끄러운 노면 슬립 프록시
 
-소유자 피드백: "빗길/눈길 프리셋인데 별로 안 미끄러움." 원인: v1 은 마찰 한계만
-낮춰서 급기동이 덜 먹혀 오히려 슬로시가 *줄었다*. 이제 lumped 슬립 프록시가
-있다 (design-review §8/§18 은 완전한 타이어 모델을 defer — 이건 싼 대역).
+마찰 한계만 낮추면 급기동이 덜 먹혀 오히려 슬로시가 *줄어든다*. 그래서 lumped 슬립 프록시를
+둔다 (design-review §8/§18 은 완전한 타이어 모델을 defer — 이건 싼 대역).
 
 - `VehicleModel._slip ∈ [0,1]`: 요구 가속이 마찰 한계를 넘으면 빠르게 상승
   (`SlipOnsetTau` 0.08 s), 천천히 회복 (`SlipRecoverTau` 0.35 s).
@@ -97,8 +94,7 @@ grade, 커브 bank, 노면 거칠기, 간간이 포트홀 — 는 강체 탱크�
   을 매 스텝 뽑되 `_slip > 0` 일 때만 적용 → 슬립 궤적과 RNG 소비 분리 (결정론 안정).
 - `VehicleState.TyreSlip` 노출 → HUD 에 "⚠ 타이어 미끄러짐" 표시.
 
-**격렬함 조절 (`slipIntensity`, 2026-08-30).** 소유자 피드백: "너무 미끌려서
-운전 중이라는 느낌이 안 든다." 코드 기본값(YawWander 0.35 등)이 데모에 과했다.
+**격렬함 조절 (`slipIntensity`).** 코드 기본값(YawWander 0.35 등)은 데모에 과하다.
 `ExperimentProfile.SlipIntensity` 가 슬립의 *결과* 세 가지 —
 `SlipYawWander`(fishtail) · `SlipGripLoss`(추가 접지 손실) · `SlipYawLag`(조향
 under-response + grab) — 를 한 번에 스케일. `Grip` 과 독립: `Grip` 은 *언제*
@@ -108,8 +104,7 @@ under-response + grab) — 를 한 번에 스케일. `Grip` 과 독립: `Grip` �
   - `1` = 코드 기본값 그대로.
   - `2~3` (클램프) = 의도적으로 격렬한 슬라이드.
 - 프리셋: 일반/굽은/급경사 0.5, 비포장 0.6, 빗길 0.7 (grip 0.6), 눈길 0.9
-  (grip 0.38). 예전의 거센 느낌은 `experiment.txt` 에서 `slipIntensity: 1.5`
-  이상으로.
+  (grip 0.38). 거센 슬립은 `experiment.txt` 에서 `slipIntensity: 1.5` 이상으로.
 
 ## 서스펜션 heave
 
@@ -141,6 +136,6 @@ design-review §8 은 "heave, pitch, roll" 요구). 차체가 spring-mass-damper
 
 ## 모델링 안 함 (보류)
 
-도로 유발 yaw (crown steer), 짧은 범프의 타이어 envelopment, 공간 상관된 좌/우
-트랙 (v1 은 단일 트랙 프로파일), 차체 roll 트림 너머의 뱅크드 커브 lateral 하중
+도로 유발 yaw (crown steer), 짧은 범프의 타이어 envelopment, 좌/우 트랙 사이의 정밀한
+공간 상관 (현재는 긴 undulation 공유 + 짧은 거칠기 독립의 근사), 차체 roll 트림 너머의 뱅크드 커브 lateral 하중
 결합. 어느 것도 액체에 도달하는 지배적 disturbance 경로(수직 + grade)에 영향 없음.

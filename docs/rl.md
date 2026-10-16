@@ -25,13 +25,13 @@ findings F1~F4: 강체(잠금 관절) `Hold` 상대로 **어떤 분석적 반응
 | `RemotePolicyController` | `Rl/` | ✅ 학습된 정책의 브릿지 *클라이언트* — `serve_policy.py` 에 연결 (step D) |
 | `BcDatasetExporter` | `Rl/` | ✅ hindsight 궤적 → BC 지도학습 데이터셋 (step C) |
 | `RlServerLauncher` / `BcExportRunner` / `PolicyEvalRunner` | `Sim/Editor/` | ✅ `-executeMethod` / 메뉴 진입점 (헤드리스 Unity 호스트) |
-| Python env + PPO | `python/` | 🟡 비대칭 크리틱 CleanRL 스타일 PPO; end-to-end 실행됨, obs/return 정규화까지 올림. **맨땅 PPO 는 학습하지 못한다** (F1·F4·F9·F10). BC 클론이 PPO 미세조정보다 낫다 (F10). "첫 실행 결과" 참고 |
+| Python env + PPO | `python/` | 🟡 비대칭 크리틱 CleanRL 스타일 PPO; end-to-end 실행됨, obs/return 정규화까지 올림. **맨땅 PPO 는 학습하지 못한다** (F1·F4·F9·F10). BC 클론이 PPO 미세조정보다 낫다 (F10). 아래 "맨땅 PPO 가 안 되는 이유" 참고 |
 | `bc_pretrain.py` / `serve_policy.py` | `python/` | ✅ BC 사전학습 + 정책 추론 프로세스 (step C/D). `serve_policy.py --release-bias/--release-ema` 는 해제 요청 보정 실험 옵션(기본 꺼짐, F12) |
 | `DaggerRolloutRunner` / `dagger.py` | `Sim/Editor/` · `python/` | ✅ 학습자 상태를 교사 행동으로 재라벨 + 누적 재학습 루프 (F12). **줄기는 닫힘** (D11) |
 | `MultiCornerRunner` | `Sim/Editor/` | ✅ F8 계열 합성 코너링 주행 + 주행별 천장 + `datasets-f8-multi.tsv` (F11). 천장이 이득을 못 주는 주행은 0 궤적(유휴) |
 | 도메인 랜덤화 | — | ⬜ (보류 — 활성 RL 학습 재개 시) |
-| 체크포인트 재개 | `train_ppo.py --resume` | ✅ (2026-08-30) — `state.pt` 로 이어서 학습. 커리큘럼 자동화는 아직 수동 |
-| 에피소드 로깅 | `EpisodeLog` → `Logs/episodes.csv` | ✅ (2026-08-30) — 평가/비교 러너가 에피소드당 한 줄 append. RL 학습 자체는 아직 미배선 (필요 시 `RlEnvironment` 에서) |
+| 체크포인트 재개 | `train_ppo.py --resume` | ✅ `state.pt` 로 이어서 학습. 커리큘럼 자동화는 아직 수동 |
+| 에피소드 로깅 | `EpisodeLog` → `Logs/episodes.csv` | ✅ 평가/비교 러너가 에피소드당 한 줄 append. RL 학습 자체는 아직 미배선 (필요 시 `RlEnvironment` 에서) |
 
 ## 행동 / 관측 / reward
 
@@ -47,9 +47,9 @@ findings F1~F4: 강체(잠금 관절) `Hold` 상대로 **어떤 분석적 반응
 
 ## 실행 방법
 
-**2026-08-29 브릿지 end-to-end 검증** (macOS arm64, M4 Max): 아래 명령이 전체
-루프를 돌림 — ~1400 steps/s, 체크포인트 + TensorBoard 로그 기록. **PPO 는 아직
-학습 못 함** ("첫 실행 결과" 참고) — 학습기 문제이지 브릿지 문제 아님.
+**브릿지 end-to-end 검증됨** (macOS arm64, M4 Max): 아래 명령이 전체 루프를 돌림 — ~1400
+steps/s, 체크포인트 + TensorBoard 로그 기록. 맨땅 PPO 가 학습 못 하는 이유는 학습기·브릿지가 아니라
+과제 설계(액션 공간)다 — "맨땅 PPO 가 안 되는 이유" 절.
 
 > ⚠️ **헤드리스 서버 시작 전에 Unity Editor 를 닫아라.** Unity 는 프로젝트당
 > 단일 인스턴스 — Editor(또는 죽은 `-batchmode` Unity, `AssetImportWorker`)가
@@ -108,14 +108,14 @@ hindsight 행동을 먹여 → `Logs/bc/dataset.csv`. 그다음 `python bc_pretr
 무동작이라 BC 가 가르치는 건 저진폭 매끄러운 프라이어(탐색을 절벽에서 떼어놓음)
 이지 유능한 정책이 아니다.
 
-**교사 다양화 · DAgger (F11·F12, 2026-10-11 — 줄기는 닫힘, D11):**
+**교사 다양화 · DAgger (F11·F12 — 줄기는 닫힘, D11):**
 `MultiCornerRunner.Run` 이 합성 주행을 만들고 `-traceManifest datasets-f8-multi.tsv`
 로 내보내기·평가에 쓴다. `python/dagger.py --dataset … --manifest …` 가 학습자를
 굴려 방문 상태를 재라벨하고 누적 재학습한다. 천장이 이득을 못 주는(유휴) 교사는
 내보내기에서 **잠금 라벨**이 된다. 결과는 강체를 못 이겼다 — 재개 조건은
 [experiment-plan.md](experiment-plan.md).
 
-## 행동 계약 (PolicyContract) — 2026-09-10
+## 행동 계약 (PolicyContract)
 
 **문제였던 것:** 학습(`RlEnvironment`)은 `rate = baseline + policy·0.35·maxRate`
 를 만들고 lock gate 를 통과시켰는데, 배포(`RemotePolicyController`)는
@@ -175,26 +175,13 @@ rate 로 clamp. 정책은 멀쩡한 동작점 주변에서 작은 보정만 학�
 `FluidStabEnv` 를 Gymnasium `AsyncVectorEnv` 로 감쌈 (v1 PPO 스크립트는
 단일 env — 처리량이 중요해지면 확장).
 
-## 첫 실행 결과 (2026-08-29): 배관은 작동; 맨땅 PPO 는 이 과제를 학습 **못 함**
+## 맨땅 PPO 가 안 되는 이유 (F9·F10)
 
-세 번 실행 (600 k~1 M 스텝): 학습된 정책이 항상 *zero-action 정책보다 나쁨*,
-return 곡선이 완전 평평. 별개의 두 문제; 첫째는 고침, 둘째는 과제 설계 결정.
+학습기는 CleanRL 참조 수준이다(actor·크리틱 obs 에 `RunningMeanStd` whitening ±10 클립, return 정규화,
+`--ent-coef` 기본 `1e-3`, 정규화기 통계를 체크포인트에 저장해 `play.py` 가 재적용). 그래도 처음부터 전부
+배우는 PPO 는 이 과제를 학습하지 못한다. 원인은 **과제가 예측 문제**라는 점이다.
 
-### (1) 학습기가 CleanRL 참조 아래였음 — **고침**
-
-`train_ppo.py` 가 원시 234차원 프레임스택 obs(물리 단위, 스케일 제각각)를
-`tanh` MLP 에 바로 먹였고, 스케일 안 된 reward 타깃과 `--ent-coef 0`. 첫 Linear
-층이 포화하고 아무것도 학습 안 됨. 이번 세션에 추가: actor obs **와** 특권 크리틱
-obs 둘 다에 `RunningMeanStd` whitening (±10 클립); CleanRL 스타일 return 정규화
-(reward ÷ 할인 return 의 running std); `--ent-coef` 기본 `0 → 1e-3`; obs
-정규화기 통계를 체크포인트에 저장하고 `play.py` 가 재적용; 콘솔이 이제
-`return(mean50)` (원시) 를 flush 출력. `v_loss` 가 스파이크 → ~1e-2. 하지만
-정책은 (2) 때문에 여전히 개선 안 됨.
-
-### (2) 과제는 예측 문제 — 반응형 탐색이 절벽에서 떨어진다
-
-`-rlDriver aggressive -rlAggression 0.7 -rlFill 0.72` (진자 ROM, 30 s
-에피소드)에서 측정한 평균 에피소드 return:
+`-rlDriver aggressive -rlAggression 0.7 -rlFill 0.72` (진자 ROM, 30 s 에피소드)에서 측정한 평균 return:
 
 | 정책 | return | 넘치나? |
 |---|---|---|
@@ -202,21 +189,13 @@ obs 둘 다에 `RunningMeanStd` whitening (±10 클립); CleanRL 스타일 retur
 | felt-tilt obs 에 대한 **어떤** 반응형 P 또는 D 컨트롤러, **어떤 gain, 어느 부호든** | ≈ −3200 | 예, 3~4 / 4 |
 | 1 M 스텝 후 PPO | ≈ −3250 | 예 |
 
-이건 **정확히 finding F1/F4**: 짐벌이 파도에 반응해 움직이는 순간 슬로시
-에너지를 펌핑하고 탱크가 넘친다. 유일한 좋은 정책은 좁은 "hold / 예측" 능선;
-무작위 init 주변의 Gaussian 행동 노이즈는 *항상* 절벽 위, 모든 롤아웃이
-≈ −3200 에서 조기 종료, 크리틱이 "전부 −3200" 을 학습, gradient 가 사라지고
-log-std 가 붕괴. 맨땅 on-policy 학습기는 여기서 예측 정책을 발견 못 한다.
+짐벌이 파도에 반응해 움직이는 순간 슬로시 에너지를 펌핑하고 탱크가 넘친다(F1·F4). 좋은 정책은 좁은
+"hold / 예측" 능선뿐이라, 무작위 init 주변의 가우시안 행동 노이즈는 항상 절벽 위에 서고, 모든 롤아웃이
+≈ −3200 에서 조기 종료되고, 크리틱이 "전부 −3200" 을 학습해 gradient 가 사라지고 log-std 가 붕괴한다.
 
-**이건 스텝이나 튜닝이 아니라 과제 설계 변경이 필요했다.** 이후 순서:
-
-1. **녹화 인간 주행**(`DriverTrace`)과 **feasibility 천장**(`HindsightOptimizer`)을 먼저
-   만들었다. 천장은 결정 게이트였고 녹화 주행에서 강체를 못 이겼다 (F5·F6).
-2. **잔차 + lock-capable 액션**(D8)으로 구조적 핸디캡을 없앴다.
-3. 잔차 액션 공간이 **절벽**이라 학습 신호가 0 임을 특정하고 **명시적 잠금 액션**으로
-   고쳤다 (F9 → F10, D10). 이 뒤로 ③ 이 학습한다.
-4. 교사 다양화·DAgger 로도 강체를 못 이겼다 (F11·F12). **이 줄기는 닫혔다** (D11).
-
+해결은 스텝이나 튜닝이 아니라 **과제 설계**였다: 녹화 인간 주행 + feasibility 천장(F5·F6) → 잔차 +
+lock-capable 액션(D8) → 잔차 액션 공간이 절벽임을 특정하고 **명시적 잠금 액션**으로 교체(F9 → F10,
+D10). 이 뒤로 ③ 이 학습한다. 교사 다양화·DAgger 로도 강체를 못 이겼고 줄기는 닫혔다(F11·F12, D11).
 현재 상태와 재개 조건은 [experiment-plan.md](experiment-plan.md).
 
 ## 메모 / 리스크
@@ -238,9 +217,8 @@ log-std 가 붕괴. 맨땅 on-policy 학습기는 여기서 예측 정책을 발
 - **Reward hacking 감시:** 고전적 exploit 은 액체를 하드 end-stop 에 가두는 것.
   항목별 breakdown 의 `joint-limit-proximity` 와 `actuator-effort` 감시;
   발생하면 `k6`/`k5` 올림.
-- **Reward 가중치 조정 2026-08-29:** `Overflow` 500 → 5e4, `TerminalSpill`
-  5 → 500. 예전 값으로는 50 L 스필이 ≈ −25 만 비용이고 탱크를 쏟아 에피소드를
-  끝내는 게 버티는 것보다 *더 나은* 점수 — fail-fast exploit. `RlEnvironmentTests`
+- **Reward 가중치:** `Overflow` 5e4, `TerminalSpill` 500. 낮은 값(500 / 5)에서는 50 L 스필이
+  ≈ −25 만 비용이고 탱크를 쏟아 에피소드를 끝내는 게 버티는 것보다 *더 나은* 점수 — fail-fast exploit. `RlEnvironmentTests`
   / `RewardFunction` 테스트 여전히 통과.
 - **처리량:** 바이너리 브릿지는 v1 에 충분. 병목이면 스텝 배치하거나 호스트를
   standalone .NET 프로세스로 (env 코드는 엔진프리 — 런처만 Unity).

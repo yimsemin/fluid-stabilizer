@@ -25,7 +25,7 @@
   렌더링이 꺼져 있음. 단순한 트럭/탱크/액체 프록시에 URP 가 주는 게 필요 없음.
 - **`Packages/manifest.json`** — Unity 빌트인 모듈 + `com.unity.test-framework`
   (결정론적 유닛 테스트) + `com.unity.inputsystem` (게임패드/키보드 입력). 둘
-  다 phase 1 시작 때 추가됨. **`com.unity.sentis` 는 명시적 결정 없이 추가 금지**
+  다 프로젝트 시작 때 추가됨. **`com.unity.sentis` 는 명시적 결정 없이 추가 금지**
   (project-goals 아키텍처: 정책은 별도 프로세스, ONNX 를 Unity 에 굽지 않음).
 - **표준 빌드 지원:** `FluidStabilizer ▸ Build Standalone App` (`BuildRunner`)
   이 활성 타깃(이 Mac 에선 StandaloneOSX)으로 빌드 → `Builds/`. 다른 플랫폼용
@@ -41,7 +41,7 @@
   `unityyamlmerge`, Git LFS 규칙.
 - GitHub 리모트 `origin` = `github.com/yimsemin/fluid-stabilizer` (존재).
 
-## 이번 세션들에 설치한 도구
+## 설치한 도구
 
 | 도구 | 이유 |
 |---|---|
@@ -51,12 +51,12 @@
 
 | 설치 안 함 | 이유 |
 |---|---|
-| **ROS 2** | 하드웨어 통합(phase 3) 전까지 불필요. 설계가 message-DTO + bus 인터페이스를 유지해서 나중에 재구조화 없이 추가 가능. |
+| **ROS 2** | 하드웨어 통합 전까지 불필요. 설계가 message-DTO + bus 인터페이스를 유지해서 나중에 재구조화 없이 추가 가능. |
 | **Unity ML-Agents** | 설계가 의도적으로 학습을 Unity/ML-Agents 에 결합 안 함 (design-review §12). RL 학습기는 언어중립 env 경계 뒤에. |
 | **유체 시뮬 플러그인 (Obi Fluid, Zibra 등)** | 권장 슬로시 모델은 커스텀 분석적 reduced-order 모델 (design-review §6). 입자 유체는 결정론과 RL 스텝 예산을 깸. |
 | **`com.unity.sentis` (ONNX 런타임)** | 아키텍처 결정 (project-goals): 정책은 별도 Python 프로세스로 서빙, Unity 바이너리에 안 구움. 작은 MLP 에 과함. |
 | **.NET SDK, Node.js** | Unity Editor 가 자체 C# 컴파일러 번들. Claude Code 가 생성된 `.csproj`/`.sln` 을 읽고 편집 가능. |
-| **standalone IDE (Rider / VS Code C#)** | phase 1 에 불필요. Editor + Claude Code 로 충분. |
+| **standalone IDE (Rider / VS Code C#)** | 불필요. Editor + Claude Code 로 충분. |
 
 ## 헤드리스 실행
 

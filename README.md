@@ -27,16 +27,16 @@ Physical AI 시뮬레이션 프로젝트: **인간이 운전하는** 트럭에 �
 
 ## 어디서부터 읽나
 
-**문서는 모두 한글.** [docs/README.md](docs/README.md) — 문서 색인, "문서마다
-하나의 역할", 정비 이력.
+**문서는 모두 한글.** [docs/README.md](docs/README.md) 가 색인(용어, 문서별 역할)이다.
 
 - [docs/lessons.md](docs/lessons.md) — **결과·교훈 한 문서 요약 (처음 읽는다면 이것부터)**
-- [docs/project-goals.md](docs/project-goals.md) — 무엇을 · 왜 · 헤드라인 결과 · 최종 아키텍처
-- [docs/experiment-plan.md](docs/experiment-plan.md) — 살아있는 현황 + 다음 단계
-- [docs/demo-guide.md](docs/demo-guide.md) — **시연용 참고 문서** (비개발자 청중)
-- [docs/findings.md](docs/findings.md) — 실험으로 밝혀진 사실 F1~F17
+- [docs/project-goals.md](docs/project-goals.md) — 무엇을 · 왜 · 최종 아키텍처
+- [docs/experiment-plan.md](docs/experiment-plan.md) — 현황 · 만든 것 · 닫힘/열림
+- [docs/findings.md](docs/findings.md) — 실험으로 밝혀진 사실 F1~F17 (숫자·근거)
 - [docs/decisions.md](docs/decisions.md) — 설계 결정 로그 D1~D14
-- [docs/design-review.md](docs/design-review.md) — 아키텍처 결정의 근거 (큰 참고 문서)
+- [docs/operating-guide.md](docs/operating-guide.md) — 조작 가이드 (키·패널·서버)
+- [docs/demo-guide.md](docs/demo-guide.md) — 시연 대본 (비개발자 청중)
+- [docs/design-review.md](docs/design-review.md) — 설계 시점의 근거 (큰 참고 문서)
 
 ## 저장소 구조
 
@@ -65,6 +65,5 @@ fluid-stabilizer/
 Unity Hub → **Add → Add project from disk** → 이 폴더 선택. Unity
 **6000.5.10f1** 정확히 (Mac 과 Windows 같은 버전).
 
-플레이 씬: 메뉴 ▸ FluidStabilizer ▸ Rebuild Play Scene 후 `PlayScene.unity` 열기.
-`W/S` 가감속, `A/D` 조향, `0~5` 스태빌라이저(5 = 후행지식 천장), `C` 3-way 비교,
-`P` 주행 녹화, `L` 재생. 시연 흐름은 [docs/demo-guide.md](docs/demo-guide.md).
+플레이 씬: 메뉴 ▸ FluidStabilizer ▸ Rebuild Play Scene 후 `PlayScene.unity` 열기. 키와 패널은
+[docs/operating-guide.md](docs/operating-guide.md), 시연 흐름은 [docs/demo-guide.md](docs/demo-guide.md).
