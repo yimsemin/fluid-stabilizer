@@ -83,7 +83,7 @@ phase-1 결론은 "소유자의 녹화 주행에서 ① 강체가 이긴다"로 
   상태로 쓰인다. look-ahead 센서는 계속 보류한다 ([project-goals.md](project-goals.md)
   "현실성 제약"). "프리뷰를 준 천장과 인과 정책의 격차" 실험은 하지 않는다.
 - **다음 줄기는 인과 MPC 검증이다.** 현재 상태와 모델·액추에이터 한계만으로 예측
-  최적화하는 제어기를 만들고, 강체와 규칙기반 대비 상한을 잰다. 단계와 중단 기준은
+  최적화하는 제어기를 만들고, 강체와 규칙기반 대비 상한을 잰다. 단계와 중단 기준은 [findings.md](findings.md) F14 에 있다.
   [experiment-plan.md](experiment-plan.md).
 
 **근거:**
@@ -277,8 +277,8 @@ hindsight `무동작` 바닥이 강체 Hold 와 일치, config 오버라이드 �
    `SimulationConfig.Road` 뒤에; **기본 비활성** — 기존 시나리오와 결정론 가드가
    바이트 단위로 동일하게 유지되도록. `Severity` 손잡이 하나가 거칠기+이벤트를
    스케일 (미래 커리큘럼용). 상세: [road-model.md](road-model.md).
-2. **단일 트랙 도로 프로파일** (좌/우 바퀴 트랙 분리 없음), **grade/bank 는
-   차체 트림으로** (도로 유발 yaw 없음) — v1. 액체로 가는 지배적 disturbance
+2. **단일 트랙 도로 프로파일** (좌/우 바퀴 트랙 분리 없음 — D7 에서 좌우 구분으로 확장),
+   **grade/bank 는 차체 트림으로** (도로 유발 yaw 없음) — v1. 액체로 가는 지배적 disturbance
    경로는 수직 + grade 이고, 이렇게 하면 모델이 싸고 상태가 작다.
 3. **`VehicleModel` 에 heave DOF 추가** (pitch+roll 만 있었음; design-review §8
    은 셋 다 요구). 차체가 ~1.5 Hz 트럭 승차 주파수의 spring-mass-damper 로 노면을
@@ -325,7 +325,7 @@ F2 의 헤드라인 결과가 그 산물이었다 (F4 참고).
 
 ## D4 — 2026-08-28 — 얕은물 슬로시 모델: 스킴과 커플링 선택
 
-`ShallowWaterSloshModel` (phase-2 모델 A, design-review §6) 은 바뀌지 않은
+`ShallowWaterSloshModel` (design-review §6 의 옵션 D) 은 바뀌지 않은
 `ISloshModel` 인터페이스 뒤의 2-D 깊이평균 Saint-Venant 솔버. 내린 선택:
 
 - **스킴.** 1차 유한체적, **Rusanov (local Lax–Friedrichs)** flux, forward
@@ -402,9 +402,8 @@ NaN 으로 번지지 않게. 정상 사용 중 클램프에 닿으면 봉투 밖
 적분한다. Unity PhysX 는 어떤 시뮬레이션 동역학에도 **쓰지 않는다**.
 `FluidStabilizer.Sim` 은 시각화, 입력, 씬 배선에만 Unity 를 쓴다.
 
-> (2026-08-29 정정: 이 문서 예전 버전에 "500 Hz" 라고 적혀 있었으나 실제 고정
-> 스텝은 **600 Hz** 다 — 200 Hz 센서가 정수로 나눠지도록 500 대신 600 선택,
-> [frames-units-conventions.md](frames-units-conventions.md) 참고.)
+600 Hz 인 이유는 200 Hz 센서가 정수로 나눠지도록 하기 위해서다
+([frames-units-conventions.md](frames-units-conventions.md)).
 
 **이유.**
 

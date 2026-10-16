@@ -112,7 +112,7 @@
 
 **배치 수치:** 메뉴 ▸ *FluidStabilizer ▸ Evaluate Recorded Drives* (또는
 *Evaluate Learned Policy*) → 모든 녹화 주행 × 컨트롤러 × 슬로시 모델의 리터 표를
-`Logs/trace-eval.txt` 에 쓰고, 에피소드마다 한 줄을 **`Logs/episodes.csv`** 에
+`Logs/trace-eval-<시각>-<id>.txt` 에 쓰고, 에피소드마다 한 줄을 **`Logs/episodes-v2.csv`** 에
 덧붙인다 (운영점 + 결과 지표 → 스프레드시트로 누적 비교·그래프).
 
 ---
@@ -219,10 +219,10 @@
 
 ## 용어 (Physical AI 입문 청중용)
 
+슬로시·freeboard·①~④ 같은 기본 용어는 [docs/README.md](README.md) "용어". 아래는 학습 관련 용어다.
+
 | 용어 | 뜻 |
 |---|---|
-| **슬로시 (sloshing)** | 용기 안 액체의 출렁임. 여기서는 그 *시간 동역학*(기동 후에도 계속 움직임)이 문제. |
-| **freeboard** | 액체 표면에서 탱크 rim 까지 남은 높이. 0 이하 = 넘침. |
 | **베이스라인 (baseline)** | 학습 정책과 비교할 기준. ① 강체, ② 규칙 기반. |
 | **후행지식 (hindsight)** | 미래를 다 알고 나서(사후에) 최적화. 실제로는 불가능, 비교용 기준선. |
 | **잔차 RL (residual RL)** | 정책이 베이스라인 행동 위에 *작은 보정*만 학습. 전부 배우는 것보다 안정적. |

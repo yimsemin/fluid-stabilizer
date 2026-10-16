@@ -7,6 +7,7 @@
 > `HighwayBriskLowFreeboard` 0.67 L vs ~27 L, `RoughRoadHighway` 0 L vs ~8 L,
 > `RoughRoadLowFreeboard` 0.1 L vs ~30 L, `HighFillAggressive` 35 L vs ~68 L. 각 F 항목의 수치는
 > 그 항목 시점의 설정이다 — 다른 항목과 직접 비교하지 말고 항목 안에서만 읽는다.
+> 항목 안의 "다음에/확인 못 한 것" 문장은 그 시점의 서술이다. 이후 결과는 *기울임 괄호*로 이어서 적었다.
 
 ## 한눈에 — F1~F17
 
@@ -226,8 +227,8 @@ validation 2 주행(합 162.8 L)을 재생해, 스필을 "탱크 좌표계 수�
   좋아졌고 최선 설정은 시간의 55 % 를 잠금으로 보낸다. 즉 이득은 틸트로 슬로시를 감쇠해서가
   아니라 *언제 개입하지 않을지*를 고르는 데서 나온다.
 - **외란 감쇠 가정(0.15~0.5 s)과 지평 단축(0.75 s)은 일관되게 도움이 되지 않았다.**
-- 한계: 진자 모델만 (얕은물 미평가 — 3단계 조건 미충족), 합성 주행·`final` 미사용,
-  시드 3종 · 설정 20여 가지만 시험.
+- 한계: 이 항목의 평가는 진자 모델만이다(얕은물 플랜트 시험은 F17, 진자 내부 모델 한정). 합성
+  주행·`final` 미사용, 시드 3종 · 설정 20여 가지만 시험.
 
 ---
 
@@ -333,7 +334,7 @@ b 를 키우면 강체에 수렴할 뿐이다 — **b ≥ 0.2 에서는 어떤 �
   채 계산만 늘리지 않으려면 먼저 "활성/유휴를 관측으로 예측할 수 있는가" 를 주행 40개
   이상으로 확인하는 편이 싸다.
 - 확인하지 못한 것: 얕은물 채점 · 규칙기반 ②/PID 대비 · 시드 3 개 이상 · 소유자의
-  `validation`/`final` 에서의 결과. `final` 은 **평가하지 않았다.**
+  `validation`/`final` 에서의 결과. `final` 은 **평가하지 않았다.** *(`final` 평가는 F13.)*
 
 ---
 
@@ -395,6 +396,7 @@ b 를 키우면 강체에 수렴할 뿐이다 — **b ≥ 0.2 에서는 어떤 �
   불안정이다. 교사를 더 늘려도 같은 구조다.
 - 확인하지 못한 것: 얕은물 채점 · 규칙기반 ②/PID 대비 · 해제 임계 보수화 같은
   배포측 완화 · DAgger. 소유자의 홀드아웃(`final`)에서는 **평가하지 않았다.**
+  *(배포측 완화와 DAgger 는 F12, `final` 평가는 F13.)*
 
 ---
 
@@ -458,9 +460,10 @@ b 를 키우면 강체에 수렴할 뿐이다 — **b ≥ 0.2 에서는 어떤 �
 - **강체 대비는 여전히 실패.** 12.4 vs 7.9 L. 헤드라인은 바뀌지 않는다.
 - **다음에 유효한 것은 PPO 가 아니라 BC 쪽**이다 — 교사 다양화(여러 주행),
   잘림을 줄이는 액션 파라미터화, 또는 DAgger 류의 온-폴리시 교정. 맨땅 PPO 나
-  현재 형태의 미세조정에 더 쓰는 건 근거가 없다.
+  현재 형태의 미세조정에 더 쓰는 건 근거가 없다. *(교사 다양화와 DAgger 는 F11·F12 에서
+  시험했고 강체를 못 이겼다.)*
 - 한 주행짜리 클론이라 **일반화는 검증되지 않았다.** 진짜 홀드아웃도 여전히
-  없다 ([reproducibility.md](reproducibility.md)).
+  없다 ([reproducibility.md](reproducibility.md)). *(일반화는 F11, 홀드아웃은 F13.)*
 
 시연: `Logs/demo-corner-eval-*.txt` (위 표의 출처), 체크포인트
 `python/runs/bc-f8/actor.pt`. [demo-guide.md](demo-guide.md) 참고.
@@ -526,11 +529,11 @@ F6 은 "lock-capable 이 F5 의 구조적 핸디캡을 없앴다 (③ ⊇ ①)" 
 - **다음에 바꿀 것은 학습이 아니라 액션 공간이다.** 잠금 여부를 dead-band 로
   사후 판정하지 말고 **정책이 명시적으로 요청**하게 해야 한다 (예: 세 번째
   출력 = lock/unlock, 또는 잠금 상태를 관측에 넣고 전환 비용을 보상에 반영).
-  그래야 "잠근 채로 있기"가 학습 가능한 선택지가 된다.
+  그래야 "잠근 채로 있기"가 학습 가능한 선택지가 된다. *(F10 에서 실행했다.)*
 - 대안(잠금 제거)은 F5 의 서보 핸디캡(바닥 19 L)을 되살리므로 그 자체로는 답이
   아니다.
 
-가드: `HindsightRecoveryTests.LockCapableResidual_IsACliffNotASlope`.
+가드: 절벽을 고정하던 테스트는 D10 의 명시적 잠금으로 대체됐고, 현재 가드는 F10 의 `HindsightRecoveryTests.ExplicitLock_KeepsTheRigidFloor_ForAnyResidual` 이다.
 
 ## F8 — 2026-09-10 — 능동 안정화가 이기는 운영점을 처음으로 찾았다: 매끄러운 노면의 지속 코너링
 
@@ -599,14 +602,14 @@ F6 의 FAIL 자체는 녹화 주행에서 F5 의 8 knot · 243 평가로도 재�
   ("소유자의 실제 주행에서는 ① 강체가 이긴다")은 **바뀌지 않는다.**
 - **작은 잔차 RL 을 시도할 근거가 처음으로 생겼다** — 단, 녹화 주행이 아니라
   **이 조건에서**. 목표는 ②(25 L)와 ④(5 L) 사이를 인과적 센서만으로 얼마나
-  메우는가다.
+  메우는가다. *(실행은 F9~F12.)*
 - 확인 못 한 것: 4 주행 중 2 주행은 이득 0 (탐색 분산). 진짜 홀드아웃 없음
-  ([reproducibility.md](reproducibility.md)). ④는 비인과적이므로 인과 정책이
+  ([reproducibility.md](reproducibility.md)) *(이후 등록, F13)*. ④는 비인과적이므로 인과 정책이
   실제로 얼마나 근접할지는 **미지수**다.
 
 **시연:** 메뉴 ▸ *FluidStabilizer ▸ Generate Demo Drive (sustained corner)* →
 `Traces/demo-corner-*.trace.csv` + `.traj.csv`. 플레이 씬에서 **L** 로 재생,
-**0~4** 로 스태빌라이저 전환 (④ = 천장 레인). [demo-guide.md](demo-guide.md).
+**0~5** 로 스태빌라이저 전환 (④ = 5, 천장 레인). [demo-guide.md](demo-guide.md).
 가드: `HindsightRecoveryTests.DemoCondition_CeilingBeatsRigid_UnderBothSloshModels`.
 
 ## F7 — F5/F6 재검증: 탐색기는 정상, 그러나 F5 의 숫자는 재현되지 않는다 (2026-09-10)
@@ -687,12 +690,12 @@ F5·F6 의 원래 관측 수치는 **그대로 보존한다** — 틀린 측정�
   매끄러운 저주파 단일축 신호에서의 유능함이다. 30~48 s 광대역 주행의 탐색
   난이도는 더 높고, 여기엔 "알려진 개선 행동" 기준이 없다.
 - lock-capable(D8) 조건에서의 재현은 이번에 다시 돌리지 않았다 (F6 원표 유지).
-- 이 결론은 홀드아웃 등록(2026-10-10) 이전의 것이라 **미사용 주행에서 확인되지 않았다.** `final` 평가는 아직 하지 않았다.
+- 이 결론은 홀드아웃 등록 이전의 것이라 **미사용 주행에서 확인되지 않았다.** *(이후 F13 에서 `final` 7 주행으로 확인했다.)*
 
 ### 가드
 
 `SweepRunner` (메뉴 ▸ Premise Sweep 2c; `-executeMethod …SweepRunner.Run [-swOnly …]`),
-`LockCapableActionTests` (8). EditMode 128 통과 / 8 스킵.
+`LockCapableActionTests` (8).
 
 ---
 
@@ -1066,8 +1069,7 @@ F1 의 해석 3 (합성 운전자가 너무 광대역)이 대체로 유지.
 액추에이터와 너무 멀다. `AxisLqr` 의 Riccati 수학은 맞고 여전히 테스트됨;
 실제 액추에이터 모델에 대한 제대로 된 MPC 는 미래 작업.
 
-가드: `EvaluatorTests.TiltControl_ClearlyBeatsHold_OnRealisticBriskDriving`,
-`NaiveTiltControl_StillExcitesSlosh_UnderAggressiveDriving`.
+가드: 이 항목의 테스트는 F4 의 강체 기준으로 대체됐다 — 현재 가드는 `EvaluatorTests.RigidHold_NotBeatenByReactiveTilt_OnLowFreeboardHighway`, `ReactiveTilt_LosesToRigidHold_UnderAggressiveHighFill`.
 
 ---
 
@@ -1078,7 +1080,7 @@ F1 의 해석 3 (합성 운전자가 너무 광대역)이 대체로 유지.
 **F2 로 부분 대체** (현실적 운전자) — 논리와 플랜트 모델 이력 때문에 남겨둠.
 공격적 조건 발견은 여전히 유효.
 
-**상태: 프로젝트 형태를 정하는 발견. 방향 결정 필요.**
+**상태 (당시): 프로젝트 형태를 정하는 발견. 방향 결정 필요.** 이후의 결정은 F2~F4 와 D5 에 있다.
 
 ### 시도한 것 (design-review 옵션 A: 진짜 천장 만들기)
 
@@ -1136,7 +1138,8 @@ actuator-in-the-loop 인 경우엔 실패.
 2. **제시된 대로의 과제가 공격적 운전에 대해 거의 제어 불가능.** 실제 탱크
    트럭은 능동 짐벌이 아니라 배플 + 조심스러운 운전을 씀. 개방형 탱크의 2축
    회전은 그냥 authority 가 없을 수도. → 전제 조정: preview/예측, 3번째(heave)
-   축, 배플 추가, 또는 "온화한 조건에서의 robustness" 프레이밍 수용.
+   축, 배플 추가, 또는 "온화한 조건에서의 robustness" 프레이밍 수용. *(배플은 F15·F16 에서
+   시험했고 가장 크게 줄였다. 프리뷰는 D12 에서 제외했다.)*
 3. **합성 운전자가 너무 광대역.** `RandomManeuverDriver` 가 roll 슬로시
    주기(~0.8 s) 근처의 날카로운 0.3~1.0 s 이벤트를 쏘고 공진. 실제 고속도로
    운전은 더 완만하고 대역제한적. → 운전자 분포 재설계하고 재평가.
@@ -1157,6 +1160,6 @@ actuator-in-the-loop 인 경우엔 실패.
 
 ### 가드
 
-`EvaluatorTests.NoBaselineControllerBeatsHold_OnTheDiscriminatingScenario`,
-`NaiveFeedbackControllers_ExciteSlosh_AndWorsenSpill` 가 현재 상태를 고정;
+`EvaluatorTests.RigidHold_NotBeatenByReactiveTilt_OnLowFreeboardHighway`,
+`ReactiveTilt_LosesToRigidHold_UnderAggressiveHighFill` 가 현재 상태를 고정한다.
 플랜트/컨트롤러 변경이 둘 중 하나를 뒤집으면 이 파일을 재검토해야 한다.

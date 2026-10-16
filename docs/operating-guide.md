@@ -137,12 +137,12 @@ cd python && .venv/bin/python serve_policy.py --checkpoint runs/bc/actor.pt --po
    쉽기 때문이다.
 5. 결과는 **4** 또는 **C** 로 본다.
 
-## 9. 결과 로그 (`Logs/episodes.csv`)
+## 9. 결과 로그 (`Logs/episodes-v2.csv`)
 
 3분할 비교와 헤드리스 평가(메뉴 **FluidStabilizer ▸ Evaluate Recorded Drives** / **Evaluate Learned
-Policy**)는 끝난 에피소드마다 한 줄을 `Logs/episodes.csv` 에 **덧붙인다** — 운영점(fill·탱크높이·도로·
+Policy**)는 끝난 에피소드마다 한 줄을 `Logs/episodes-v2.csv` 에 **덧붙인다** — 운영점(fill·탱크높이·도로·
 grip)과 결과(넘친 리터·최소 freeboard·슬로시에너지·액추에이터 노력/포화). 스프레드시트로 열어 실행을
-누적 비교할 수 있다. 주행 × 컨트롤러 × 슬로시 모델의 리터 표는 `Logs/trace-eval.txt` 에 쓴다. `Logs/`
+누적 비교할 수 있다. 주행 × 컨트롤러 × 슬로시 모델의 리터 표는 `Logs/trace-eval-<시각>-<id>.txt` 에 쓴다. `Logs/`
 는 git 에 안 올라간다.
 
 ## 10. standalone 앱 빌드

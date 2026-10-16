@@ -18,8 +18,8 @@
 
 ## 작업 전에 읽을 것
 
-1. [docs/project-goals.md](docs/project-goals.md) — 목적 · 헤드라인 결과 · 최종
-   아키텍처. **의도와 범위의 유일한 출처.**
+1. [docs/project-goals.md](docs/project-goals.md) — 목적 · 비교 대상 · 최종 아키텍처 ·
+   설계 원칙. **의도와 범위의 유일한 출처.**
 2. [docs/experiment-plan.md](docs/experiment-plan.md) — 살아있는 현황 + 다음 단계.
 3. [docs/design-review.md](docs/design-review.md) — 비판적 리뷰 + 권장 아키텍처.
    **설계 결정의 근거 출처.**
@@ -57,7 +57,7 @@
 
 ROS 2 · Unity ML-Agents · SPH/입자 유체 플러그인 (Obi, Zibra) · CFD ·
 완전한 WheelCollider 차량 시뮬 · 클라우드/CI 인프라 · `com.unity.sentis`.
-근거는 design-review §21, setup-status §4.
+근거는 design-review §21, setup-status "의도적으로 설치 안 한 것과 이유".
 
 ## 슬로시 모델
 

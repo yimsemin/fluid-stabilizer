@@ -9,8 +9,8 @@
 전달한다. 완벽히 평평한 도로에서는 현실적 고속도로 운전 하에 강체 탱크가 거의
 안 넘친다 (finding F4), 그래서 학습 정책이 이길 게 별로 없다. 실제 도로 — 굽이치는
 grade, 커브 bank, 노면 거칠기, 간간이 포트홀 — 는 강체 탱크가 *거부할 수 없고*
-예측 정책은 할 수 있는 disturbance. 4종 비교(project-goals.md)를 다시 흥미로운
-조건으로 되돌린다.
+예측 정책은 할 수 있다고 기대한 disturbance 다. 4종 비교(project-goals.md)를 의미 있는
+조건으로 만든다. *(결과: 도로를 켜도 소유자의 녹화 주행에서는 강체가 이긴다 — F5~F13.)*
 
 ## 무엇을 모델링하나 — `RoadModel` (엔진프리, `FluidStabilizer.Core.Sim`)
 
@@ -28,9 +28,8 @@ grade, 커브 bank, 노면 거칠기, 간간이 포트홀 — 는 강체 탱크�
 `Severity` (기본 1) 가 거칠기 + 이벤트를 스케일 (grade/bank/곡률 제외) — 커리큘럼
 이나 도메인 랜덤화의 유일한 손잡이. `RoadConfig.Enabled` 이 false 면 모든 출력이
 0, 이게 v1 기본 → **기존의 모든 non-road 시나리오와 결정론 가드가 변함 없음.**
-곡률 위상은 `Reset` 에서 *마지막*으로 뽑혀서, grade/bank/거칠기/이벤트 RNG
-스트림이 이 채널 존재 전과 바이트 동일 (opt-in 하는 RoughRoad* 시나리오만 새
-동작을 봄 — 그 베이스라인 수는 재스윕 필요).
+곡률 위상은 `Reset` 에서 *마지막*으로 뽑혀서 grade/bank/거칠기/이벤트 RNG 스트림에 영향이 없다
+(곡률 채널을 추가해도 그 스트림은 바이트 동일).
 
 ## 트럭이 도로를 운전한다 — 레인 모델
 
@@ -108,8 +107,7 @@ under-response + grab) — 를 한 번에 스케일. `Grip` 과 독립: `Grip` �
 
 ## 서스펜션 heave
 
-`VehicleModel` 이 3번째 스프렁매스 DOF 를 얻음 (pitch + roll 만 있었음;
-design-review §8 은 "heave, pitch, roll" 요구). 차체가 spring-mass-damper 로
+`VehicleModel` 은 heave, pitch, roll 3 스프렁매스 DOF 를 가진다 (design-review §8 의 요구). 차체가 spring-mass-damper 로
 노면을 추종 — `HeaveNaturalFreqHz` 1.6, `HeaveDampingRatio` 0.30, ~1.5 Hz
 트럭 승차 모드. 그래서 날카로운 범프가 순간 가속 스파이크가 아니라 서스펜션
 자체 공진을 가진 *필터링된* jolt 로 탱크에 도달 (design-review §4). 차체 수직

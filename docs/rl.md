@@ -31,12 +31,13 @@ findings F1~F4: 강체(잠금 관절) `Hold` 상대로 **어떤 분석적 반응
 | `MultiCornerRunner` | `Sim/Editor/` | ✅ F8 계열 합성 코너링 주행 + 주행별 천장 + `datasets-f8-multi.tsv` (F11). 천장이 이득을 못 주는 주행은 0 궤적(유휴) |
 | 도메인 랜덤화 | — | ⬜ (보류 — 활성 RL 학습 재개 시) |
 | 체크포인트 재개 | `train_ppo.py --resume` | ✅ `state.pt` 로 이어서 학습. 커리큘럼 자동화는 아직 수동 |
-| 에피소드 로깅 | `EpisodeLog` → `Logs/episodes.csv` | ✅ 평가/비교 러너가 에피소드당 한 줄 append. RL 학습 자체는 아직 미배선 (필요 시 `RlEnvironment` 에서) |
+| 에피소드 로깅 | `EpisodeLog` → `Logs/episodes-v2.csv` | ✅ 평가/비교 러너가 에피소드당 한 줄 append. RL 학습 자체는 아직 미배선 (필요 시 `RlEnvironment` 에서) |
 
 ## 행동 / 관측 / reward
 
-- **행동:** 축당 관절 **각속도** 명령 `[-1, 1]`, `GimbalConfig.MaxRateRadPerSec`
-  로 스케일. 각도가 아니라 rate 모드 (design-review §11; F1).
+- **행동:** 3차원. 축당 관절 **각속도** 명령 2개 `[-1, 1]` (`GimbalConfig.MaxRateRadPerSec` 로
+  스케일, 각도가 아니라 rate 모드 — design-review §11, F1; 베이스라인이 있으면 그 위의 잔차)와
+  3번째 **잠금 해제 요청** (D10 — 0 근처면 잠금 = 강체). 합성 규칙은 "행동 계약" 절.
 - **Actor 관측:** `ObservationEncoder` — 차량+탱크 IMU, 관절 상태, 모터 상태,
   로드셀 4개, 옵션 레벨/CAN, 마지막 행동, 탱크 프레임에서의 low-pass felt-tilt
   방향 + rate. 프레임 스택. **절대** ground truth 없음.
@@ -90,14 +91,13 @@ python serve_policy.py --checkpoint runs/bc-run/actor.pt --port 5601
 
 **런처 플래그:** `-rlPort -rlFill -rlSeconds -rlStack -rlDriver {highway|aggressive|scripted|steady}
 -rlSlosh {pendulum|shallow} -rlRoad {none|mild|rough} -rlBriskness -rlAggression`.
-`-rlPort/-rlStack` 빼고 전부 이제 **`experiment.txt` 를 기본값으로** 하고,
+`-rlPort/-rlStack` 빼고 전부 **`experiment.txt` 를 기본값으로** 하고,
 플래그가 실행별로 override.
 
 **트레이스 기반 학습 (step C0):** 학습에 쓰는 주행은 루트 `datasets.tsv` 의
 `train` split 이 정한다 — **hindsight 산출물 유무로 결정하지 않는다.**
 `-traceSplit` 로 split, `-rlTrace <substr>` 로 파일명 필터.
-**Reset 마다** 해당 주행의 설정·seed·슬로시 모델·전체 길이를 적용한다 (예전의
-"첫 주행 설정 일괄 적용 + 가장 짧은 주행 길이로 자르기" 는 제거됐다).
+**Reset 마다** 해당 주행의 설정·seed·슬로시 모델·전체 길이를 적용한다.
 규칙 전체는 [reproducibility.md](reproducibility.md).
 
 **BC 웜스타트 (step C):** `FluidStabilizer ▸ Export BC Dataset` (또는
@@ -117,20 +117,19 @@ hindsight 행동을 먹여 → `Logs/bc/dataset.csv`. 그다음 `python bc_pretr
 
 ## 행동 계약 (PolicyContract)
 
-**문제였던 것:** 학습(`RlEnvironment`)은 `rate = baseline + policy·0.35·maxRate`
-를 만들고 lock gate 를 통과시켰는데, 배포(`RemotePolicyController`)는
-`rate = policy·maxRate` 만 보냈다. baseline 도 잠금도 없었다. 즉 **잔차 정책을
-브릿지로 서빙하면 학습 때와 완전히 다른 의미로 실행**됐다. 관측도 1 틱
-어긋나 있었다 — 학습은 `(s_t, a_t)`, 배포는 `(s_{t+1}, a_t)` 를 인코딩했다.
+**왜 계약이 필요한가:** 학습(`RlEnvironment`)이 `rate = baseline + policy·0.35·maxRate` 를 만들고 lock
+gate 를 통과시키는데 배포(`RemotePolicyController`)가 `rate = policy·maxRate` 만 보내면, **잔차 정책을
+브릿지로 서빙할 때 학습 때와 완전히 다른 의미로 실행**된다. 관측 정렬이 학습과 배포에서 1 틱
+어긋나도 마찬가지다. 그래서 합성 규칙을 한 타입으로 묶는다.
 
-**지금:**
+**현재:**
 
 - `PolicyContract` 하나가 baseline · 행동 배율 · maxRate · lock 여부 ·
   frame stack · 관측 버전을 담는다.
 - `ActionComposer` 하나가 행동 → 명령 합성을 담당하고 **학습과 배포가 같은 것을
   쓴다.**
-- 관측 정렬을 배포 쪽에 맞췄다 (`_loop.LatestSensorBundle`). **이전 체크포인트는
-  다른 정렬로 학습됐다** — 재학습 대상.
+- 관측 정렬은 학습과 배포가 같다 (`_loop.LatestSensorBundle`). 이 정렬 이전에 만든 체크포인트는
+  재학습 대상이다.
 - 계약이 체크포인트를 따라다닌다: 학습 서버 핸드셰이크(v2) → `train_ppo.py` /
   `bc_pretrain.py` 가 체크포인트에 저장 → `serve_policy.py` 가 핸드셰이크로
   되돌려 보냄 → Unity 가 그대로 실행.
@@ -159,7 +158,8 @@ doc-comment. 이건 Unity 바이너리에 구운 ONNX 가 *아님* — project-g
 `baselineRate + policy·(residualFrac·MaxRate)` 를 발행 (베이스라인 각도/잠금
 명령은 등가 rate 로 변환 — 각도는 P 추종, 잠금은 0 으로 PD 유지), 둘 다 max
 rate 로 clamp. 정책은 멀쩡한 동작점 주변에서 작은 보정만 학습 — F1/F4 절벽의
-해법. 행동 공간과 Python 학습기는 변경 없음; 합성은 서버 쪽. `RlEnvironment` 에
+해법. 합성은 서버 쪽이라 행동 공간과 Python 학습기는 그대로다. 단 잔차 액션 공간만으로는 dead-band
+때문에 학습 신호가 없는 절벽이 되어(F9) 아래 lock-capable 합성에 명시적 해제 요청(D10)을 더해 쓴다. `RlEnvironment` 에
 `baselineFactory` / `residualRateScaleRadPerSec` ctor 인자 + `ActorName` /
 `GimbalState` getter 추가. `ResidualRlTests` (4).
 
@@ -170,6 +170,8 @@ rate 로 clamp. 정책은 멀쩡한 동작점 주변에서 작은 보정만 학�
 ①(잠근 탱크)이 되어 F5 의 구조적 핸디캡 제거. **결과 (F6): 그래도 후행지식이
 강체를 못 이김** (녹화 주행 기준). `LockCapableActionTests` (8), [decisions.md](decisions.md) D8.
 서빙은 `RemotePolicyController` 가 정책 계약(D9)대로 같은 baseline 합성 + `LockGate` 를 로컬에서 돌린다.
+**D10 이후** 잠금 판정은 rate 문턱의 사후 판정이 아니라 정책의 3번째 액션(해제 요청, 저역통과)이며
+시작은 잠긴 상태다.
 
 **병렬 롤아웃:** 서버는 단일 클라이언트. N 포트에 N 서버를 띄우고 N 개
 `FluidStabEnv` 를 Gymnasium `AsyncVectorEnv` 로 감쌈 (v1 PPO 스크립트는

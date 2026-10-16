@@ -43,6 +43,19 @@ EditMode 테스트는 **158 통과 / 0 실패 / 16 스킵**이다.
 ```
 (Unity 에디터가 같은 프로젝트를 열고 있으면 실행되지 않는다. 배치는 한 번에 하나.)
 
+**수동 해법 실험 도구** (F15~F17, 메뉴 없이 `-executeMethod` 로 실행. 결과는 `Logs/` 에 새 파일로 쓴다):
+
+```
+UNITY="/Applications/Unity/Hub/Editor/6000.5.10f1/Unity.app/Contents/MacOS/Unity"
+# 탱크 값 스윕 (충전율·림·감쇠·배플). 얕은물: -slShallow, 강체만: -slRigidOnly, 배플 감쇠 보정: -slCalibrate
+"$UNITY" -batchmode -quit -nographics -projectPath . -executeMethod FluidStabilizer.SimEditor.SloshSweepRunner.Run \
+  -slVariants "base:|fill 0.56:FillRatio=0.56|X2Y1 K20:BaffleCountX=2;BaffleCountY=1;BaffleLossCoeff=20" -slShallow -slRigidOnly -logFile -
+# 능동 제어 vs 배플 (강체·규칙기반·오라클 MPC, 주행 병렬 실행)
+"$UNITY" -batchmode -quit -nographics -projectPath . -executeMethod FluidStabilizer.SimEditor.ActiveVsBaffleRunner.Run -logFile -
+```
+
+얕은물 스윕은 변형 하나당 수 분이 걸린다 (`-slRigidOnly` 로 절반). 인자와 기본 변형 목록은 각 러너의 클래스 주석.
+
 ## MPC 를 다시 열 때 참고 (확인된 사실)
 
 - **슬로시 주파수·감쇠** (ROM 공식 계산값, 탱크 1.2×0.7 m, fill 0.62): 피치 0.70 Hz

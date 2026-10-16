@@ -5,13 +5,12 @@
 실험 *결과* 숫자는 [findings.md](findings.md), 진행상황은
 [experiment-plan.md](experiment-plan.md) 담당.
 
-## 왜 만들었나
+## 왜 필요한가
 
-F5/F6 게이트 결론은 "이 조건에서 hindsight 가 강체를 못 이긴다"는 주장이다.
-그런데 `*.trace.csv` 는 seed·fill·도로 on/off 만 저장했고 탱크 높이, 접지력,
-도로 곡률·경사, 센서 설정은 저장하지 않았다. **결론을 재현할 수 없다면 그
-결론은 검증할 수 없다.** 그래서 세 가지를 고쳤다: 설정 전체 기록, 데이터 셋
-명시 분리, 실행 증거 기록.
+F5/F6 같은 게이트 결론은 "이 조건에서 hindsight 가 강체를 못 이긴다"는 주장이다. 주행 파일이 seed·fill·
+도로 on/off 만 저장하면 탱크 높이, 접지력, 도로 곡률·경사, 센서 설정이 빠져 **결론을 재현할 수 없고,
+재현할 수 없는 결론은 검증할 수 없다**(그 실제 사례가 [F7](findings.md) 이다). 그래서 세 가지를 지킨다:
+설정 전체 기록, 데이터 셋 명시 분리, 실행 증거 기록.
 
 ## 1. 주행 파일 (trace v2)
 
@@ -36,8 +35,8 @@ F5/F6 게이트 결론은 "이 조건에서 hindsight 가 강체를 못 이긴�
 
 루트 `datasets.tsv` 가 **train / validation / final** 을 명시한다.
 
-- **hindsight 파일이 있느냐로 멤버십을 결정하지 않는다.** (예전 `-rlTrace all`
-  동작. 산출물 유무가 데이터 분할을 정하면 분할이 아니다.)
+- **hindsight 파일이 있느냐로 멤버십을 결정하지 않는다.** (산출물 유무가 데이터 분할을 정하면
+  분할이 아니다.)
 - 각 행에 원본 SHA-256 과 `history`. 해시가 다르면 실패한다.
 - split 간 중복, 빈 split, `final` 에 `history != unseen` 은 전부 실패.
 - BC · RL · hindsight · sweep 는 **`train` 만** 쓴다 (`-traceSplit`, 기본
@@ -101,17 +100,16 @@ history · `Assumptions`, 요청 컨트롤러, 정책 식별 정보, fallback �
 
 **`policy-ok` 와 `analytic` 만 AI 성능 비교에 들어간다.** `ComparisonRunner` 의
 판정 배너와 초록 하이라이트(`BestLanes()`) 둘 다 이 규칙을 쓴다 — fallback 레인은
-강체와 스필이 같아서 "최소 스필 승리" 규칙으로는 AI 승리로 표시됐었다.
+강체와 스필이 같아서 "최소 스필 승리" 규칙으로는 AI 승리로 잘못 표시될 수 있기 때문이다.
 
 `serve_policy.py` 는 **실제 로드한 바이트의** 체크포인트 SHA-256 과 서버 소스
 SHA, 라이브러리 버전을 handshake 에 보낸다.
 
 ## 5. RL 환경
 
-`RlEnvironment` 는 **Reset 마다** 선택된 trace 의 설정·seed·모델·전체 길이를
-적용한다. 예전 동작(첫 주행 설정을 전체에 적용, 가장 짧은 주행 길이로 자르기,
-도로 severity 기본값 덮어쓰기)은 제거됐다. 합성 실행은 명시적 `-rlRoad` 가
-없으면 severity 를 유지하고, trace 모드와 합성 override 플래그의 혼용은 거부한다.
+`RlEnvironment` 는 **Reset 마다** 선택된 trace 의 설정·seed·모델·전체 길이를 적용한다(첫 주행 설정을
+전체에 쓰거나 가장 짧은 주행 길이로 자르지 않는다). 합성 실행은 명시적 `-rlRoad` 가 없으면 severity 를
+유지하고, trace 모드와 합성 override 플래그의 혼용은 거부한다.
 
 ## 알려진 한계
 

@@ -1,17 +1,16 @@
-# fluid-stabilizer — RL trainer
+# fluid-stabilizer — RL 학습기
 
-External Python trainer. **No Unity dependency** — talks to the C#
-`TrainingServer` over a plain TCP socket.
+외부 Python 학습기. **Unity 의존성 없음** — C# `TrainingServer` 와 평범한 TCP 소켓으로 대화한다.
 
-- `fluidstab/client.py` — raw socket protocol (matches `Assets/FluidStabilizer/Rl/TrainingServer.cs`)
-- `fluidstab/env.py` — `FluidStabEnv(gymnasium.Env)`; `info["privileged"]` holds the asymmetric-critic obs
-- `train_ppo.py` — CleanRL-style PPO with an asymmetric critic
-- `play.py` — run a checkpoint, print episode returns
-- `bc_pretrain.py` — behaviour-cloning pretraining from `Logs/bc/dataset-*.csv`
-- `serve_policy.py` — serve a checkpoint to Unity (`--release-bias/--release-ema` are experiment options, off by default)
-- `dagger.py` — DAgger loop around the Unity plant (closed line, see `docs/findings.md` F12)
+- `fluidstab/client.py` — 소켓 프로토콜 (`Assets/FluidStabilizer/Rl/TrainingServer.cs` 와 일치)
+- `fluidstab/env.py` — `FluidStabEnv(gymnasium.Env)`; `info["privileged"]` 에 비대칭 크리틱 obs
+- `train_ppo.py` — 비대칭 크리틱을 가진 CleanRL 스타일 PPO
+- `play.py` — 체크포인트를 돌려 에피소드 return 출력
+- `bc_pretrain.py` — `Logs/bc/dataset-*.csv` 로 행동 복제 사전학습
+- `serve_policy.py` — 체크포인트를 Unity 에 서빙 (`--release-bias/--release-ema` 는 실험 옵션, 기본 꺼짐)
+- `dagger.py` — Unity 플랜트 주변 DAgger 루프 (줄기는 닫힘, `docs/findings.md` F12)
 
-See [`../docs/rl.md`](../docs/rl.md) for the full workflow.
+전체 워크플로는 [`../docs/rl.md`](../docs/rl.md).
 
 ## 설치와 실행
 
