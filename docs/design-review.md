@@ -5,8 +5,8 @@
 전체 목적은 [project-goals.md](project-goals.md) 참고.
 
 > 원래 2026-08-27 승인 시점의 영어 리뷰를 2026-08-29 한글화. 이후 실제 구현에서
-> 갱신된 결정은 [decisions.md](decisions.md) (D1~D13) 와 [findings.md](findings.md)
-> (F1~F14) 에 있고, 여기서는 원래 판단의 논리를 보존한다.
+> 갱신된 결정은 [decisions.md](decisions.md) (D1~D14) 와 [findings.md](findings.md)
+> (F1~F17) 에 있고, 여기서는 원래 판단의 논리를 보존한다.
 
 ---
 

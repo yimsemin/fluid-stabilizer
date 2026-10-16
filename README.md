@@ -18,11 +18,12 @@ Physical AI 시뮬레이션 프로젝트: **인간이 운전하는** 트럭에 �
 **문서는 모두 한글.** [docs/README.md](docs/README.md) — 문서 색인, "문서마다
 하나의 역할", 정비 이력.
 
+- [docs/lessons.md](docs/lessons.md) — **결과·교훈 한 문서 요약 (처음 읽는다면 이것부터)**
 - [docs/project-goals.md](docs/project-goals.md) — 무엇을 · 왜 · 헤드라인 결과 · 최종 아키텍처
 - [docs/experiment-plan.md](docs/experiment-plan.md) — 살아있는 현황 + 다음 단계
 - [docs/demo-guide.md](docs/demo-guide.md) — **시연용 참고 문서** (비개발자 청중)
-- [docs/findings.md](docs/findings.md) — 실험으로 밝혀진 사실 F1~F10
-- [docs/decisions.md](docs/decisions.md) — 설계 결정 로그 D1~D10
+- [docs/findings.md](docs/findings.md) — 실험으로 밝혀진 사실 F1~F17
+- [docs/decisions.md](docs/decisions.md) — 설계 결정 로그 D1~D14
 - [docs/design-review.md](docs/design-review.md) — 아키텍처 결정의 근거 (큰 참고 문서)
 
 ## 저장소 구조
@@ -41,23 +42,26 @@ fluid-stabilizer/
 
 ## 현재 상태
 
-**phase-1 종료** (2026-09-11). 녹화 → hindsight 천장 → BC 데이터셋 → BC 사전학습
-→ 잔차 PPO → `serve_policy.py` → Unity 앱 내 ①②③④ 비교 → standalone 앱까지
-처음부터 끝까지 돈다. 재현성(trace v2 · 데이터셋 split · 실행 증거)과 정책 행동
-계약도 갖춰졌다. EditMode 테스트 **152 통과 / 16 스킵**.
-리모트 `origin` = `github.com/yimsemin/fluid-stabilizer`.
+**마무리 단계** (2026-10-16). 녹화 → hindsight 천장 → BC 데이터셋 → BC 사전학습 → DAgger/PPO
+→ `serve_policy.py` → Unity 앱 내 ①②③④ 비교 → standalone 앱까지 처음부터 끝까지 돈다.
+재현성(trace v2 · 데이터셋 split · 실행 증거)과 정책 행동 계약도 갖춰졌다. EditMode 테스트
+**158 통과 / 0 실패 / 16 스킵**. 리모트 `origin` = `github.com/yimsemin/fluid-stabilizer`.
 
-**정직한 헤드라인: ① 강체 탱크가 이긴다** (findings F1·F4·F5·F6). 소유자의 녹화
-주행에서는 완전한 미래 지식을 가진 후행지식 천장조차 강체를 못 이긴다. 인과적
-센서전용 정책이 비인과적 천장을 넘을 수 없으므로 이 결론은 방어된다.
+**정직한 헤드라인: ① 강체 탱크가 이긴다.** 학습·튜닝에 쓰지 않은 홀드아웃 7 주행에서도
+① 114.4 L, ② 규칙기반 166~175 L, ③ 학습 정책 120~131 L ([F13](docs/findings.md)).
+완전 상태와 정확한 모델을 가진 오라클 MPC 도 −5 ~ −8 % 에 그쳤다 (F14).
 
-**그리고 ③ 이 실제로 학습한다** (F10). 합성 운영점(매끄러운 노면의 지속 코너링)
-에서 교사 → BC → 배포가 끝까지 돌고 ③ 이 규칙기반을 **51 %** 앞선다
-(12.4 vs 25.2 L; 강체 7.9 L 에는 여전히 패). 그동안 학습이 안 된 이유도 특정됐다 —
-하이퍼파라미터가 아니라 **액션 공간**이었다 (F9 → F10).
+**그리고 탱크 설계가 먼저다.** 컨트롤러 없이 충전율·림 높이·내부 배플만 바꿔도 스필이
+능동 제어보다 훨씬 크게 줄었다 — 얕은물 모델에서 배플만으로 −20 ~ −75 % (F15·F16).
+배플 탱크에서도 강체가 능동 제어를 이겼다 (F17). 정량은 슬로시 모델에 따라 갈려서
+보수적인 얕은물 값을 쓴다.
 
-자세한 건 [docs/experiment-plan.md](docs/experiment-plan.md) 와
-[docs/findings.md](docs/findings.md) "한눈에" 표.
+③ 학습 정책은 합성 조건(매끄러운 노면의 지속 코너링)에서 규칙기반을 **51 %** 앞서며
+실제로 학습하지만(F10) 강체는 못 이긴다. 학습이 막혔던 원인은 하이퍼파라미터가 아니라
+**액션 공간**이었다 (F9 → F10).
+
+결과·교훈·후속 제언: [docs/lessons.md](docs/lessons.md). 현황과 열린 후보:
+[docs/experiment-plan.md](docs/experiment-plan.md).
 
 ## 프로젝트 열기
 

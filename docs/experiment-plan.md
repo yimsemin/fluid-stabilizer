@@ -5,12 +5,12 @@
 설계 결정은 [decisions.md](decisions.md), 결과·교훈 요약은 [lessons.md](lessons.md)
 에 있고 여기서는 링크만 건다.
 
-## 현황 (2026-10-12)
+## 현황 (2026-10-16)
 
 phase-1 이 끝났다: 결정론적 시뮬레이션(물리 · 도로 · 액추에이터 · 슬로시 2종 · 센서)
 · 베이스라인 · 평가기 · 재현성 도구 · 플레이 씬 · RL/BC/DAgger 경로 · 정책 서빙 ·
-4-way 비교 · standalone 빌드가 모두 만들어졌고 EditMode 테스트 **155 통과 / 0 실패 /
-16 스킵**이다.
+4-way 비교 · 수동 해법(배플) 평가 · standalone 빌드가 모두 만들어졌고 EditMode 테스트
+**158 통과 / 0 실패 / 16 스킵**이다.
 
 **결과:** 학습·튜닝에 쓰지 않은 `final` 7 주행에서 ① 강체 114.4 L, ② 규칙기반
 166~175 L, ③ 학습 정책 120~131 L — **① 강체가 이긴다** ([F13](findings.md)). ③ 은
@@ -22,7 +22,13 @@ phase-1 이 끝났다: 결정론적 시뮬레이션(물리 · 도로 · 액추�
 진동이 지배하는 주행 하나에 집중되고 나머지는 강체와 구분되지 않는다. 인과 MPC 줄기는
 종료했다 ([D13](decisions.md)).
 
-**다음 작업: 없음 (소유자 선택 대기).** 열린 후보는 [아래](#앞으로-할-수-있는-것).
+**수동 해법 (F15~F17):** 컨트롤러 없이 탱크만 바꿔도 능동 제어보다 크게 줄어든다 — 진자 모델
+충전율·림·감쇠 −9 ~ −98 % ([F15](findings.md)), 얕은물 배플 −20 ~ −75 % ([F16](findings.md)).
+크기는 슬로시 모델에 따라 크게 갈려서 정량은 보수적인 얕은물 값을 쓴다. 배플 탱크에서도 ① 강체가
+② 규칙기반과 진자 내부 모델 MPC 를 이겼다 ([F17](findings.md)).
+
+**프로젝트는 마무리 단계다 ([D14](decisions.md)).** 결론은 "탱크 설계가 먼저, 능동 제어는
+근거가 부족하다"이다. 새 실험 후보는 [아래](#앞으로-할-수-있는-것).
 
 ### 남은 한계
 
@@ -31,8 +37,11 @@ phase-1 이 끝났다: 결정론적 시뮬레이션(물리 · 도로 · 액추�
 - **F5 표의 절대 수치는 재현 불가.** 원 수치는 보존하되 그렇게 표시했다.
 - **④ 천장은 저대역 궤적이다.** 인과 제어기 전체의 상한이 아니다 (D12). 슬로시 주기 단위
   능동 감쇠는 오라클 MPC 로 따로 시험했다 (F14).
-- **MPC 는 진자 모델·8 주행에서만 평가했다.** 설정을 같은 8 주행으로 골랐고(낙관 편향),
-  얕은물과 새 홀드아웃 평가는 하지 않았다 — 1단계 미달로 해당 조건에 이르지 않았다.
+- **MPC 는 8 주행에서만 평가했다.** 설정을 같은 8 주행으로 골랐고(낙관 편향) 새 홀드아웃 평가는
+  하지 않았다. 얕은물 플랜트는 진자 내부 모델로만 시험했다 (F17). 얕은물 내부 모델 MPC 는 시험하지
+  않았다.
+- **배플은 한 계수(K)로 뭉뚱그린 근사다.** K 와 실제 배플의 대응은 확인하지 않았고, 전체 깊이
+  스크린만 다뤘다 (F16). 수동 해법 스윕은 8 주행(train+validation)으로만 잰다.
 - **③ 을 얕은물에서 평가하지 않았다.** 진자에서 이미 강체를 못 이겼다.
 - **BC > PPO.** PPO 미세조정이 클론을 무너뜨려 스필이 두 배가 됐다 (F10).
 
@@ -45,10 +54,10 @@ phase-1 이 끝났다: 결정론적 시뮬레이션(물리 · 도로 · 액추�
 | 결정론적 시뮬 코어 | ✅ | `ManualClock` · `DeterministicRandom`(PCG32) · `SimulationLoop` (600/200/100 Hz, 번들 지연, Gт 기록), 엔진프리 (D1) |
 | 차량 + 도로 + 히브(heave) | ✅ | `VehicleModel` (3-DOF 스프렁 매스 + friction-circle), `RoadModel` (거리 함수 = grade/bank/거칠기/포트홀, 좌우 트랙 비대칭, 슬립 프록시) — D6·D7, [road-model.md](road-model.md) |
 | 짐벌 액추에이터 | 🟡 | `GimbalActuator`: 전송지연, PD+I 위치 서보, 피크토크 포화, 마찰, rate/travel 한계, `Locked` 모드(강체 관절), I²t 권선열 모델 — D5. 백래시·기어박스 상세 보류 |
-| 슬로시 모델 2종 | ✅ | `PendulumSloshModel` (등가역학 ROM, 축당 진자 1개) + `ShallowWaterSloshModel` (2-D Saint-Venant, ~48×28 격자) — D4. **브래킷 규율** (F3): ROM 으로 설계·학습, 얕은물로 검증 |
+| 슬로시 모델 2종 | ✅ | `PendulumSloshModel` (등가역학 ROM, 축당 진자 1개) + `ShallowWaterSloshModel` (2-D Saint-Venant, ~48×28 격자, 스크린 배플 지원) — D4·D14. **브래킷 규율** (F3): ROM 으로 설계·학습, 얕은물로 검증 |
 | 센서 층 | 🟡 | `SensorSuite`: 차량+탱크 IMU, 엔코더(양자화), 모터, 로드셀 4개, 옵션 레벨/CAN; 샘플당 노이즈 + 에피소드당 바이어스, 번들 지연 |
 | 베이스라인 컨트롤러 | 🟡 | ① `Hold`(잠금), ② `SpecificForceAlignment` / `Pid`, 특권 `PrivilegedFullStateController`. `AxisLqr`/`LqrSloshController` 는 **보류**: 설계 모델이 실제 서보·지연 플랜트와 달라 공진 (F1). **D8·D10** lock-capable 액션(`LockGate`, 명시적 해제 요청). `OracleMpcController`(특권 MPPI, F14) 는 상한 시험용이며 배포 불가 |
-| 평가 하네스 | ✅ | `Evaluator` + `ScenarioSet`(8개), `TraceEvaluator` (녹화 주행 × 베이스라인 × 슬로시 2종, 주행별 리터), `HindsightOptimizer` (저대역 천장, F5), `SweepRunner`, `DrivingPremiseSweepRunner` |
+| 평가 하네스 | ✅ | `Evaluator` + `ScenarioSet`(8개), `TraceEvaluator` (녹화 주행 × 베이스라인 × 슬로시 2종, 주행별 리터), `HindsightOptimizer` (저대역 천장, F5), `SweepRunner`, `DrivingPremiseSweepRunner`, `SloshSweepRunner` (탱크 값 스윕 · 감쇠 보정, F15·F16), `ActiveVsBaffleRunner` (능동 vs 배플, F17) |
 | 플레이 씬 · 조작 | ✅ | `SimulationRunner` · `HumanDriverInput` · `SimView` · `Hud` · `PlayControls`. 컨트롤 패널(백틱), 녹화/재생(`P`/`L`), 3분할 비교 + 판정 배너(`C`) — [operating-guide.md](operating-guide.md), [human-drive.md](human-drive.md) |
 | RL / BC / DAgger | ✅ (줄기는 닫힘) | `FluidStabilizer.Rl` (`ObservationEncoder`, `RewardFunction`, `RlEnvironment`, `PolicyContract`, `ActionComposer`, `TrainingServer`), Python PPO · `bc_pretrain.py` · `dagger.py` · `serve_policy.py`, `MultiCornerRunner`, `DaggerRolloutRunner` — D9–D11, [rl.md](rl.md) |
 | 재현성 · 데이터 | ✅ | `DriverTrace` v2(유효 설정 전체) · `datasets.tsv` split · 실행 증거 · 정책 실행 상태 · `EpisodeLog` — [reproducibility.md](reproducibility.md) |
@@ -144,13 +153,14 @@ phase-1 이 끝났다: 결정론적 시뮬레이션(물리 · 도로 · 액추�
 | DAgger · 해제 편향 | F12 | 위와 같음 |
 | 프리뷰(미래 도로 정보) | D12 — 원칙상 제외 | 소유자가 원칙을 바꿀 때 |
 | 홀드아웃 `final` 7 주행 | F13 으로 소비됨 | 새 주행을 녹화해 새 `final` 로 등록 |
-| 인과 MPC (상태 추정 · 얕은물 · 학습) | F14 — 오라클 −5 ~ −8 % < −10 % ([D13](decisions.md)) | 외란 예측이 개선되거나(프리뷰 외 센서로 얻은 정보) 액추에이터 권한·잠금 방식이 바뀌어 오라클 상한이 −10 % 를 넘을 근거가 생길 때 |
+| 인과 MPC (상태 추정 · 학습) | F14 — 오라클 −5 ~ −8 % < −10 % ([D13](decisions.md)) | 외란 예측이 개선되거나(프리뷰 외 센서로 얻은 정보) 액추에이터 권한·잠금 방식이 바뀌어 오라클 상한이 −10 % 를 넘을 근거가 생길 때 |
+| 능동 제어로 배플 탱크의 강체를 이기기 | F17 — 배플 유무와 관계없이 강체가 이김. 단 MPC 내부 모델이 진자 ([D14](decisions.md)) | 얕은물을 내부 모델로 쓰는 MPC 가 현실적인 비용으로 가능해질 때 (현재 에피소드당 약 4.2 s) |
 
 ### 열림 — 소유자가 선택한다
 
 | 후보 | 하는 일 | 결정 필요 |
 |---|---|---|
-| 수동 해법 — 배플 설계 | F16 이 배플 모델로 −20 ~ −75 % 를 확인했고, F17 에서 배플 탱크에서도 강체가 능동 제어(규칙기반·진자 내부 모델 MPC)를 이겼다. 남은 일: K 와 실제 배플(구멍 비율·판 두께)의 대응, 부분 높이·링 배플 | 어떤 배플 종류까지 모델링할지 |
+| 수동 해법 — 배플 실물 대응 | F16 의 K 가 실제 배플(구멍 비율·판 두께)에 해당하는지 문헌 또는 실험으로 확인, 부분 높이·링 배플 모델링, 새 홀드아웃에서 재측정 | 어떤 배플 종류까지 모델링할지 |
 | 활성 구간 감지기 | 저주파 지속 외란 구간만 능동 제어, 그 밖에서는 항상 강체 | 합성 주행 40 개 이상 생성. F14 가 근거를 보탰다: MPC 이득이 자유 진동 구간에 집중되고 시간의 약 55 % 를 잠금으로 보냈다 |
 
 ### 보류 — 필요가 생길 때

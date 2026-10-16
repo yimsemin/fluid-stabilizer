@@ -31,7 +31,7 @@
   이 활성 타깃(이 Mac 에선 StandaloneOSX)으로 빌드 → `Builds/`. 다른 플랫폼용
   빌드가 필요하면 Unity Hub 에서 해당 Build Support 모듈 추가.
 - **검증:** 헤드리스로 열림, 스크립트 0 에러 컴파일, EditMode 테스트
-  155 통과 / 16 스킵 (2026-10-12), standalone 빌드 정상 실행.
+  158 통과 / 16 스킵 (2026-10-16), standalone 빌드 정상 실행.
 
 ## Git 저장소
 

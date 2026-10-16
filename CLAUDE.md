@@ -23,7 +23,7 @@
 2. [docs/experiment-plan.md](docs/experiment-plan.md) — 살아있는 현황 + 다음 단계.
 3. [docs/design-review.md](docs/design-review.md) — 비판적 리뷰 + 권장 아키텍처.
    **설계 결정의 근거 출처.**
-4. [docs/decisions.md](docs/decisions.md) — 결정 로그 D1~D13.
+4. [docs/decisions.md](docs/decisions.md) — 결정 로그 D1~D14.
 5. [docs/findings.md](docs/findings.md) — 실험으로 밝혀진 사실 F1~F17.
 6. [docs/frames-units-conventions.md](docs/frames-units-conventions.md) — 좌표계,
    단위, 타이밍 (물리 코드 전에 합의됨, 고정).
@@ -62,8 +62,8 @@ ROS 2 · Unity ML-Agents · SPH/입자 유체 플러그인 (Obi, Zibra) · CFD �
 ## 슬로시 모델
 
 v1 = 커스텀 분석적 **등가역학 모델** (축당 진자 1개, 매니지드 루프에서 적분,
-양방향 결합), `ISloshModel` 뒤에. 얕은물과 다중모드 모델은 phase-2 drop-in.
-design-review §6. **브래킷 규율** (findings F3): 진자 ROM 으로 학습, 얕은물로 검증.
+양방향 결합), `ISloshModel` 뒤에. 얕은물 모델(`ShallowWaterSloshModel`, 스크린 배플 지원)은
+구현·검증용 drop-in이고 다중모드 모델은 보류. design-review §6. **브래킷 규율** (findings F3): 진자 ROM 으로 학습, 얕은물로 검증.
 
 ## 환경 사실
 
@@ -84,9 +84,9 @@ design-review §6. **브래킷 규율** (findings F3): 진자 ROM 으로 학습,
 
 ## 현재 상태
 
-**phase-1 종료, 홀드아웃 최종 평가와 인과 MPC 검증까지 끝남** (2026-10-12). 파이프라인 전체가
+**프로젝트 마무리 단계** (2026-10-16, [D14](docs/decisions.md)). phase-1 종료, 홀드아웃 최종 평가·인과 MPC 검증·수동 해법(배플) 평가까지 끝남. 파이프라인 전체가
 처음부터 끝까지 돌고(녹화 → 천장 → BC → DAgger/PPO → 정책 서빙 → ①②③④ 비교 →
-standalone 빌드), EditMode 테스트 **155 통과 / 0 실패 / 16 스킵**.
+standalone 빌드), EditMode 테스트 **158 통과 / 0 실패 / 16 스킵**.
 
 **헤드라인 (F13):** 학습·튜닝에 쓰지 않은 `final` 7 주행에서도 **① 강체가
 이긴다** (114.4 L; 규칙기반 ② 166~175, 학습 ③ 120~131). ③ 은 합성 F8 조건의
@@ -106,8 +106,17 @@ standalone 빌드), EditMode 테스트 **155 통과 / 0 실패 / 16 스킵**.
 **하지 말 것 (추가 2):** 상태 추정·얕은물·학습으로 MPC 를 이어가는 것 — 재개 조건은
 [docs/experiment-plan.md](docs/experiment-plan.md) "닫힘" 표.
 
-**다음에 할 것:** 없음 (소유자 선택 대기). 열린 후보(배플 기준선, 활성 구간 감지기)는
-같은 문서 "열림" 표. 결과·교훈 요약은 [docs/lessons.md](docs/lessons.md).
+**수동 해법 (F15~F17):** 컨트롤러 없이 탱크만 바꿔도 능동 제어(−5 ~ −8 %)보다 크게 줄어든다 —
+충전율·림·감쇠 −9 ~ −98 % (진자), 얕은물 스크린 배플 −20 ~ −75 %. 크기는 슬로시 모델에 따라
+갈리므로 정량은 보수적인 얕은물 값을 쓴다. 배플 탱크에서도 ① 강체가 능동 제어를 이긴다.
+`ShallowWaterSloshModel` 이 배플(`BaffleCountX/Y`, `BaffleLossCoeff`)을 지원한다.
+
+**하지 말 것 (추가 3):** 탱크 설계 스윕 없이 능동 제어부터 만드는 것 · 한 슬로시 모델의 수동 해법
+효과를 다른 모델 검증 없이 결정 근거로 쓰는 것.
+
+**다음에 할 것:** 없음 (마무리). 열린 후보(배플 실물 대응, 활성 구간 감지기)는
+[docs/experiment-plan.md](docs/experiment-plan.md) "열림" 표. 결과·교훈 요약은
+[docs/lessons.md](docs/lessons.md).
 
 세션 커밋은 바로 `main` 으로 (혼자 쓰는 로컬 저장소 — feature 브랜치 없음).
 
