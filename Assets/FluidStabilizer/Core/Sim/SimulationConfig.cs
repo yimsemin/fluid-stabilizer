@@ -299,6 +299,13 @@ namespace FluidStabilizer.Core.Sim
         public double SurfaceSlopePerPendulumAngle = 1.0;
         public double SpillDischargeCoefficient = 0.6;
 
+        /// <summary>Screen baffles normal to x / y (shallow-water model only; 0 = none).</summary>
+        public int BaffleCountX = 0;
+        public int BaffleCountY = 0;
+
+        /// <summary>Loss coefficient K of one baffle (head loss ½·K·u|u|).</summary>
+        public double BaffleLossCoeff = 0.0;
+
         /// <summary>Empty tank + cradle mass (kg).</summary>
         public double DryMass = 40.0;
 
@@ -314,7 +321,10 @@ namespace FluidStabilizer.Core.Sim
             QuadraticDamping = QuadraticDamping,
             ParticipatingMassScale = ParticipatingMassScale,
             SurfaceSlopePerPendulumAngle = SurfaceSlopePerPendulumAngle,
-            SpillDischargeCoefficient = SpillDischargeCoefficient
+            SpillDischargeCoefficient = SpillDischargeCoefficient,
+            BaffleCountX = BaffleCountX,
+            BaffleCountY = BaffleCountY,
+            BaffleLossCoeff = BaffleLossCoeff
         };
     }
 

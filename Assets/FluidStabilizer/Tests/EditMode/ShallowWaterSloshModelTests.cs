@@ -295,5 +295,41 @@ namespace FluidStabilizer.Tests
             Assert.AreEqual(-1.2 / G, thSw, 0.05);
             Assert.AreEqual(thPend, thSw, 0.06, "low-amplitude tilt should roughly match the pendulum ROM");
         }
+
+        private static (double ke, double volume) PulseThenRelease(SloshParameters p, Double3 pulse)
+        {
+            var m = Fresh(p);
+            for (int i = 0; i < 300; i++) m.Step(Input(pulse));
+            for (int i = 0; i < 1800; i++) m.Step(Input(Double3.Zero));
+            return (m.SampleGroundTruth().SloshKineticEnergy, m.LiquidVolume);
+        }
+
+        [Test]
+        public void Baffles_ZeroLoss_ChangesNothing()
+        {
+            var plain = PulseThenRelease(Params(0.4), new Double3(3, 0, 0));
+            var p = Params(0.4); p.BaffleCountX = 2; p.BaffleLossCoeff = 0.0;
+            var zero = PulseThenRelease(p, new Double3(3, 0, 0));
+            Assert.AreEqual(plain.ke, zero.ke, 1e-12);
+        }
+
+        [Test]
+        public void Baffles_DampLongitudinalSlosh_AndConserveVolume()
+        {
+            var plain = PulseThenRelease(Params(0.4), new Double3(3, 0, 0));
+            var p = Params(0.4); p.BaffleCountX = 2; p.BaffleLossCoeff = 20.0;
+            var baf = PulseThenRelease(p, new Double3(3, 0, 0));
+            Assert.Less(baf.ke, 0.5 * plain.ke, $"baffled {baf.ke:E3} vs plain {plain.ke:E3}");
+            Assert.AreEqual(plain.volume, baf.volume, plain.volume * 1e-9);
+        }
+
+        [Test]
+        public void XBaffles_DoNotDampLateralSlosh()
+        {
+            var plain = PulseThenRelease(Params(0.4), new Double3(0, 3, 0));
+            var p = Params(0.4); p.BaffleCountX = 2; p.BaffleLossCoeff = 20.0;
+            var baf = PulseThenRelease(p, new Double3(0, 3, 0));
+            Assert.AreEqual(plain.ke, baf.ke, plain.ke * 0.05);
+        }
     }
 }

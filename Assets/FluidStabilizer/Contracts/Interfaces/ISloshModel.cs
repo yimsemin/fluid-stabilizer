@@ -120,5 +120,17 @@ namespace FluidStabilizer.Contracts
 
         /// <summary>Weir discharge coefficient for the continuous overflow estimate (~0.6).</summary>
         public double SpillDischargeCoefficient;
+
+        /// <summary>Full-depth screen baffles normal to x (stop longitudinal sloshing), evenly spaced. 0 = none.</summary>
+        public int BaffleCountX;
+
+        /// <summary>Full-depth screen baffles normal to y (stop lateral sloshing), evenly spaced. 0 = none.</summary>
+        public int BaffleCountY;
+
+        /// <summary>
+        /// Pressure-loss coefficient K of one baffle: head loss ½·K·u|u| on the approach
+        /// velocity. Only <c>ShallowWaterSloshModel</c> uses it; the pendulum ignores baffles.
+        /// </summary>
+        public double BaffleLossCoeff;
     }
 }

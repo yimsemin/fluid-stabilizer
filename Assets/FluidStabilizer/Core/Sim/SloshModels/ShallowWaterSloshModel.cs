@@ -79,6 +79,10 @@ namespace FluidStabilizer.Core.Sim.SloshModels
         private double _cDragX, _cDragY, _cQuad, _freqScale2, _cd;
         private double _omegaX, _omegaY, _zeta;
 
+        // ---- baffles: x-face indices (1..nx-1) / y-face indices (1..ny-1) ----
+        private int[] _bafFacesX = Array.Empty<int>(), _bafFacesY = Array.Empty<int>();
+        private double _bafK;
+
         // ---- outputs cached between Step() and SampleGroundTruth() ----
         private Double3 _com;
         private double _ke, _thx, _thxDot, _thy, _thyDot;
@@ -150,6 +154,10 @@ namespace FluidStabilizer.Core.Sim.SloshModels
             _cDragY = 2.0 * _zeta * _omegaY;
             _cQuad = Math.Max(0.0, p.QuadraticDamping);
             _cd = p.SpillDischargeCoefficient > 0 ? p.SpillDischargeCoefficient : 0.6;
+
+            _bafK = Math.Max(0.0, p.BaffleLossCoeff);
+            _bafFacesX = BaffleFaces(p.BaffleCountX, _nx);
+            _bafFacesY = BaffleFaces(p.BaffleCountY, _ny);
 
             _thx = _thxDot = _thy = _thyDot = _thxPrev = _thyPrev = 0.0;
             _com = new Double3(0, 0, 0.5 * _h0);
@@ -430,7 +438,51 @@ namespace FluidStabilizer.Core.Sim.SloshModels
                     _h[k] = h; _hu[k] = hu; _hv[k] = hv;
                 }
             }
+            if (_bafK > 0.0) ApplyBaffles(dt);
             return spill;
+        }
+
+        /// <summary>Faces of <paramref name="count"/> evenly spaced baffles across <paramref name="n"/> cells.</summary>
+        private static int[] BaffleFaces(int count, int n)
+        {
+            if (count <= 0) return Array.Empty<int>();
+            var faces = new System.Collections.Generic.SortedSet<int>();
+            for (int b = 1; b <= count; b++) faces.Add(Math.Max(1, Math.Min(n - 1, (int)Math.Round((double)b * n / (count + 1)))));
+            var a = new int[faces.Count];
+            faces.CopyTo(a);
+            return a;
+        }
+
+        /// <summary>
+        /// Screen baffles as a pressure-loss element. A screen drops the head by ½·K·u|u|
+        /// across the face; the momentum sink ¼·K·h·u|u|/Δ is applied to each of the two
+        /// adjacent cells and integrated implicitly (hu /= 1 + dt·K·|u_face|/(4Δ)), so a
+        /// stiff K cannot make the explicit step unstable. Mass is untouched; only the
+        /// normal momentum is removed. K is a lumped coefficient (porosity, plate
+        /// thickness, contraction), not derived from a hole pattern.
+        /// </summary>
+        private void ApplyBaffles(double dt)
+        {
+            foreach (int fi in _bafFacesX)
+            {
+                for (int j = 0; j < _ny; j++)
+                {
+                    int kL = (fi - 1) * _ny + j, kR = fi * _ny + j;
+                    double uf = 0.5 * ((_h[kL] > HDry ? _hu[kL] / _h[kL] : 0.0) + (_h[kR] > HDry ? _hu[kR] / _h[kR] : 0.0));
+                    double f = 1.0 / (1.0 + dt * _bafK * Math.Abs(uf) / (4.0 * _dx));
+                    _hu[kL] *= f; _hu[kR] *= f;
+                }
+            }
+            foreach (int fj in _bafFacesY)
+            {
+                for (int i = 0; i < _nx; i++)
+                {
+                    int kL = i * _ny + (fj - 1), kR = i * _ny + fj;
+                    double vf = 0.5 * ((_h[kL] > HDry ? _hv[kL] / _h[kL] : 0.0) + (_h[kR] > HDry ? _hv[kR] / _h[kR] : 0.0));
+                    double f = 1.0 / (1.0 + dt * _bafK * Math.Abs(vf) / (4.0 * _dy));
+                    _hv[kL] *= f; _hv[kR] *= f;
+                }
+            }
         }
 
         /// <summary>
