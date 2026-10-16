@@ -16,7 +16,7 @@
 | [demo-guide.md](demo-guide.md) | **시연용 참고 문서** — 개요·구조·학습 과정·비교·결과 해석·남은 과제 (비개발자 청중) | 소유자 (시연 시) |
 | [vision-check.md](vision-check.md) | 초안 단계별 O/X 체크리스트 (2026-08-30 초안 종료 — 기록으로 보존) | 소유자 |
 | [lessons.md](lessons.md) | **결과·교훈·후속 제언 요약** — 처음 보는 사람용 한 문서 (포트폴리오·후속 프로젝트 출발점) | 누구나 |
-| [findings.md](findings.md) | **실험으로 밝혀진 사실 F1~F14** (숫자·근거) | 소유자 + Claude |
+| [findings.md](findings.md) | **실험으로 밝혀진 사실 F1~F15** (숫자·근거) | 소유자 + Claude |
 | [decisions.md](decisions.md) | **설계 결정 로그 D1~D13** (무엇을 정했고 왜) | Claude + 소유자 |
 | [design-review.md](design-review.md) | 아키텍처 결정의 근거 (큰 참고 문서, 잘 안 바뀜) | 주로 Claude |
 | [reproducibility.md](reproducibility.md) | **재현성 · 데이터 셋 분리 · 실행 기록 규칙** (trace v2, `datasets.tsv`, provenance, 정책 실행 상태) | Claude + 소유자 |

@@ -24,7 +24,7 @@
 3. [docs/design-review.md](docs/design-review.md) — 비판적 리뷰 + 권장 아키텍처.
    **설계 결정의 근거 출처.**
 4. [docs/decisions.md](docs/decisions.md) — 결정 로그 D1~D13.
-5. [docs/findings.md](docs/findings.md) — 실험으로 밝혀진 사실 F1~F14.
+5. [docs/findings.md](docs/findings.md) — 실험으로 밝혀진 사실 F1~F15.
 6. [docs/frames-units-conventions.md](docs/frames-units-conventions.md) — 좌표계,
    단위, 타이밍 (물리 코드 전에 합의됨, 고정).
 7. [docs/lessons.md](docs/lessons.md) — 결과·교훈·후속 제언 한 문서 요약
