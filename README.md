@@ -89,17 +89,16 @@ fluid-stabilizer/
 ├── experiment.txt            운영점 손잡이 (fill / 도로 / 운전자 / 에피소드 / 슬로시 / seed)
 ├── Packages/  ProjectSettings/   Unity 6000.5.10f1, Built-in 렌더 파이프라인
 ├── Traces/                   녹화 주행 — 홀드아웃 `final` 7 개만 공개 (나머지는 gitignore)
-├── datasets*.tsv             주행 데이터 셋 분할 매니페스트 (train/validation/final + SHA-256)
+├── datasets.tsv              주행 데이터 셋 분할 매니페스트 (train/validation/final + SHA-256)
+├── datasets-f8*.tsv          합성 시연 조건 주행의 매니페스트 (F8·F11)
+├── LICENSE  LICENSE-docs.md  CITATION.cff   라이선스(코드 MIT, 문서 CC BY 4.0)와 인용 정보
 └── Builds/                   standalone 빌드 (gitignore)
 ```
 
 ## 현재 상태
 
-**마무리 단계** (2026-10-16, [D14](docs/decisions.md)). 녹화 → hindsight 천장 → BC 데이터셋 → BC 사전학습
-→ DAgger/PPO → `serve_policy.py` → Unity 앱 내 ①②③④ 비교 → standalone 앱까지 처음부터 끝까지
-돈다. 재현성(trace v2 · 데이터셋 split · 실행 증거)과 정책 행동 계약도 갖춰졌다. EditMode
-테스트 **158 통과 / 0 실패 / 16 스킵**. 리모트 `origin` = `github.com/yimsemin/fluid-stabilizer`.
-결과는 위 "한 장 요약", 현황과 열린 후보는 [docs/experiment-plan.md](docs/experiment-plan.md).
+**마무리됨** (2026-10-16, [D14](docs/decisions.md)). 녹화 → 천장 → BC → DAgger/PPO → 정책 서빙 → 4종 비교 →
+standalone 앱까지 처음부터 끝까지 돈다. 테스트 수와 열린 후보는 [docs/experiment-plan.md](docs/experiment-plan.md).
 
 ## 프로젝트 열기
 
