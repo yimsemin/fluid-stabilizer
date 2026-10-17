@@ -90,6 +90,7 @@ fluid-stabilizer/
 ├── Packages/  ProjectSettings/   Unity 6000.5.10f1, Built-in 렌더 파이프라인
 ├── Traces/                   녹화 주행 — 홀드아웃 `final` 7 개만 공개 (나머지는 gitignore)
 ├── datasets.tsv              주행 데이터 셋 분할 매니페스트 (train/validation/final + SHA-256)
+├── datasets-public.tsv       공개된 final 7 주행만 담은 매니페스트 (재현용, docs/reproduce-from-scratch.md)
 ├── datasets-f8*.tsv          합성 시연 조건 주행의 매니페스트 (F8·F11)
 ├── LICENSE  LICENSE-docs.md  CITATION.cff   라이선스(코드 MIT, 문서 CC BY 4.0)와 인용 정보
 └── Builds/                   standalone 빌드 (gitignore)

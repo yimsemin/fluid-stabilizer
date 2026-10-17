@@ -1,0 +1,11 @@
+# fluid-stabilizer-datasets/v1
+# 공개본용 매니페스트: 공개된 홀드아웃 final 7 주행만 담는다. 전체 목록은 datasets.tsv.
+# 사용: -traceManifest datasets-public.tsv -traceSplit final (docs/reproduce-from-scratch.md)
+split	file	sourceSha256	history
+final	drive-20261010-232217-229-037c5cfa.trace.csv	54af0622c1121a4a43cc0fbb105c0082fd04682df9fca9e7030dd93f9c17fde5	unseen
+final	drive-20261010-232523-254-64830d7c.trace.csv	c45ebbcfa0ae2a0135c11c4bf3950dceb6b2777325c222adf503cc7493876a35	unseen
+final	drive-20261010-232319-306-1b0c0c20.trace.csv	e157c7b7e4e267788e92f7fd0fa3b8c40f9c2ebf681f79ee0ec3faba9988a7dc	unseen
+final	drive-20261010-232734-098-427a206c.trace.csv	80b69969bb427267ed8870d1f9cbe0028bf1f2e6abf12c35f670c49330f54ea5	unseen
+final	drive-20261010-233230-965-0b3e0822.trace.csv	6c21889dddddce91933a5f12a83dc5f489ee3cc2a3891b7517dff31d789451c8	unseen
+final	drive-20261010-233334-358-e5035fa5.trace.csv	994389b5ee563a95ee9ad92a01e2a57391fb7fb79f74803c6396e492312a90aa	unseen
+final	drive-20261010-233436-863-6aee7781.trace.csv	1e4a93fc5fecd0daf3cacc21c1dd123df18c4c3fb81506147b2223e6c4aa1273	unseen
