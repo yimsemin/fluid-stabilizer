@@ -1,0 +1,17 @@
+cff-version: 1.2.0
+message: "If you use this project, please cite it as below."
+title: "fluid-stabilizer: a Physical AI simulation of a 2-axis stabilizer for an open liquid tank"
+type: software
+authors:
+  - alias: "yimsemin"
+repository-code: "https://github.com/yimsemin/fluid-stabilizer"
+license: MIT
+abstract: >-
+  A deterministic simulation of an AI-controlled 2-axis gimbal under an open liquid tank on a
+  human-driven truck. A rigid (locked) tank beat rule-based, learned and model-predictive control;
+  changing the tank (fill ratio, rim height, baffles) reduced spill far more than any controller.
+keywords:
+  - slosh
+  - physical AI
+  - reinforcement learning
+  - negative results
