@@ -138,6 +138,14 @@ namespace FluidStabilizer.Tests
         {
             if (!File.Exists("datasets.tsv") || !Directory.Exists("Traces"))
                 Assert.Ignore("no local Traces/ — recorded drives are not committed");
+            // a public clone ships only the `final` drives; the full manifest check needs all of them
+            foreach (var line in File.ReadAllLines("datasets.tsv"))
+            {
+                var v = line.Split('\t');
+                if (line.StartsWith("#") || v.Length != 4 || v[0] == "split") continue;
+                if (!File.Exists(Path.Combine("Traces", v[1])))
+                    Assert.Ignore("partial Traces/ (public clone has only the final split): " + v[1]);
+            }
             var train = TraceDataset.Load("datasets.tsv", "Traces", "train");
             var validation = TraceDataset.Load("datasets.tsv", "Traces", "validation");
             var final = TraceDataset.Load("datasets.tsv", "Traces", "final");

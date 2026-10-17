@@ -120,7 +120,7 @@ DAgger/PPO → 정책 서빙 → 4종 비교 → standalone 빌드)가 돌고, E
   (`git config core.hooksPath .githooks` 로 훅 활성화 — 새 클론마다 1회).
 - **생성/로컬 파일 커밋 금지:** `Library/ Temp/ Logs/ UserSettings/ Builds/`,
   `Assets/FluidStabilizer/Scenes/PlayScene.unity` (SceneBuilder 가 재생성),
-  `Traces/` (녹화 주행 — 로컬 데이터; 안정되면 curated 홀드아웃 셋을 의도적으로
+  `Traces/` (녹화 주행 — 로컬 데이터; 공개는 홀드아웃 `final` 7 개만 의도적으로
   force-add), `python/.venv/ python/runs/`, `*.pt *.onnx`. 추적 자산의
   `.meta` 파일은 **커밋함**.
 - `.gitignore` 가 이미 이것들을 커버; 새 도구가 생성 출력을 쓰면 같은 변경에서

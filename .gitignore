@@ -17,7 +17,7 @@
 [Rr]ecordings/
 
 # Recorded human-drive traces (DriverTrace). Local data; back up separately.
-# A curated held-out set for the three-way comparison can be force-added later.
+# Only the held-out `final` split (datasets.tsv) is force-added and published; everything else stays local.
 /[Tt]races/
 
 # Uncomment this line if you wish to ignore the asset store tools plugin
