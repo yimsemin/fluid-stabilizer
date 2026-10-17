@@ -1,5 +1,9 @@
 # fluid-stabilizer
 
+> **상태: 마무리된 아카이브.** 연구·학습 기록으로 공개한다. 새 기능 개발은 하지 않으며 이슈·PR 은 받지 않는다.
+> 코드는 MIT, 문서는 CC BY 4.0 ([LICENSE](LICENSE), [LICENSE-docs.md](LICENSE-docs.md)). 문서는 한글이다 — 영어 요약은 아래 "English summary".
+
+
 Physical AI 시뮬레이션 프로젝트: **인간이 운전하는** 트럭에 실린 개방형 액체
 탱크가 넘치지 않도록, AI 가 2축 스태빌라이저를 제어한다.
 
@@ -25,6 +29,41 @@ Physical AI 시뮬레이션 프로젝트: **인간이 운전하는** 트럭에 �
 **이어서 읽기:** 질문 → 시도 → 답의 흐름과 15개 교훈은 [docs/lessons.md](docs/lessons.md)
 (처음 읽는다면 이것부터). 숫자의 근거는 [docs/findings.md](docs/findings.md).
 
+## English summary
+
+**Question.** Can an AI control a 2-axis gimbal under an open liquid tank on a human-driven truck to reduce spill?
+The whole pipeline was built end to end (deterministic vehicle/road/slosh/sensor/actuator simulation in Unity,
+rule-based control, hindsight ceiling, behavior cloning / DAgger / PPO, policy serving, evaluation harness).
+
+**Result: it did not beat doing nothing.** On 7 unseen recorded drives, a *rigid* (locked) tank spilled least:
+
+| Controller | Pendulum slosh model | Shallow-water slosh model |
+|---|---|---|
+| ① Rigid (no control) | **114.4 L** | **583.4 L** |
+| ② Rule-based (PID) | 167.0 L | 1049.2 L |
+| ③ Learned policy | 120.2 - 131.3 L | not evaluated |
+
+An oracle model-predictive controller (full state, exact internal model) gained only 5-8 % over rigid.
+Changing the **tank** instead of the controller helped far more: lower fill ratio, higher rim, and internal baffles
+cut spill by 20-75 % (shallow-water model) with no controller at all.
+
+![Total spill by controller](docs/images/fig1-controllers.png)
+![Tank design vs active control](docs/images/fig2-tank-design.png)
+
+**Lessons.** (1) Measure the "do nothing" baseline first - it was already strong. (2) If learning fails, suspect the
+action space before the hyperparameters (a hard "lock if command is small" rule created a gradient-free cliff).
+(3) Before building a controller, ask whether the *problem* can be changed (tank design). (4) When two models disagree
+on magnitude, trust the conservative one. Details (in Korean): [docs/lessons.md](docs/lessons.md); evidence:
+[docs/findings.md](docs/findings.md) F1-F17.
+
+### Limits - read before reusing the conclusions
+
+- All results come from **simulation**; there is no physical measurement. Slosh is modeled by two models
+  (equivalent pendulum, shallow water), and baffle/fill effects differ by model (the shallow-water value is the conservative one).
+- The recorded drives are **one person's** driving on one operating point (fill 0.62, road on); only 7 final drives are published.
+- The MPC's internal model is a pendulum, so its failure on baffled tanks is partly a modeling mismatch (F17).
+- The held-out `final` set was evaluated once and is consumed; re-tuning on it would no longer be a held-out test.
+
 ## 어디서부터 읽나
 
 **문서는 모두 한글.** [docs/README.md](docs/README.md) 가 색인(용어, 문서별 역할)이다.
@@ -34,6 +73,7 @@ Physical AI 시뮬레이션 프로젝트: **인간이 운전하는** 트럭에 �
 - [docs/experiment-plan.md](docs/experiment-plan.md) — 현황 · 만든 것 · 닫힘/열림
 - [docs/findings.md](docs/findings.md) — 실험으로 밝혀진 사실 F1~F17 (숫자·근거)
 - [docs/decisions.md](docs/decisions.md) — 설계 결정 로그 D1~D14
+- [docs/reproduce-from-scratch.md](docs/reproduce-from-scratch.md) — 처음부터 재현하는 법 (무엇이 재현되고 무엇이 안 되는지 포함)
 - [docs/operating-guide.md](docs/operating-guide.md) — 조작 가이드 (키·패널·서버)
 - [docs/demo-guide.md](docs/demo-guide.md) — 시연 대본 (비개발자 청중)
 - [docs/design-review.md](docs/design-review.md) — 설계 시점의 근거 (큰 참고 문서)
@@ -48,7 +88,8 @@ fluid-stabilizer/
 ├── docs/                     설계 문서 (한글) — 먼저 읽을 것
 ├── experiment.txt            운영점 손잡이 (fill / 도로 / 운전자 / 에피소드 / 슬로시 / seed)
 ├── Packages/  ProjectSettings/   Unity 6000.5.10f1, Built-in 렌더 파이프라인
-├── Traces/                   녹화 주행 (로컬 데이터, 대부분 gitignore)
+├── Traces/                   녹화 주행 — 홀드아웃 `final` 7 개만 공개 (나머지는 gitignore)
+├── datasets*.tsv             주행 데이터 셋 분할 매니페스트 (train/validation/final + SHA-256)
 └── Builds/                   standalone 빌드 (gitignore)
 ```
 

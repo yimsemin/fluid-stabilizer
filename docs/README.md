@@ -38,6 +38,7 @@
 | [experiment-plan.md](experiment-plan.md) | **현황 + 만든 것 + 닫힘/열림 지도.** 유일한 진행상황 추적기 | 소유자 |
 | [decisions.md](decisions.md) | **설계 결정 로그 D1~D14** (무엇을 정했고 왜, 상태 표 포함) | Claude + 소유자 |
 | [design-review.md](design-review.md) | 설계 시점의 근거 (큰 참고 문서. 상단 표가 현재 유효성을 알려줌) | 주로 Claude |
+| [reproduce-from-scratch.md](reproduce-from-scratch.md) | **처음부터 재현하는 법** — 공개본에서 재현되는 것과 안 되는 것, 준비·테스트·앱 실행 | 외부 독자 |
 | [operating-guide.md](operating-guide.md) | **조작 가이드** (비개발자용) — 키·설정 패널·운전·서버·비교·학습·빌드 | 소유자 |
 | [demo-guide.md](demo-guide.md) | **시연 대본** — 청중에게 무엇을 어떤 순서로 보여주고 어떻게 말할지 (비개발자 청중) | 소유자 (시연 시) |
 | [reproducibility.md](reproducibility.md) | **재현성 · 데이터 셋 분리 · 실행 기록 규칙** (trace v2, `datasets.tsv`, provenance) | Claude + 소유자 |

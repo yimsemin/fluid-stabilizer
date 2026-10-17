@@ -47,3 +47,6 @@
 *.ttf    filter=lfs diff=lfs merge=lfs -text
 *.otf    filter=lfs diff=lfs merge=lfs -text
 *.onnx   filter=lfs diff=lfs merge=lfs -text
+
+# 공개 문서용 그림은 작아서 LFS 를 쓰지 않는다 (공개 저장소의 LFS 대역폭 할당량 회피)
+docs/images/*.png -filter -diff -merge binary
