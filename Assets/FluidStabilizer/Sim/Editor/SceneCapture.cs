@@ -71,6 +71,65 @@ namespace FluidStabilizer.SimEditor
             comparison.Stop();
         }
 
+        /// <summary>
+        /// Frames for the README GIF: ① 강체 vs ② 규칙기반 on one recorded drive, one PNG per lane per step
+        /// plus a spill CSV. Args: -capTrace &lt;trace path&gt; [-capSeconds 40] [-capStep 0.5]. Writes
+        /// Logs/gif/. Needs the editor graphics (no -nographics); Python assembles the GIF.
+        /// </summary>
+        public static void GrabCompareFrames()
+        {
+            string tracePath = Arg("-capTrace", null);
+            double seconds = double.Parse(Arg("-capSeconds", "40"), System.Globalization.CultureInfo.InvariantCulture);
+            double step = double.Parse(Arg("-capStep", "0.5"), System.Globalization.CultureInfo.InvariantCulture);
+            EditorSceneManager.OpenScene("Assets/FluidStabilizer/Scenes/PlayScene.unity");
+            var comparison = Object.FindAnyObjectByType<ComparisonRunner>();
+            Directory.CreateDirectory("Logs/gif");
+            comparison.StartComparison(DriverTrace.LoadFromFile(tracePath), true,
+                new[] { StabilizerChoice.Off, StabilizerChoice.SpecificForceAlignmentPlusI });
+
+            const int w = 640, h = 360;
+            var csv = new System.Text.StringBuilder("frame,t,spill1,spill2\n");
+            int frames = (int)(seconds / step);
+            for (int f = 0; f < frames; f++)
+            {
+                comparison.PumpForCapture(step);
+                for (int lane = 0; lane < comparison.LaneCount; lane++)
+                {
+                    var cam = comparison.LaneCamera(lane);
+                    var oldRect = cam.rect;
+                    cam.rect = new Rect(0, 0, 1, 1);
+                    cam.aspect = w / (float)h;
+                    cam.fieldOfView = float.Parse(Arg("-capFov", "24"), System.Globalization.CultureInfo.InvariantCulture);
+                    cam.clearFlags = CameraClearFlags.SolidColor;
+                    cam.backgroundColor = new Color(0.55f, 0.62f, 0.72f);
+                    var rt = new RenderTexture(w, h, 24);
+                    cam.targetTexture = rt;
+                    cam.Render();
+                    RenderTexture.active = rt;
+                    var tex = new Texture2D(w, h, TextureFormat.RGB24, false);
+                    tex.ReadPixels(new Rect(0, 0, w, h), 0, 0);
+                    tex.Apply();
+                    File.WriteAllBytes($"Logs/gif/f{f:D3}-{lane}.png", tex.EncodeToPNG());
+                    cam.targetTexture = null;
+                    RenderTexture.active = null;
+                    cam.rect = oldRect;
+                    Object.DestroyImmediate(rt);
+                    Object.DestroyImmediate(tex);
+                }
+                csv.Append($"{f},{(f + 1) * step:F1},{comparison.LaneSpillLitres(0):F2},{comparison.LaneSpillLitres(1):F2}\n");
+            }
+            File.WriteAllText("Logs/gif/spill.csv", csv.ToString());
+            comparison.Stop();
+            Debug.Log($"[SceneCapture] wrote {frames} frames to Logs/gif/");
+        }
+
+        private static string Arg(string name, string fallback)
+        {
+            var a = System.Environment.GetCommandLineArgs();
+            for (int i = 0; i < a.Length - 1; i++) if (a[i] == name) return a[i + 1];
+            return fallback;
+        }
+
         private static DriverTrace RecordRoadTrace(ulong seed, double seconds)
         {
             var cfg = new FluidStabilizer.Core.Sim.SimulationConfig { EpisodeSeconds = seconds };

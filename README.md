@@ -35,6 +35,11 @@ Physical AI 시뮬레이션 프로젝트: **인간이 운전하는** 트럭에 �
 | **결과** | ① 강체가 이겼다. 처음 보는 7 주행에서 ① 114 L, ② 166~175 L, ③ 120~131 L. 오라클 MPC 도 강체 대비 −5 ~ −8 % 뿐. 반면 **컨트롤러 없이 탱크만 바꾸면** 훨씬 크게 줄었다(얕은물 모델에서 내부 배플 −20 ~ −75 %). |
 | **인사이트** | ① 아무것도 안 하는 기준선이 이미 강하면 먼저 그것부터 재라. ② 학습이 안 되면 하이퍼파라미터보다 **액션 공간**을 의심하라. ③ 제어기를 만들기 전에 **문제(탱크)를 바꿀 수 있는지** 먼저 보라. ④ 모델에 따라 크기가 갈리는 결과는 보수적인 쪽을 믿어라. |
 
+![① 강체와 ② 규칙기반을 같은 주행에서 비교한 앱 화면](docs/images/demo-compare.gif)
+
+*같은 주행·같은 도로에서 ① 강체(위)와 ② 규칙기반(아래)을 나란히 돌린 앱 화면(공개된 `final` 주행 1개, 진자 모델, 처음 40 초, 4배속).
+규칙기반은 탱크를 기울여 오히려 액체를 더 흔들고 더 많이 넘친다. 재생성: [docs/reproduce-from-scratch.md](docs/reproduce-from-scratch.md) 4절.*
+
 **이어서 읽기:** 질문 → 시도 → 답의 흐름과 15개 교훈은 [docs/lessons.md](docs/lessons.md)
 (처음 읽는다면 이것부터). 숫자의 근거는 [docs/findings.md](docs/findings.md).
 
@@ -77,6 +82,7 @@ on magnitude, trust the conservative one. Details (in Korean): [docs/lessons.md]
 
 **문서는 모두 한글.** [docs/README.md](docs/README.md) 가 색인(용어, 문서별 역할)이다.
 
+- [AGENTS.md](AGENTS.md) — AI·사람용 30 줄 안내 (읽는 순서, 닫힌 줄기, 주의사항)
 - [docs/lessons.md](docs/lessons.md) — **결과·교훈 한 문서 요약 (처음 읽는다면 이것부터)**
 - [docs/project-goals.md](docs/project-goals.md) — 무엇을 · 왜 · 최종 아키텍처
 - [docs/experiment-plan.md](docs/experiment-plan.md) — 현황 · 만든 것 · 닫힘/열림
@@ -97,7 +103,7 @@ fluid-stabilizer/
 ├── docs/                     설계 문서 (한글) — 먼저 읽을 것
 ├── experiment.txt            운영점 손잡이 (fill / 도로 / 운전자 / 에피소드 / 슬로시 / seed)
 ├── Packages/  ProjectSettings/   Unity 6000.5.10f1, Built-in 렌더 파이프라인
-├── Traces/                   녹화 주행 — 홀드아웃 `final` 7 개만 공개 (나머지는 gitignore)
+├── Traces/                   녹화 주행 — 홀드아웃 `final` 7 개만 공개 (나머지는 gitignore; `validation` 2 개는 과거 커밋에만 있음)
 ├── datasets.tsv              주행 데이터 셋 분할 매니페스트 (train/validation/final + SHA-256)
 ├── datasets-public.tsv       공개된 final 7 주행만 담은 매니페스트 (재현용, docs/reproduce-from-scratch.md)
 ├── datasets-f8*.tsv          합성 시연 조건 주행의 매니페스트 (F8·F11)

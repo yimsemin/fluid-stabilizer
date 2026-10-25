@@ -65,6 +65,11 @@ namespace FluidStabilizer.Sim
         /// <summary>The first strip's camera (editor screenshot aid — the main camera is disabled while a comparison runs).</summary>
         public Camera FirstStripCamera => _lanes.Count > 0 ? _lanes[0].Cam : null;
 
+        /// <summary>Editor capture aids: lane count, a lane's camera, and its spill so far [L].</summary>
+        public int LaneCount => _lanes.Count;
+        public Camera LaneCamera(int i) => _lanes[i].Cam;
+        public double LaneSpillLitres(int i) => _lanes[i].SpillLitres;
+
         private sealed class Lane
         {
             public StabilizerChoice Choice;

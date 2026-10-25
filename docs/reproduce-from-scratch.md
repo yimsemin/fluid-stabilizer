@@ -9,7 +9,7 @@
 | 항목 | 공개본의 상태 |
 |---|---|
 | 코드 · 문서 · 설정 | 전부 있음 |
-| 녹화 주행 | **홀드아웃 `final` 7 개만** `Traces/` 에 있다. `train` 6 개와 `validation` 2 개는 공개하지 않았다. |
+| 녹화 주행 | **홀드아웃 `final` 7 개만** `Traces/` 에 있다. 현재 트리에 `train` 6 개와 `validation` 2 개는 없다(`datasets.tsv` 에는 목록과 해시만 있다). 과거 커밋 `4043c0d` 에는 `validation` 2 개가 포함돼 있다. |
 | 학습된 모델(`*.pt`, `*.onnx`) · 학습 로그(`python/runs/`) | 없음 (gitignore). 학습 경로(BC·DAgger·PPO)는 코드로 있으나 학습에 쓴 주행이 없어 **같은 모델을 재생성할 수 없다.** |
 | 재현되는 결과 | F13 (처음 보는 7 주행: ① 강체 · ② 규칙기반) — `final` 7 개만 쓰기 때문. 방법은 3절 |
 | 그대로는 재현되지 않는 결과 | F14~F17 (MPC · 탱크 설계 스윕). 이 실험 도구는 `train` 주행을 읽는다. 자기 주행을 녹화해 `datasets.tsv` 에 등록하면 같은 *방법*으로 다시 돌릴 수 있지만 숫자는 달라진다. |
@@ -56,6 +56,12 @@ Evaluate Recorded Drives** 메뉴는 없는 파일을 찾다가 실패한다. `f
 2. `Assets/FluidStabilizer/Scenes/PlayScene.unity` 를 열고 Play ▶.
 3. `L` 키로 녹화 주행을 재생하고 `0~2` 로 ① 강체 / ② 규칙기반을 바꿔 같은 주행을 비교한다.
    `final` 주행은 `Traces/` 에 있다. 키와 패널: [operating-guide.md](operating-guide.md).
+4. (선택) README 의 비교 GIF 프레임 다시 만들기 — 에디터를 닫고, 그래픽을 켠 채(`-nographics` 없이) 실행하면
+   `Logs/gif/` 에 ①②의 프레임 PNG 와 누적 스필 `spill.csv` 가 생긴다. GIF 조립: `python/.venv/bin/python docs/images/make_compare_gif.py` (Pillow 필요).
+
+```bash
+"/Applications/Unity/Hub/Editor/6000.5.10f1/Unity.app/Contents/MacOS/Unity" -batchmode -quit -projectPath . -executeMethod FluidStabilizer.SimEditor.SceneCapture.GrabCompareFrames -capTrace Traces/drive-20261010-232523-254-64830d7c.trace.csv -capSeconds 40 -capStep 0.4 -capFov 24 -logFile -
+```
 
 ## 5. 탱크 설계 실험을 자기 데이터로 다시 하기
 
