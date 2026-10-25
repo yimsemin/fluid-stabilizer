@@ -6,7 +6,6 @@ authors:
   - alias: "yimsemin"
 repository-code: "https://github.com/yimsemin/fluid-stabilizer"
 license: MIT
-version: "1.0-archive"
 date-released: "2026-10-25"
 abstract: >-
   A deterministic simulation of an AI-controlled 2-axis gimbal under an open liquid tank on a
