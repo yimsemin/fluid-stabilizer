@@ -85,8 +85,8 @@ v1 = 커스텀 분석적 **등가역학 모델** (축당 진자 1개, 매니지�
 ## 현재 상태
 
 **프로젝트 마무리 단계** (2026-10-16, [D14](docs/decisions.md)). 파이프라인 전체(녹화 → 천장 → BC →
-DAgger/PPO → 정책 서빙 → 4종 비교 → standalone 빌드)가 돌고, EditMode 테스트 **158 통과 / 0 실패 /
-16 스킵**.
+DAgger/PPO → 정책 서빙 → 4종 비교 → standalone 빌드)가 돌고, EditMode 테스트가 실패 없이 통과한다 (개수:
+[docs/experiment-plan.md](docs/experiment-plan.md)).
 
 **결론 (한 줄):** 소유자의 녹화 주행에서 ① 강체가 능동 제어(②·③·MPC)를 이기고, 탱크 설계(충전율·림·
 배플)가 능동 제어보다 훨씬 크게 스필을 줄인다. 숫자·한계·교훈: [docs/lessons.md](docs/lessons.md),

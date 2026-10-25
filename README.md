@@ -113,7 +113,7 @@ fluid-stabilizer/
 
 ## 현재 상태
 
-**마무리됨** (2026-10-16, [D14](docs/decisions.md)). 녹화 → 천장 → BC → DAgger/PPO → 정책 서빙 → 4종 비교 →
+**마무리됨** (결정 2026-10-16, [D14](docs/decisions.md); 아카이브 확정 2026-10-25, 태그 `v1.0-archive`). 녹화 → 천장 → BC → DAgger/PPO → 정책 서빙 → 4종 비교 →
 standalone 앱까지 처음부터 끝까지 돈다. 테스트 수와 열린 후보는 [docs/experiment-plan.md](docs/experiment-plan.md).
 
 ## 프로젝트 열기

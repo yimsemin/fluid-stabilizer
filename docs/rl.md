@@ -21,11 +21,11 @@ findings F1~F4: 강체(잠금 관절) `Hold` 를 상대로 **어떤 분석적 �
 | `RewardFunction` | `Rl/` | ✅ design-review §11 의 연속 reward. 가중치 설정 가능, 항목별 분해 제공 |
 | `RlEnvironment` | `Rl/` | ✅ 결정론적 `Reset(seed)→obs`, `Step(action)→(obs, reward, terminated, truncated, privileged)`. 잔차 모드 지원(아래 참고) |
 | `TrainingServer` | `Rl/` | ✅ length-prefixed 바이너리 TCP 브릿지(클라이언트 1개). in-process env 와 비트 단위로 같게 루프백 테스트됨 |
-| `RemotePolicyController` | `Rl/` | ✅ 학습된 정책의 브릿지 *클라이언트* — `serve_policy.py` 에 연결 (step D) |
-| `BcDatasetExporter` | `Rl/` | ✅ hindsight 궤적 → BC 지도학습 데이터셋 (step C) |
+| `RemotePolicyController` | `Rl/` | ✅ 학습된 정책의 브릿지 *클라이언트* — `serve_policy.py` 에 연결 |
+| `BcDatasetExporter` | `Rl/` | ✅ hindsight 궤적 → BC 지도학습 데이터셋 |
 | `RlServerLauncher` / `BcExportRunner` / `PolicyEvalRunner` | `Sim/Editor/` | ✅ `-executeMethod` / 메뉴 진입점 (헤드리스 Unity 호스트) |
 | Python env + PPO | `python/` | 🟡 비대칭 critic 을 쓰는 CleanRL 스타일 PPO. 끝까지 실행됨. obs/return 정규화 적용. **맨땅 PPO 는 학습하지 못한다**(F1·F4·F9·F10). BC 클론이 PPO 미세조정보다 낫다(F10). 아래 "맨땅 PPO 가 안 되는 이유" 참고 |
-| `bc_pretrain.py` / `serve_policy.py` | `python/` | ✅ BC 사전학습 + 정책 추론 프로세스 (step C/D). `serve_policy.py --release-bias/--release-ema` 는 해제 요청 보정 실험 옵션(기본 꺼짐, F12) |
+| `bc_pretrain.py` / `serve_policy.py` | `python/` | ✅ BC 사전학습 + 정책 추론 프로세스. `serve_policy.py --release-bias/--release-ema` 는 해제 요청 보정 실험 옵션(기본 꺼짐, F12) |
 | `DaggerRolloutRunner` / `dagger.py` | `Sim/Editor/` · `python/` | ✅ 학습자 상태를 교사 행동으로 다시 라벨링 + 누적 재학습 루프 (F12). **줄기는 닫힘** (D11) |
 | `MultiCornerRunner` | `Sim/Editor/` | ✅ F8 계열 합성 코너링 주행 + 주행별 천장 + `datasets-f8-multi.tsv` (F11). 천장이 이득을 못 주는 주행은 0 궤적(유휴) |
 | 도메인 랜덤화 | — | ⬜ (보류 — 활성 RL 학습을 재개할 때) |
@@ -90,12 +90,12 @@ python serve_policy.py --checkpoint runs/bc-run/actor.pt --port 5601
 `-rlPort/-rlStack` 를 뺀 나머지는 모두 **`experiment.txt` 를 기본값으로** 하고, 플래그가 실행마다 이를
 덮어쓴다.
 
-**트레이스 기반 학습 (step C0):** 학습에 쓰는 주행은 루트 `datasets.tsv` 의 `train` split 이 정한다 —
+**트레이스 기반 학습:** 학습에 쓰는 주행은 루트 `datasets.tsv` 의 `train` split 이 정한다 —
 **hindsight 산출물이 있느냐로 정하지 않는다.** `-traceSplit` 으로 split 을, `-rlTrace <substr>` 로 파일명
 필터를 지정한다. **Reset 할 때마다** 해당 주행의 설정·seed·슬로시 모델·전체 길이를 적용한다. 규칙 전체는
 [reproducibility.md](reproducibility.md).
 
-**BC 웜스타트 (step C):** `FluidStabilizer ▸ Export BC Dataset`(또는 `-executeMethod …BcExportRunner.Run`)이
+**BC 웜스타트:** `FluidStabilizer ▸ Export BC Dataset`(또는 `-executeMethod …BcExportRunner.Run`)이
 각 주행을 실제 관측 파이프라인으로 재생하면서 hindsight 행동을 먹여 `Logs/bc/dataset.csv` 를 만든다. 이어서
 `python bc_pretrain.py` 가 `actor_mean` 과 whitener 를 맞춰 `runs/bc/actor.pt` 를 만들고,
 `python train_ppo.py --init-actor runs/bc/actor.pt` 가 이를 PPO 웜스타트에 쓴다. F5 의 hindsight 최적해가
@@ -134,30 +134,25 @@ python serve_policy.py --checkpoint runs/bc-run/actor.pt --port 5601
 freeboard·명령 rate·스텝 수가 모두 일치**해야 한다(plain / hold-잔차 / sfa-잔차 + 잠금). 인코더 클래스가
 같다는 것은 근거가 되지 않는다.
 
-**정책 서빙 (step D — 배포 분리):** 학습된 정책이 자기 프로세스에서 실행된다.
+**정책 서빙 (배포 분리):** 학습된 정책이 자기 프로세스에서 실행된다.
 `python serve_policy.py --checkpoint runs/<run>/actor.pt --port 5601`(`actor_mean` + whitener 를 로드해
 결정론적 평균을 반환하고, 클라이언트마다 스레드를 쓴다). Unity 의 `RemotePolicyController`(엔진프리,
 `FluidStabilizer.Rl`)가 브릿지 클라이언트다. `ObservationEncoder` 를 로컬에서 돌려 벡터를 보내고, 응답을 관절
 속도 명령으로 바꾼다. 서버가 없으면 잠근 Hold 로 내려가고 약 2 초마다 다시 탐지한다. wire 포맷은 클래스의
 doc-comment 에 있다. 이것은 Unity 바이너리에 구운 ONNX 가 *아니다* — project-goals.md 참고.
 
-**잔차 모드 (step B):** `-rlBaseline {none|hold|sfa|pid}` `-rlResidualFrac <0..1>`(기본 0.35). 베이스라인이
-있으면 env 가 매 제어 틱마다 관절 속도 공간에서 `baselineRate + policy·(residualFrac·MaxRate)` 를 발행한다
-(베이스라인의 각도/잠금 명령은 등가 rate 로 바꾼다. 각도는 P 추종, 잠금은 0 으로 PD 유지). 둘 다 max rate 로
-자른다. 정책은 멀쩡한 동작점 주변의 작은 보정만 학습하므로 F1/F4 의 절벽을 피하는 해법이다. 합성은 서버 쪽에서
-하므로 행동 공간과 Python 학습기는 그대로다. 다만 잔차 액션 공간만으로는 dead-band 때문에 학습 신호가 없는
-절벽이 되므로(F9), 아래의 lock-capable 합성에 명시적 해제 요청(D10)을 더해 쓴다. `RlEnvironment` 에
-`baselineFactory` / `residualRateScaleRadPerSec` 생성자 인자와 `ActorName` / `GimbalState` getter 를
-추가했다. `ResidualRlTests` (4).
+**잔차 모드:** `-rlBaseline {none|hold|sfa|pid}` `-rlResidualFrac <0..1>`(기본 0.35). 베이스라인이 있으면 env 가
+매 제어 틱마다 관절 속도 공간에서 `baselineRate + policy·(residualFrac·MaxRate)` 를 발행한다(각도 명령은 P 추종,
+잠금은 0 으로 PD 유지에 해당하는 등가 rate). 둘 다 max rate 로 자른다. 합성은 서버 쪽에서 하므로 행동 공간과 Python
+학습기는 그대로다. 잔차만으로는 dead-band 때문에 학습 신호가 없는 절벽이 되므로(F9) 아래의 lock-capable 합성과
+명시적 해제 요청(D10)을 함께 쓴다. `ResidualRlTests` (4).
 
-**lock-capable 하이브리드 액션 (D8, `-rlLockCapable`, baseline≠none 이면 기본 켜짐):** 합성 rate 가 데드밴드
-(`GimbalConfig.LockRateThresholdRadPerSec`) 안이고 관절이 0 근처면 env 가 `Locked` 명령을 발행한다. 처지는
-서보가 아니라 강체 관절이 된다. `LockGate`(엔진프리 결정론적 상태기계, 히스테리시스 + 최소 체류)가 이를 담당한다.
-③ 의 바닥이 ①(잠근 탱크)이 되어 F5 의 구조적 핸디캡이 제거된다. **결과(F6): 그래도 후행지식은 강체를
-이기지 못했다**(녹화 주행 기준). `LockCapableActionTests` (8), [decisions.md](decisions.md) D8. 서빙할 때는
-`RemotePolicyController` 가 정책 계약(D9)대로 같은 baseline 합성과 `LockGate` 를 로컬에서 돌린다. **D10 이후**
-잠금 판정은 rate 문턱에 따른 사후 판정이 아니라 정책의 세 번째 액션(해제 요청, 저역통과)이며, 시작은 잠긴
-상태다.
+**lock-capable 하이브리드 액션 (D8·D10, `-rlLockCapable`, baseline≠none 이면 기본 켜짐):** 잠금 상태에서는 env 가
+`Locked` 명령을 발행해, 처지는 서보가 아니라 강체 관절이 된다. D8 은 합성 rate 의 데드밴드로 잠금을 판정했고
+(`LockGate`: 엔진프리 결정론적 상태기계, 히스테리시스 + 최소 체류), D10 이후에는 정책의 세 번째 액션(해제 요청,
+저역통과)이 판정하며 시작은 잠긴 상태다. ③ 의 바닥이 ① 이 되어 F5 의 구조적 핸디캡이 제거됐다. **결과(F6): 그래도
+후행지식은 강체를 이기지 못했다**(녹화 주행 기준). `LockCapableActionTests` (8). 서빙할 때는 `RemotePolicyController`
+가 정책 계약(D9)대로 같은 합성을 로컬에서 돌린다.
 
 **병렬 롤아웃:** 서버는 클라이언트 하나만 받는다. N 개 포트에 N 개 서버를 띄우고 N 개의 `FluidStabEnv` 를
 Gymnasium `AsyncVectorEnv` 로 감싼다(v1 PPO 스크립트는 env 하나만 쓴다 — 처리량이 중요해지면 확장).
@@ -191,7 +186,7 @@ lock-capable 액션(D8) → 잔차 액션 공간이 절벽임을 특정하고 **
 - **wire 로 스필 지표를 보내지 않는다.** `play.py` 는 shaped reward 만 합산한다. F4 의 표는 이름 붙은 6
   시나리오의 리터 단위 스필이다. `RlEnvironment.Summary()` 가 C# 에서 그 집계를 만들지만 TCP 프로토콜
   (RESET/STEP/CLOSE)이 노출하지 않는다. 정책을 F4 와 비교하려면 `SUMMARY` opcode 나 `PolicyEvalRunner` 경로
-  (step D, `Logs/policy-eval.txt`)가 필요하다.
+  (`Logs/policy-eval.txt`)가 필요하다.
 - **체크포인트 재개:** `train_ppo.py --resume runs/<name>/state.pt` 가 agent + optimizer + obs/priv/return
   정규화기 + `global_step` 을 복원해 이어서 학습한다(`--init-actor` 보다 우선). `state.pt` 는 `--save-every`
   (기본 20) 업데이트마다, 그리고 종료할 때 기록한다(`actor.pt` 는 매 업데이트 — serve 호환용 슬림 파일).

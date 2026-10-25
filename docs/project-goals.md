@@ -126,6 +126,5 @@ hardware-in-the-loop.
 
 ## 채택하지 않은 것
 
-ROS 2, Unity ML-Agents, 유체 시뮬 플러그인(Obi, Zibra), CFD, 완전한 WheelCollider 차량 시뮬,
-`com.unity.sentis`, 클라우드/CI 인프라는 명시적 결정 없이 설치하지 않는다. "나중에 필요할 테니 지금 설치"는
-하지 않는다. 목록과 근거는 [CLAUDE.md](../CLAUDE.md) 와 [design-review.md](design-review.md) §21 에 있다.
+명시적 결정 없이 설치·채택하지 않는 목록은 [CLAUDE.md](../CLAUDE.md), 각각의 이유는
+[setup-status.md](setup-status.md) "의도적으로 설치하지 않은 것" 에 있다. "나중에 필요할 테니 지금 설치"는 하지 않는다.
